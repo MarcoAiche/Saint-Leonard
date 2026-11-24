@@ -1,0 +1,10 @@
+# Godot 4
+.godot/
+/android/
+*.translation
+export_presets.cfg
+build/
+
+# wird beim ersten Start aus data/riegersdorf.json gebaut
+data/world_baked.scn
+data/raw/
