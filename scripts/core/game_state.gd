@@ -346,7 +346,7 @@ static func new_slot_name(title: String) -> String:
 func reset_new_game() -> void:
 	playtime = 0.0
 	money = 600
-	inv = {"rifle": 1, "ammo": 20, "knife": 1, "flashlight": 1, "binoculars": 1, "beer": 3, "cigarettes": 10, "snack": 2}
+	inv = {"pistol": 1, "rifle": 1, "assault_rifle": 1, "sniper": 1, "ammo": 80, "knife": 1, "flashlight": 1, "binoculars": 1, "beer": 3, "cigarettes": 10, "snack": 2}
 	loaded = MAG_SIZE
 	health = 100.0
 	stamina = 100.0
