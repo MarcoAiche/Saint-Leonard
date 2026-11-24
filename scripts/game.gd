@@ -34,6 +34,7 @@ var waypoint := Vector2.INF
 var placed_nodes := {}  # uid -> Node3D
 var house_nodes := {}  # Bauplatz -> Node3D
 var remote_players := {}  # peer id -> RemotePlayer
+var last_damage_source := ""
 var remote_trucks := {}  # peer id -> Truck
 var remote_police := {}  # peer id -> Array[PoliceCar]
 var net_stats := {}  # Zähler für Tests: empfangene Effekte, Stimme
@@ -868,6 +869,8 @@ func _sleep() -> void:
 	GameState.health = 100.0
 	GameState.stamina = 100.0
 	GameState.bac = 0.0
+	if police:
+		police.cool_heat()
 	GameState.save_game()
 	await get_tree().create_timer(1.0).timeout
 	hud.set_fade(0.0)
@@ -1253,7 +1256,7 @@ func still_explode(entry: Dictionary) -> void:
 		interactions.remove_node(n)
 	Net.request_remove(uid)
 	hud.toast("BUMM! Der Kessel ist explodiert. Die Rauchsäule lockt die Polizei an!", 5.0)
-	police.dispatch(pos, "Rauchsäule im Wald")
+	police.dispatch_explosion(pos)
 
 
 # ------------------------------------------------------------------ Schießen
@@ -1264,9 +1267,7 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 	var q := PhysicsRayQueryParameters3D.create(from, from + dir * 700.0, 1 | 4 | 8 | 16)
 	q.exclude = [player.get_rid()]
 	var hit := space.intersect_ray(q)
-	# Schüsse im Ort rufen die Polizei
-	if landmarks.near_village(Vector2(from.x, from.z)) and randf() < 0.5:
-		police.dispatch(from, "Schüsse im Ortsgebiet")
+	police.on_player_shot(from)
 	if not hit:
 		return
 	var col: Object = hit.collider
@@ -1283,8 +1284,25 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 				hud.hitmarker(true)
 				hud.toast("Waidmannsheil! %s erlegt" % Animal.SPECIES[a.species].name, 2.5)
 	elif col is PoliceCar:
-		GameState.police_heat += 2.0
+		police.on_police_attacked(col as PoliceCar)
 		hud.toast("Du hast auf die Polizei geschossen!", 3.0)
+	elif col is Node and col.is_in_group("police_officer"):
+		var killed: bool = col.call("take_hit", player.hand.current_damage(), hit.position)
+		hud.hitmarker(killed)
+		police.on_police_attacked(col.get("car") as PoliceCar)
+	elif col is Node and col.has_meta("npc"):
+		var npc: Npc = col.get_meta("npc")
+		var killed: bool = npc.take_hit(player.hand.current_damage(), hit.position)
+		hud.hitmarker(killed)
+		if killed and npc.important:
+			GameState.add_money(-mini(1000, maxi(GameState.money, 0)))
+			hud.toast("%s getötet! Automatische Strafe: 1.000 €" % npc.npc_name, 4.0)
+	elif col is Node and col.has_meta("remote_player"):
+		var rp: RemotePlayer = col.get_meta("remote_player")
+		var headshot: bool = (hit.position.y - rp.global_position.y) > 1.35
+		var dmg_p := 100.0 if headshot else 25.0
+		hud.hitmarker(headshot)
+		Net.hurt_player(rp.peer_id, dmg_p, Net.my_id())
 	elif col is Carcass:
 		(col as RigidBody3D).apply_impulse(dir * 40.0, hit.position - (col as Node3D).global_position)
 
@@ -1353,11 +1371,28 @@ func _process(delta: float) -> void:
 				car.place_at(car.global_position, car.global_basis.z)
 			else:
 				body.global_position.y = g + 1.0
-	# Gesundheit
+	# Gesundheit / Tod
 	if GameState.health <= 0.0 and player.passed_out <= 0.0:
-		GameState.health = 35.0
-		GameState.add_money(-mini(150, maxi(GameState.money, 0)))
-		_pass_out("Schwer verletzt! Der Notarzt kostet 150 €.")
+		GameState.health = 100.0
+		if seat != "":
+			exit_vehicle()
+		var home2: Vector2 = landmarks.home_center
+		var home_y := world.height_at(home2.x, home2.y)
+		player.global_position = Vector3(home2.x, home_y + 1.0, home2.y)
+		player.velocity = Vector3.ZERO
+		if last_damage_source.begins_with("player:"):
+			var killer_id := int(last_damage_source.split(":")[1])
+			Net.charge_friendly_fire(killer_id, 500)
+			_pass_out("Von einem Mitspieler getötet! Der Schütze zahlt 500 €.")
+		elif last_damage_source == "police":
+			GameState.add_money(-mini(500, maxi(GameState.money, 0)))
+			if police:
+				police.confiscate_weapons_and_moonshine()
+			_pass_out("Von der Polizei getötet! 500 € & verbotene Gegenstände beschlagnahmt.")
+		else:
+			GameState.add_money(-mini(500, maxi(GameState.money, 0)))
+			_pass_out("Gestorben! Zuhause wiederbelebt (500 €).")
+		last_damage_source = ""
 	if _placing != "" and _ghost:
 		_ghost.global_transform = _ghost_transform()
 		var ok := Placeables.check(_placing, _ghost.global_position, self).is_empty()

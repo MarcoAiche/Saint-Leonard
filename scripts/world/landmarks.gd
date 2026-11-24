@@ -321,7 +321,8 @@ func _build_props() -> void:
 
 	# Gasthaus Pirtscher: Wirt vor der Tür
 	var wirt_pos: Vector3 = pub.door + (Vector3(spawn.pos) - pub.door).normalized() * 1.2
-	_npc(self, "Wirt Sepp", Vector3(wirt_pos.x, world.height_at(wirt_pos.x, wirt_pos.z), wirt_pos.z), 0.0, {shirt = Color(0.9, 0.9, 0.88), pants = Color(0.2, 0.2, 0.2), hat = "none"})
+	var sepp := _npc(self, "Wirt Sepp", Vector3(wirt_pos.x, world.height_at(wirt_pos.x, wirt_pos.z), wirt_pos.z), 0.0, {shirt = Color(0.9, 0.9, 0.88), pants = Color(0.2, 0.2, 0.2), hat = "none"})
+	sepp.important = true
 	I.add(wirt_pos, 3.0, "Gasthaus Pirtscher: Wirt Sepp", func(): game.open_shop("pub"))
 
 	# Spielautomaten beim Gasthaus, an der Tankstelle und beim Supermarkt
@@ -346,7 +347,8 @@ func _build_props() -> void:
 		if id == "police":
 			outfit = {uniform = true, hat = "police"}
 		var npc_name: String = {"bauhaus": "Bauhaus-Verkäufer", "super": "Kassiererin", "gun": "Büchsenmacher", "butcher": "Fleischer Franz", "police": "Polizeiinspektion"}[id]
-		_npc(self, npc_name, Vector3(door.x, world.height_at(door.x, door.z), door.z), s.yaw, outfit)
+		var shop_npc := _npc(self, npc_name, Vector3(door.x, world.height_at(door.x, door.z), door.z), s.yaw, outfit)
+		shop_npc.important = true
 		if id == "police":
 			I.add(door, 3.0, "Polizei: Strafen bezahlen", func(): game.police_desk())
 		else:
@@ -421,7 +423,7 @@ func _build_props() -> void:
 		var cd: Vector2 = checkpoint.dir
 		var cside := Vector2(-cd.y, cd.x)
 		for k in range(-3, 4):
-			var q: Vector2 = Vector2(cp.x, cp.z) + cd * k * 3.0 + cside * 0.0
+			var q: Vector2 = Vector2(cp.x, cp.z) + cd * k * 3.0 + cside * 1.8
 			var cone := _box(cnode, Vector3(0.3, 0.6, 0.3), v3(q, 0.3), Color(1.0, 0.45, 0.05))
 			cone.position.y += 0.05
 		checkpoint.node = cnode

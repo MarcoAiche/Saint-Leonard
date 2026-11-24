@@ -3,6 +3,8 @@ extends Vehicle
 ## Streifenwagen (weiß mit blauem Streifen, Blaulicht). Fährt eine Route ab, verfolgt Verdächtige
 ## oder steht an der Kontrolle. Die Fahrlogik ist bewusst einfach: Zielpunkt anpeilen, Tempo halten.
 
+const PoliceOfficerScript := preload("res://scripts/police/police_officer.gd")
+
 enum Mode { PATROL, PURSUE, PARKED, GOTO }
 
 var mode := Mode.PATROL
@@ -13,11 +15,16 @@ var target: Node3D = null
 var goto_pos := Vector3.ZERO
 var siren_on := false
 var stuck_t := 0.0
+var allow_dirt := false
+var bogged_t := 0.0
+var dismounted_officer: Node3D = null
+var officer_dead := false
 
 var _siren: AudioStreamPlayer3D
 var _lights: Array[OmniLight3D] = []
 var _blink := 0.0
 var _officer: CharacterModel
+var _car_rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
@@ -27,6 +34,7 @@ func _ready() -> void:
 	max_engine_force = 7000.0
 	top_speed_kmh = 150.0
 	_build()
+	_car_rng.randomize()
 	driving = true
 	player_input = false
 	_siren = AudioStreamPlayer3D.new()
@@ -102,15 +110,78 @@ func _process(delta: float) -> void:
 		_officer.animate(delta, 0.0, true, false, true)
 
 
+func _surface_cap() -> float:
+	if surface.tier == WorldBuilder.TIER_MAIN or surface.tier == WorldBuilder.TIER_VILLAGE:
+		return 150.0
+	return 15.0
+
+
+func dismount_officer(game: Node, manager: Node, hostile := false) -> Node3D:
+	if officer_dead:
+		return null
+	if is_instance_valid(dismounted_officer) and dismounted_officer.get("alive"):
+		dismounted_officer.set("hostile", bool(dismounted_officer.get("hostile")) or hostile)
+		return dismounted_officer
+	if is_instance_valid(dismounted_officer):
+		officer_dead = true
+		return null
+	if _officer:
+		_officer.visible = false
+	var off: Node3D = PoliceOfficerScript.new()
+	get_parent().add_child(off)
+	var side := global_basis.x * 1.6
+	off.global_position = global_position + side
+	off.call("setup", game, manager, self, hostile)
+	dismounted_officer = off
+	mode = Mode.PARKED
+	return off
+
+
+func remount_officer() -> void:
+	if is_instance_valid(dismounted_officer):
+		dismounted_officer.queue_free()
+		dismounted_officer = null
+	if _officer:
+		_officer.visible = true
+
+
 func _physics_process(delta: float) -> void:
 	_drive_ai(delta)
 	super._physics_process(delta)
+
+
+func _follow_route(p: Vector2, look_dist: float) -> Vector2:
+	var inv := global_transform.affine_inverse()
+	while route_i < route.size() - 1:
+		var wp := route[route_i]
+		var dist := wp.distance_to(p)
+		var behind := (inv * Vector3(wp.x, global_position.y, wp.y)).z < 0.0
+		if dist < 16.0 or behind:
+			route_i += 1
+		else:
+			break
+	var look := route_i
+	var acc := 0.0
+	while look < route.size() - 1 and acc < look_dist:
+		acc += route[look].distance_to(route[look + 1])
+		look += 1
+	return route[look]
 
 
 func _drive_ai(delta: float) -> void:
 	var p := Vector2(global_position.x, global_position.z)
 	var aim := p
 	var want_kmh := 0.0
+	var offroad: bool = int(surface.tier) == 0 or int(surface.tier) >= WorldBuilder.TIER_DIRT
+	if bogged_t > 0.0:
+		bogged_t -= delta
+		ai_throttle = 0.0
+		ai_steer = 0.0
+		ai_handbrake = true
+		return
+	if offroad and absf(speed_kmh()) > 3.0 and _car_rng.randf() < 0.04 * delta:
+		bogged_t = 3.5
+		return
 	match mode:
 		Mode.PARKED:
 			ai_throttle = 0.0
@@ -122,41 +193,48 @@ func _drive_ai(delta: float) -> void:
 				ai_throttle = 0.0
 				ai_handbrake = true
 				return
-			while route_i < route.size() - 1 and route[route_i].distance_to(p) < 9.0:
-				route_i += 1
-			# etwas vorausschauen
-			var look := route_i
-			var acc := 0.0
-			while look < route.size() - 1 and acc < 10.0:
-				acc += route[look].distance_to(route[look + 1])
-				look += 1
-			aim = route[look]
+			aim = _follow_route(p, 14.0)
 			want_kmh = cruise_kmh
-			if route_i >= route.size() - 1 and route[-1].distance_to(p) < 10.0:
-				route = route.slice(0, 0)  # neue Route anfordern
+			if route_i >= route.size() - 1 and route[-1].distance_to(p) < 16.0:
+				route = route.slice(0, 0)
 		Mode.PURSUE:
 			if not is_instance_valid(target):
 				mode = Mode.PATROL
 				return
 			var tv: Vector3 = target.linear_velocity if target is RigidBody3D else Vector3.ZERO
-			var tp := target.global_position + tv * 0.6
-			aim = Vector2(tp.x, tp.z)
-			var d := aim.distance_to(p)
-			want_kmh = clampf(d * 2.5, 20.0, 145.0)
-			if d < 9.0:
-				want_kmh = minf(want_kmh, absf(target.linear_velocity.length() * 3.6) + 5.0) if target is RigidBody3D else 10.0
+			var tp := target.global_position + tv * 0.4
+			var direct := Vector2(tp.x, tp.z)
+			var d := direct.distance_to(p)
+			if d > 30.0 and route.size() >= 2 and route_i < route.size() - 1:
+				aim = _follow_route(p, 18.0)
+			else:
+				aim = direct
+			var target_kmh: float = absf(target.linear_velocity.length() * 3.6) if target is RigidBody3D else 0.0
+			if d < 7.0 and target_kmh < 4.0:
+				want_kmh = 0.0
+			elif d < 22.0:
+				want_kmh = target_kmh + clampf((d - 6.0) * 2.2, 0.0, 28.0)
+			else:
+				want_kmh = clampf(d * 2.5, 25.0, 150.0)
 		Mode.GOTO:
-			aim = Vector2(goto_pos.x, goto_pos.z)
-			want_kmh = 80.0
-			if aim.distance_to(p) < 12.0:
+			var g2 := Vector2(goto_pos.x, goto_pos.z)
+			var gd := g2.distance_to(p)
+			if route.size() >= 2 and route_i < route.size() - 1:
+				aim = _follow_route(p, 18.0)
+				want_kmh = 75.0
+			elif allow_dirt and gd > 14.0:
+				aim = g2
+				want_kmh = 40.0
+			else:
+				aim = g2
 				want_kmh = 0.0
 	ai_handbrake = false
 	var local := global_transform.affine_inverse() * Vector3(aim.x, global_position.y, aim.y)
 	var ang := atan2(local.x, local.z)
 	ai_steer = clampf(ang * 1.8, -1.0, 1.0)
 	var v := speed_kmh()
-	if absf(ang) > 1.2 and v > 25.0:
-		want_kmh = minf(want_kmh, 25.0)
+	if absf(ang) > 1.2 and v > 10.0:
+		want_kmh = minf(want_kmh, 10.0)
 	if want_kmh <= 0.1:
 		ai_throttle = -1.0 if v > 2.0 else 0.0
 		ai_handbrake = v < 2.0

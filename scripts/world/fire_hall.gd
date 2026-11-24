@@ -140,6 +140,7 @@ func _build() -> void:
 	for k in 8:
 		Placeables.cyl(self, 0.05, 0.28, bar + Vector3(-1.3 + k * 0.37, 1.95, -0.65), Color.from_hsv(0.08 + k * 0.05, 0.6, 0.6))
 	var kommandant := Npc.new("Kommandant Ferdl", {shirt = Color(0.12, 0.15, 0.25), pants = Color(0.12, 0.15, 0.25), hat = "none"})
+	kommandant.important = true
 	add_child(kommandant)
 	kommandant.position = bar + Vector3(0, 0, -0.35)
 	I.add(bar + Vector3(0, 1, 1.0), 2.6, "Bar: Kommandant Ferdl", func(): game.open_shop("fire"), null, self)

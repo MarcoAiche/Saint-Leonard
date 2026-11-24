@@ -57,6 +57,16 @@ func _ready() -> void:
 	_last_pos = global_position
 
 
+func _surface_cap() -> float:
+	var up: Dictionary = GameState.truck.get("upgrades", {})
+	var tuned := up.has("tires") or up.has("lift")
+	if surface.tier == WorldBuilder.TIER_MAIN or surface.tier == WorldBuilder.TIER_VILLAGE:
+		return 130.0 if tuned else 115.0
+	if surface.tier == WorldBuilder.TIER_DIRT:
+		return 100.0 if tuned else 50.0
+	return 90.0 if tuned else 20.0
+
+
 ## Aussehen und Fahrwerk nach den aktuellen Umbauten neu aufbauen
 func rebuild() -> void:
 	var up: Dictionary = GameState.truck.upgrades

@@ -23,6 +23,18 @@ func setup(id: int, pname: String, outfit: Dictionary) -> void:
 	player_name = pname
 	model = CharacterModel.new(GameState._colors_in(outfit))
 	add_child(model)
+	var body := StaticBody3D.new()
+	body.collision_layer = 16
+	body.collision_mask = 0
+	body.set_meta("remote_player", self)
+	var cs := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.38
+	cap.height = 1.8
+	cs.shape = cap
+	cs.position.y = 0.9
+	body.add_child(cs)
+	add_child(body)
 	add_to_group("player_body")
 	add_to_group("remote_player")
 	_label = Label3D.new()

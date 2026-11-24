@@ -6,6 +6,9 @@ extends Node3D
 var model: CharacterModel
 var display_name := ""
 var look_at_player := true
+var important := false
+var hp := 100.0
+var alive := true
 var _t := 0.0
 var _label: Label3D
 var _bubble: Label3D
@@ -42,6 +45,18 @@ func _ready() -> void:
 	_rng.randomize()
 	_say_cd = _rng.randf_range(1.0, 6.0)
 	add_child(model)
+	var body := StaticBody3D.new()
+	body.collision_layer = 16
+	body.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.38
+	cap.height = 1.85
+	cs.shape = cap
+	cs.position.y = 0.95
+	body.add_child(cs)
+	body.set_meta("npc", self)
+	add_child(body)
 	if not display_name.is_empty():
 		_label = Label3D.new()
 		_label.text = display_name
@@ -54,7 +69,25 @@ func _ready() -> void:
 		add_child(_label)
 
 
+func take_hit(dmg: float, hit_pos: Vector3) -> bool:
+	if not alive:
+		return false
+	var headshot := (hit_pos.y - global_position.y) > 1.35
+	hp = 0.0 if headshot else maxf(0.0, hp - clampf(dmg * 0.22, 12.0, 34.0))
+	model.set_expression("pain")
+	if hp <= 0.0:
+		alive = false
+		model.set_lying(true)
+		if _label:
+			_label.visible = false
+		return true
+	return false
+
+
 func _process(delta: float) -> void:
+	if not alive:
+		model.animate(delta, 0.0)
+		return
 	_t += delta
 	_say_cd -= delta
 	_say_t -= delta

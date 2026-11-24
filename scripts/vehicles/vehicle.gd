@@ -20,6 +20,7 @@ var wheels: Array[VehicleWheel3D] = []
 var surface := {tier = 0, kind = ""}
 var broken := false
 var lights_on := false
+var last_crash_t := 999.0
 
 var _steer := 0.0
 var _steer_buffer: Array = []  # verzögerte Lenkung bei Alkohol
@@ -159,11 +160,12 @@ func _physics_process(delta: float) -> void:
 	var power := _power_factor()
 	var force := 0.0
 	var brk := 0.0
+	var effective_top := minf(top_speed_kmh, _surface_cap())
 	if throttle > 0.0:
 		if v < -2.0:
 			brk = max_brake
 		else:
-			force = throttle * max_engine_force * power * clampf(1.0 - v / top_speed_kmh, 0.0, 1.0)
+			force = throttle * max_engine_force * power * clampf(1.0 - v / effective_top, 0.0, 1.0)
 	elif throttle < 0.0:
 		if v > 2.0:
 			brk = max_brake * -throttle
@@ -200,10 +202,16 @@ func _physics_process(delta: float) -> void:
 			apply_impulse(global_basis.y * strength * randf_range(0.3, 1.0), global_basis * at)
 			_on_bump(spd)
 	# Aufprall erkennen
+	last_crash_t += delta
 	var dv := (linear_velocity - _last_vel).length()
 	if dv > 9.0 and _last_vel.length() > 8.0:
+		last_crash_t = 0.0
 		_on_crash(dv)
 	_last_vel = linear_velocity
+
+
+func _surface_cap() -> float:
+	return 150.0 if (surface.tier == WorldBuilder.TIER_MAIN or surface.tier == WorldBuilder.TIER_VILLAGE) else 20.0
 
 
 func _wheels_on_ground() -> int:

@@ -451,13 +451,26 @@ func _noise(pos: Vector3, radius: float, kind: String) -> void:
 
 
 ## Schaden an einem Mitspieler (Wildschwein, Bär)
-func hurt_player(id: int, dmg: float) -> void:
-	_hurt.rpc_id(id, dmg)
+func hurt_player(id: int, dmg: float, killer_id := 0) -> void:
+	_hurt.rpc_id(id, dmg, killer_id)
 
 
 @rpc("any_peer", "reliable")
-func _hurt(dmg: float) -> void:
+func _hurt(dmg: float, killer_id := 0) -> void:
+	if killer_id > 0 and get_tree().current_scene:
+		get_tree().current_scene.set("last_damage_source", "player:%d" % killer_id)
 	GameState.damage(dmg)
+
+
+func charge_friendly_fire(killer_id: int, amount: int) -> void:
+	_friendly_fire_fee.rpc_id(killer_id, amount)
+
+
+@rpc("any_peer", "reliable")
+func _friendly_fire_fee(amount: int) -> void:
+	GameState.add_money(-mini(amount, maxi(GameState.money, 0)))
+	if get_tree().current_scene and get_tree().current_scene.get("hud"):
+		get_tree().current_scene.hud.toast("Friendly Fire! Du zahlst %d € für deinen Mitspieler." % amount, 4.0)
 
 
 # ------------------------------------------------------------------ Welt: Aufstellen, Häuser
