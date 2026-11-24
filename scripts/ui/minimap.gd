@@ -17,12 +17,16 @@ var others: Array = []  # [[Position, Name]]
 var show_route := true
 var _marks: Array = []  # [Position, Farbe, Kürzel, Name]
 
-var _roads: Array = []  # [PackedVector2Array, Breite, Farbe, Rect2]
+var _roads: Array = []  # [PackedVector2Array, Breite, Farbe, Rect2, rank]
 var _water: Array = []
 var _houses: ArrayMesh
 var _pois: Array = []  # [Position, Farbe, Name]
 var _border := PackedVector2Array()
 var _outside: ArrayMesh
+var _fitted := false
+var _dragging := false
+var _max_mpp := 20.0
+const MIN_MPP := 0.25
 
 
 func setup(w: WorldBuilder, full_map := false) -> void:
@@ -35,9 +39,7 @@ func setup(w: WorldBuilder, full_map := false) -> void:
 		var line := WorldBuilder.to_v2_array(r.pts)
 		var col: Color = WorldBuilder.ROAD_STYLE[r.kind][1].lightened(0.35)
 		var rank: int = WorldBuilder.ROAD_STYLE[r.kind][0]
-		if full and rank < 3:
-			continue
-		_roads.append([line, maxf(r.width * 1.6, 3.0), col, _bounds(line)])
+		_roads.append([line, maxf(r.width * 1.6, 3.0), col, _bounds(line), rank])
 	for r in w.data.rails:
 		if r.kind == "rail" and not r.tunnel:
 			var line := WorldBuilder.to_v2_array(r.pts)
@@ -104,14 +106,40 @@ static func _mesh(verts: PackedVector2Array) -> ArrayMesh:
 
 ## Ganze Spielgrenze passend einpassen
 func fit_border() -> void:
+	if not world:
+		return
 	var r := _bounds(world.border)
 	center = r.get_center()
 	meters_per_px = maxf(r.size.x / maxf(size.x - 60.0, 1.0), r.size.y / maxf(size.y - 60.0, 1.0))
+	_max_mpp = maxf(meters_per_px * 1.2, 2.0)
+	_fitted = true
+
+
+func zoom_by(factor: float, screen_pos := Vector2.INF) -> void:
+	if screen_pos == Vector2.INF:
+		screen_pos = size * 0.5
+	var world_before := center + (screen_pos - size * 0.5) * meters_per_px
+	meters_per_px = clampf(meters_per_px * factor, MIN_MPP, _max_mpp)
+	center = world_before - (screen_pos - size * 0.5) * meters_per_px
+	queue_redraw()
+
+
+func center_on_player() -> void:
+	center = player_pos
+	if meters_per_px > 2.2:
+		meters_per_px = 1.6
+	queue_redraw()
+
+
+func zoom_percent() -> int:
+	if _max_mpp <= MIN_MPP:
+		return 100
+	return roundi((_max_mpp / maxf(meters_per_px, MIN_MPP)) * 100.0)
 
 
 func _process(_delta: float) -> void:
 	if is_visible_in_tree():
-		if full:
+		if full and not _fitted and size.x > 10.0:
 			fit_border()
 		queue_redraw()
 
@@ -121,8 +149,23 @@ func to_screen(p: Vector2) -> Vector2:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if full and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		clicked.emit(center + (event.position - size * 0.5) * meters_per_px)
+	if not full:
+		return
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+			zoom_by(0.82, event.position)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+			zoom_by(1.22, event.position)
+		elif event.button_index in [MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE]:
+			_dragging = event.pressed
+		elif event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			if waypoint != Vector2.INF and to_screen(waypoint).distance_to(event.position) < 16.0:
+				clicked.emit(Vector2.INF)
+			else:
+				clicked.emit(center + (event.position - size * 0.5) * meters_per_px)
+	elif event is InputEventMouseMotion and _dragging:
+		center -= event.relative * meters_per_px
+		queue_redraw()
 
 
 func _draw() -> void:
@@ -138,6 +181,8 @@ func _draw() -> void:
 		if view.intersects(wl[2]):
 			draw_polyline(wl[0], Color(0.3, 0.6, 0.95), maxf(wl[1], lw * 3.0))
 	for r in _roads:
+		if full and meters_per_px > 2.2 and r.size() > 4 and int(r[4]) < 3:
+			continue
 		if view.intersects(r[3]):
 			draw_polyline(r[0], r[2], maxf(r[1], lw * 2.0))
 	draw_mesh(_houses, null, Transform2D(), Color(0.85, 0.45, 0.35))
