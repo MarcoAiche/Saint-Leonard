@@ -15,7 +15,7 @@ const PAPER := Color(1.0, 0.97, 0.90, 0.94)
 const ACCENT := Color(0.98, 0.78, 0.25)
 const RED := Color(0.85, 0.15, 0.1)
 
-const HELP_WALK := "[W A S D]  laufen   [Shift] rennen   [C] ducken\n[Maus links] schießen   [rechts] zielen\n[1-4] Waffen  [5] Fernglas  [6] nichts  [R] laden\n[L] Taschenlampe   [V] Ansicht\n[F] benutzen / einsteigen / tragen\n[I] Inventar   [P] Handy   [M] Karte\n[Z] rauchen   [X] trinken   [N] Minimap\n[F1] Hilfe   [Esc] Pause"
+const HELP_WALK := "[W A S D]  laufen   [Shift] rennen   [C] ducken\n[Maus links] schießen   [rechts] zielen\n[1-3] Waffen  [4] nichts  [R] laden\n[L] Taschenlampe   [V] Ansicht\n[F] benutzen / einsteigen / tragen\n[I] Inventar   [P] Handy   [M] Karte\n[Z] rauchen   [X] trinken   [N] Minimap\n[F1] Hilfe   [Esc] Pause"
 const HELP_DRIVE := "[W] Gas   [S] Bremse/Rückwärts   [A D] lenken\n[Leertaste] Handbremse   [H] hupen\n[L] Licht   [K] Radio   [T] Seilwinde\n[R] aufstellen   [V] Ansicht\n[F] aussteigen   [G] Ladefläche\n[M] Karte   [P] Handy   [F1] Hilfe"
 
 var minimap: Minimap
@@ -44,9 +44,7 @@ var _toast_time := 0.0
 var _alert: Label
 var _crosshair: Control
 var _scope: Control
-var _bino: Control
 var _hp_bar: ProgressBar
-var _st_bar: ProgressBar
 var _bac_label: Label
 var _ammo: Label
 var _progress: ProgressBar
@@ -98,7 +96,6 @@ func _ready() -> void:
 	_drunk_fx.visible = false
 	root.add_child(_drunk_fx)
 	_scope = _scope_overlay(true)
-	_bino = _scope_overlay(false)
 	_crosshair = _make_crosshair()
 	_hit = Control.new()
 	_hit.set_anchors_preset(Control.PRESET_CENTER)
@@ -140,7 +137,6 @@ func _ready() -> void:
 	var sv := VBoxContainer.new()
 	_status.add_child(sv)
 	_hp_bar = _bar(sv, "Gesundheit", Color(0.85, 0.25, 0.2))
-	_st_bar = _bar(sv, "Ausdauer", Color(0.3, 0.6, 0.9))
 	var r2 := HBoxContainer.new()
 	sv.add_child(r2)
 	_ammo = Label.new()
@@ -758,20 +754,16 @@ func set_fade(a: float) -> void:
 ## Ansicht durch Zielfernrohr / Fernglas / Fadenkreuz
 func set_view(first_person: bool, aiming: bool, slot: String, driving: bool) -> void:
 	_scope.visible = aiming and WeaponHand.has_scope(slot)
-	_bino.visible = aiming and slot == "binoculars"
-	_crosshair.visible = first_person and not driving and slot != "none" and not _scope.visible and not _bino.visible
+	_crosshair.visible = first_person and not driving and slot != "none" and not _scope.visible
 	if _scope.visible:
 		_scope.queue_redraw()
-	if _bino.visible:
-		_bino.queue_redraw()
 
 
 func update_status() -> void:
 	_clock.text = "%s  Tag %d  %s" % [GameState.clock_text(), GameState.day, {clear = "sonnig", cloudy = "bewölkt", fog = "Nebel", rain = "Regen"}.get(GameState.weather, "")]
 	_money.text = "%d €" % GameState.money
 	_hp_bar.value = GameState.health
-	_st_bar.value = GameState.stamina
-	_ammo.text = "Patronen %d/%d" % [GameState.loaded, GameState.count("ammo")] if (GameState.has("rifle") or GameState.has("pistol") or GameState.has("assault_rifle") or GameState.has("sniper")) else ""
+	_ammo.text = "Patronen %d/%d" % [GameState.loaded, GameState.count("ammo")] if (GameState.has("pistol") or GameState.has("assault_rifle") or GameState.has("sniper")) else ""
 	var pm := GameState.promille()
 	_bac_label.text = "%.1f ‰" % pm if pm >= 0.1 else ""
 	_bac_label.add_theme_color_override("font_color", RED if pm >= 0.5 else INK)

@@ -407,27 +407,21 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _foot_input(event: InputEvent) -> void:
 	var slot_labels := {
-		rifle = "Repetierbüchse",
+		sniper = "Scharfschützengewehr",
 		pistol = "Pistole",
 		assault_rifle = "Sturmgewehr",
-		sniper = "Scharfschützengewehr",
-		binoculars = "Fernglas",
 		none = "Hände frei",
 	}
 	if event.is_action_pressed("slot_1"):
-		_select_slot("rifle", slot_labels.rifle)
+		_select_slot("sniper", slot_labels.sniper)
 	elif event.is_action_pressed("slot_2"):
 		_select_slot("pistol", slot_labels.pistol)
 	elif event.is_action_pressed("slot_3"):
 		_select_slot("assault_rifle", slot_labels.assault_rifle)
-	elif event.is_action_pressed("slot_4"):
-		_select_slot("sniper", slot_labels.sniper)
-	elif event.is_action_pressed("slot_5"):
-		_select_slot("binoculars", slot_labels.binoculars)
-	elif event.is_action_pressed("slot_6"):
+	elif event.is_action_pressed("slot_4") or event.is_action_pressed("slot_5") or event.is_action_pressed("slot_6"):
 		_select_slot("none", slot_labels.none)
 	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and rig.first_person and not player.hand.aiming:
-		var order := ["rifle", "pistol", "assault_rifle", "sniper", "binoculars", "none"].filter(func(s): return s == "none" or GameState.has(s))
+		var order := ["sniper", "pistol", "assault_rifle", "none"].filter(func(s): return s == "none" or GameState.has(s))
 		var i: int = order.find(player.hand.slot)
 		var step := 1 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1
 		var nxt: String = order[(i + step + order.size()) % order.size()]
@@ -687,8 +681,8 @@ func exit_vehicle() -> void:
 	driving = false
 	rig.set_target(player, 1.65, 5.0, false, true)
 	hud.set_driving(false)
-	if GameState.has("rifle"):
-		player.hand.select("rifle")
+	if GameState.has("sniper"):
+		player.hand.select("sniper")
 
 
 func truck_near(p: Vector3, r: float) -> bool:
@@ -771,7 +765,7 @@ func open_shop(id: String) -> void:
 
 func on_bought(item: String, _shop: String) -> void:
 	missions.event("bought", {id = item})
-	if item == "rifle" or item == "binoculars":
+	if item in ["sniper", "pistol", "assault_rifle"]:
 		player.hand.select(item)
 
 

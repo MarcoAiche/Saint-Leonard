@@ -6,11 +6,6 @@ extends CanvasLayer
 signal start(mode: String, address: String, slot: String, new_game: bool)
 signal quit
 
-const SHIRTS := [Color(0.35, 0.42, 0.25), Color(0.75, 0.20, 0.15), Color(0.20, 0.30, 0.55), Color(0.85, 0.65, 0.20), Color(0.30, 0.30, 0.32), Color(0.90, 0.90, 0.88), Color(0.45, 0.30, 0.18)]
-const PANTS := [Color(0.30, 0.26, 0.20), Color(0.20, 0.25, 0.40), Color(0.15, 0.15, 0.16), Color(0.40, 0.35, 0.25)]
-const SKINS := [Color(0.98, 0.80, 0.66), Color(0.90, 0.70, 0.55), Color(0.72, 0.52, 0.38), Color(0.50, 0.35, 0.25)]
-const HATS := [["cap", "Kappe"], ["hunter", "Jägerhut"], ["hunter_gams", "Jägerhut mit Gamsbart"], ["none", "kein Hut"]]
-
 var _root: Control
 var _box: PanelContainer
 var _body: VBoxContainer
@@ -232,39 +227,31 @@ func _save_ip() -> void:
 
 
 func page_figure() -> void:
-	var vb := _page("Figur anpassen", 520)
-	_color_row(vb, "Hemd", "shirt", SHIRTS)
-	_color_row(vb, "Hose", "pants", PANTS)
-	_color_row(vb, "Haut", "skin", SKINS)
-	var hr := HFlowContainer.new()
-	vb.add_child(hr)
+	var vb := _page("Figur anpassen", 440)
+	var gr := HBoxContainer.new()
+	vb.add_child(gr)
+	var g_lbl := Label.new()
+	g_lbl.text = "Geschlecht: %s" % ("Mann" if GameState.outfit.get("gender", "male") == "male" else "Frau")
+	_button(gr, "Mann", func():
+		GameState.outfit.gender = "male"
+		g_lbl.text = "Geschlecht: Mann")
+	_button(gr, "Frau", func():
+		GameState.outfit.gender = "female"
+		g_lbl.text = "Geschlecht: Frau")
+	gr.add_child(g_lbl)
+	var jh := HBoxContainer.new()
+	vb.add_child(jh)
 	var current := Label.new()
-	for h in HATS:
-		_button(hr, h[1], func():
-			GameState.outfit.hat = h[0]
-			current.text = "Hut: %s" % h[1])
-	current.text = "Hut: %s" % GameState.outfit.get("hat", "cap")
-	vb.add_child(current)
+	current.text = "Hut: %s" % ("Jagdhut" if GameState.outfit.get("hat", "hunter") in ["hunter", "hunter_gams", "cap"] else "Kein Hut")
+	_button(jh, "Mit Jagdhut", func():
+		GameState.outfit.hat = "hunter"
+		current.text = "Hut: Jagdhut")
+	_button(jh, "Ohne Hut", func():
+		GameState.outfit.hat = "none"
+		current.text = "Hut: Kein Hut")
+	jh.add_child(current)
 	_button(vb, "Fertig", func(): page_home())
 	_finish_page()
-
-
-func _color_row(parent: Control, title: String, key: String, colors: Array) -> void:
-	var h := HBoxContainer.new()
-	parent.add_child(h)
-	var l := Label.new()
-	l.text = title
-	l.custom_minimum_size.x = 60
-	h.add_child(l)
-	for c in colors:
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(38, 32)
-		var sb := Hud._style(c, 2)
-		sb.set_content_margin_all(4)
-		b.add_theme_stylebox_override("normal", sb)
-		b.add_theme_stylebox_override("hover", Hud._style(c.lightened(0.2), 3))
-		b.pressed.connect(func(): GameState.outfit[key] = c)
-		h.add_child(b)
 
 
 func page_settings() -> void:

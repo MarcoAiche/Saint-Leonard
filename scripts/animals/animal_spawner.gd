@@ -30,6 +30,7 @@ func _targets() -> Dictionary:
 	return {
 		deer = 14 if dawn_dusk else 9,
 		boar = 5 if GameState.is_night() else 3,
+		fox = 4,
 		rabbit = 6,
 		bear = 1,
 		legend = 1 if legend_wanted else 0,

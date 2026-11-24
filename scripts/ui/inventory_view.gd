@@ -9,7 +9,7 @@ signal action(id: String, what: String)
 const CELL := 56
 const COLS := 10
 const ROWS := 8
-const EQUIP := [["rifle", "Gewehr", Vector2i(5, 2)], ["binoculars", "Fernglas", Vector2i(2, 1)], ["knife", "Messer", Vector2i(2, 1)],
+const EQUIP := [["sniper", "Scharfschützengewehr", Vector2i(5, 2)], ["knife", "Messer", Vector2i(2, 1)],
 	["flashlight", "Lampe", Vector2i(2, 1)], ["scope8", "Optik 8x", Vector2i(2, 1)]]
 const SIZES := {
 	ammo = Vector2i(1, 1), beer = Vector2i(1, 2), schnaps = Vector2i(1, 2), moonshine = Vector2i(1, 2), cigarettes = Vector2i(1, 1),
@@ -64,7 +64,7 @@ func _grid_ids() -> Array:
 	var ids := []
 	for key in GameState.inv:
 		var id := str(key)
-		if Items.info(id).kind in ["weapon"] or id in ["binoculars", "knife", "flashlight", "scope8", "rifle"]:
+		if Items.info(id).kind in ["weapon"] or id in ["knife", "flashlight", "scope8"]:
 			continue
 		ids.append(id)
 	ids.sort_custom(func(a, b):
@@ -180,9 +180,9 @@ func _open_popup(id: String, at: Vector2) -> void:
 		"outfit": _popup.add_item("Anziehen", 2)
 	if id == "jerrycan":
 		_popup.add_item("Pickup betanken", 3)
-	if id in ["rifle", "binoculars"]:
+	if id in ["sniper", "pistol", "assault_rifle"]:
 		_popup.add_item("In die Hand nehmen", 4)
-	if not id in ["rifle", "knife"]:
+	if not id in ["sniper", "knife"]:
 		_popup.add_item("Eins wegwerfen", 9)
 	_popup.position = Vector2i(at)
 	_popup.popup()
@@ -201,7 +201,7 @@ func _tooltip(id: String) -> String:
 	var lines := ["%s  (x%d)" % [it.name, GameState.count(id)]]
 	match it.kind:
 		"drink": lines.append("Alkohol: +%.1f ‰" % (it.get("alcohol", 0.0) * 10.0))
-		"food": lines.append("Gesundheit +%d, Ausdauer +%d" % [it.get("heal", 0), it.get("stamina", 0)])
+		"food": lines.append("Gesundheit +%d" % [it.get("heal", 0)])
 		"smoke": lines.append("90 s ruhige Hand, Husten verscheucht Wild")
 		"placeable", "furniture": lines.append("Rechtsklick: Aufstellen")
 		"outfit": lines.append("Rechtsklick: Anziehen")

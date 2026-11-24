@@ -1072,6 +1072,19 @@ func _box(buf: MeshBuffer, o: Dictionary, y0: float, y1: float, color: Color) ->
 # ------------------------------------------------------------------ Bäume
 
 func _tree_meshes() -> Array[ArrayMesh]:
+	var out: Array[ArrayMesh] = []
+	for path in ["res://assets/nature/Pine_2.gltf", "res://assets/nature/CommonTree_1.gltf"]:
+		var scene := load(path) as PackedScene
+		if scene:
+			var inst := scene.instantiate()
+			for mi in inst.find_children("*", "MeshInstance3D", true, false):
+				var mesh := (mi as MeshInstance3D).mesh as ArrayMesh
+				if mesh:
+					out.append(mesh)
+					break
+			inst.free()
+	if out.size() == 2:
+		return out
 	var trunk_c := Color(0.45, 0.30, 0.18)
 	var fir := MeshBuffer.new()
 	_cone(fir, Vector3.ZERO, 0.28, 3.0, 6, trunk_c)

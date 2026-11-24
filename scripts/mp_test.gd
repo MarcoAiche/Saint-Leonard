@@ -201,7 +201,7 @@ func run() -> void:
 
 	# 6. Effekte und Stimme
 	await at(35.0)
-	game.player.hand.select("rifle")
+	game.player.hand.select("sniper")
 	print("MPTEST %s: schieße (Magazin %d)" % [role, GameState.loaded])
 	game.player.hand._cool = 0.0
 	game.player.hand._fire()

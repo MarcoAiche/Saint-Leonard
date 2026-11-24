@@ -61,7 +61,7 @@ func attach_camera(rig: CameraRig) -> void:
 	rig.hand.add_child(hand)
 	hand.setup(rig, self)
 	hand.fired.connect(func(f, d): shot.emit(f, d))
-	if not GameState.has("rifle"):
+	if not GameState.has("sniper"):
 		hand.select("none")
 
 
@@ -120,7 +120,7 @@ func _physics_process(delta: float) -> void:
 		_drift = _drift.lerp(Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)), delta * 0.8)
 		dir = (dir + _drift * drunk * 0.6).normalized() * dir.length()
 
-	var sprint := Input.is_action_pressed("sprint") and input_enabled and GameState.stamina > 5.0 and not crouched and carrying == null
+	var sprint := Input.is_action_pressed("sprint") and input_enabled and not crouched and carrying == null
 	var speed := run_speed if sprint else walk_speed
 	if crouched:
 		speed = crouch_speed
@@ -128,8 +128,6 @@ func _physics_process(delta: float) -> void:
 		speed *= 0.6
 	if hand and hand.aiming:
 		speed *= 0.5
-	if sprint and dir.length() > 0.1:
-		GameState.stamina = maxf(0.0, GameState.stamina - delta * 14.0)
 	var accel := 14.0 if is_on_floor() else 3.0
 	var target := dir * speed
 	velocity.x = lerpf(velocity.x, target.x, 1.0 - exp(-accel * delta))
@@ -201,7 +199,7 @@ func _hand_and_model(delta: float, dir: Vector3) -> void:
 	var want := atan2(facing.x, facing.z)
 	model.rotation.y = lerp_angle(model.rotation.y, want, 1.0 - exp(-12.0 * delta))
 	var hspeed := Vector2(velocity.x, velocity.z).length()
-	if model.animate(delta, hspeed, is_on_floor(), aiming or (hand and hand.slot == "rifle" and fp), on_stand != null, hand and hand.action != "", hand and hand.reloading()) > 0.0:
+	if model.animate(delta, hspeed, is_on_floor(), aiming or (hand and hand.is_weapon(hand.slot) and fp), on_stand != null, hand and hand.action != "", hand and hand.reloading()) > 0.0:
 		_step_sound.pitch_scale = randf_range(0.85, 1.15)
 		_step_sound.volume_db = -14.0 if crouched else -6.0
 		_step_sound.play()
@@ -210,6 +208,8 @@ func _hand_and_model(delta: float, dir: Vector3) -> void:
 		camera_rig.height = lerpf(camera_rig.height, 1.15 if crouched else 1.65, 0.15)
 	if hand:
 		hand.process_hand(delta, input_enabled and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or DebugTools.active), crouched, on_stand != null)
+		if model:
+			model.set_held_item(hand.slot)
 	if carrying:
 		carrying.global_position = global_position + Vector3.UP * 1.35 - facing * 0.3
 		carrying.global_rotation = Vector3(0, atan2(facing.x, facing.z) + PI / 2, 0)

@@ -20,6 +20,8 @@ const SPECIES := {
 		body = Color(0.60, 0.50, 0.38), belly = Color(0.85, 0.80, 0.72), loot = {meat = 1}, male_loot = {}},
 	bear = {name = "Braunbär", hp = 420.0, walk = 1.4, run = 10.5, sight = 60.0, hear = 0.9, size = 1.5, aggressive = true, damage = 45.0,
 		body = Color(0.35, 0.24, 0.15), belly = Color(0.40, 0.29, 0.19), loot = {meat = 5, hide = 2}, male_loot = {}},
+	fox = {name = "Fuchs", hp = 40.0, walk = 1.8, run = 13.5, sight = 65.0, hear = 1.2, size = 0.7, aggressive = false,
+		body = Color(0.75, 0.32, 0.12), belly = Color(0.92, 0.88, 0.82), loot = {meat = 1, hide = 1}, male_loot = {}},
 }
 
 static var threats: Array[Node3D] = []  # Spieler und Fahrzeuge, die Tiere bemerken können
@@ -44,6 +46,8 @@ var _attack_cd := 0.0
 var _model: Node3D
 var _legs: Array[Node3D] = []
 var _head: Node3D
+var _glb_root: Node3D
+var _anim: AnimationPlayer
 var _phase := 0.0
 var _call: AudioStreamPlayer3D
 var _rng := RandomNumberGenerator.new()
@@ -77,7 +81,7 @@ func _ready() -> void:
 	add_child(cs)
 	_build_model()
 	_call = AudioStreamPlayer3D.new()
-	_call.stream = Sfx.animal_call("deer" if species == "legend" else species)
+	_call.stream = Sfx.animal_call("deer" if species in ["legend", "fox"] else species)
 	_call.unit_size = 10.0
 	_call.max_distance = 250.0
 	add_child(_call)
@@ -101,8 +105,50 @@ func _part(parent: Node3D, mesh: Mesh, c: Color, pos: Vector3, rot := Vector3.ZE
 
 func _build_model() -> void:
 	_model = Node3D.new()
-	_model.scale = Vector3.ONE * info.size
 	add_child(_model)
+	_head = Node3D.new()
+	_model.add_child(_head)
+	var glb_path := ""
+	var target_h := 1.25
+	match species:
+		"deer":
+			glb_path = "res://assets/animals/stag.glb" if male else "res://assets/animals/deer.glb"
+			target_h = 1.55 if male else 1.25
+		"legend":
+			glb_path = "res://assets/animals/stag.glb"
+			target_h = 2.05
+		"fox":
+			glb_path = "res://assets/animals/fox.glb"
+			target_h = 0.72
+		"bear":
+			glb_path = "res://assets/animals/bear.glb"
+			target_h = 1.60
+	if not glb_path.is_empty():
+		var scene := load(glb_path) as PackedScene
+		if scene:
+			_glb_root = scene.instantiate() as Node3D
+			_model.add_child(_glb_root)
+			var min_y := INF
+			var max_y := -INF
+			for mi in _glb_root.find_children("*", "MeshInstance3D", true, false):
+				var mesh_inst := mi as MeshInstance3D
+				if mesh_inst.mesh:
+					var a := mesh_inst.mesh.get_aabb()
+					var xf := _glb_root.global_transform.affine_inverse() * mesh_inst.global_transform
+					for ci in 8:
+						var c := xf * a.get_endpoint(ci)
+						min_y = minf(min_y, c.y)
+						max_y = maxf(max_y, c.y)
+			var h := max_y - min_y
+			if h > 0.001 and is_finite(h):
+				var s := target_h / h
+				_glb_root.scale = Vector3.ONE * s
+				_glb_root.position.y = -min_y * s
+			for ap in _glb_root.find_children("*", "AnimationPlayer", true, false):
+				_anim = ap as AnimationPlayer
+				break
+			return
+	_model.scale = Vector3.ONE * info.size
 	var bc: Color = info.body
 	var lc: Color = info.belly
 	var leg_h := 0.75
@@ -410,6 +456,20 @@ func _think_step() -> void:
 func _animate(delta: float, speed: float) -> void:
 	if speed > 0.2:
 		_phase += delta * (3.0 + speed * 1.2)
+	if _glb_root:
+		if _anim:
+			var want := "Idle"
+			if speed > 5.0:
+				want = "Gallop"
+			elif speed > 0.2:
+				want = "Walk"
+			elif state == State.GRAZE and _timer > 1.0:
+				want = "Eating"
+			if _anim.has_animation(want) and _anim.current_animation != want:
+				_anim.play(want, 0.2)
+		elif speed > 0.2:
+			_glb_root.position.y = absf(sin(_phase)) * 0.05
+		return
 	var a := sin(_phase) * clampf(speed / 6.0, 0.0, 0.8)
 	for i in _legs.size():
 		_legs[i].rotation.x = a * (1.0 if i % 3 == 0 else -1.0)

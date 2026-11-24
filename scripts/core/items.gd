@@ -16,12 +16,10 @@ const SHOP_NAMES := {
 const ITEMS := {
 	# Waffen und Ausrüstung
 	"pistol": {name = "Pistole", kind = "weapon", price = 450, shops = ["gun"]},
-	"rifle": {name = "Repetierbüchse", kind = "weapon", price = 900, shops = ["gun"]},
 	"assault_rifle": {name = "Sturmgewehr", kind = "weapon", price = 1600, shops = ["gun"]},
 	"sniper": {name = "Scharfschützengewehr", kind = "weapon", price = 2200, shops = ["gun"]},
 	"ammo": {name = "Patronen (10 Stk.)", kind = "ammo", price = 25, shops = ["gun"], gives = 10},
 	"scope8": {name = "Zielfernrohr 8x", kind = "tool", price = 350, shops = ["gun"]},
-	"binoculars": {name = "Fernglas", kind = "tool", price = 120, shops = ["gun"]},
 	"flashlight": {name = "Taschenlampe", kind = "tool", price = 35, shops = ["gun", "bauhaus"]},
 	"knife": {name = "Jagdmesser", kind = "tool", price = 45, shops = ["gun"]},
 	# Getränke, Rauchen, Essen
