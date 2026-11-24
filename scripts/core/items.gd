@@ -10,6 +10,7 @@ const SHOP_NAMES := {
 	"gas": "Tankstelle",
 	"butcher": "Fleischerei",
 	"pub": "Gasthaus Pirtscher",
+	"fire": "Feuerwehrhaus Korpitsch (Bar)",
 }
 
 const ITEMS := {
@@ -21,11 +22,11 @@ const ITEMS := {
 	"flashlight": {name = "Taschenlampe", kind = "tool", price = 35, shops = ["gun", "bauhaus"]},
 	"knife": {name = "Jagdmesser", kind = "tool", price = 45, shops = ["gun"]},
 	# Getränke, Rauchen, Essen
-	"beer": {name = "Bier", kind = "drink", price = 3, shops = ["super", "gas", "pub"], alcohol = 0.03},
-	"schnaps": {name = "Schnaps", kind = "drink", price = 9, shops = ["super", "pub"], alcohol = 0.07},
-	"moonshine": {name = "Schwarzgebrannter", kind = "drink", price = 0, shops = [], alcohol = 0.16, illegal = true, sell = {pub = 45, gas = 30}},
+	"beer": {name = "Bier", kind = "drink", price = 3, shops = ["super", "gas", "pub", "fire"], alcohol = 0.03},
+	"schnaps": {name = "Schnaps", kind = "drink", price = 9, shops = ["super", "pub", "fire"], alcohol = 0.07},
+	"moonshine": {name = "Schwarzgebrannter", kind = "drink", price = 0, shops = [], alcohol = 0.16, illegal = true, sell = {pub = 45, gas = 30, fire = 40}},
 	"cigarettes": {name = "Zigaretten (Packung)", kind = "smoke", price = 7, shops = ["super", "gas"], gives = 20},
-	"snack": {name = "Wurstsemmel", kind = "food", price = 4, shops = ["super", "gas", "pub"], heal = 15, stamina = 30},
+	"snack": {name = "Wurstsemmel", kind = "food", price = 4, shops = ["super", "gas", "pub", "fire"], heal = 15, stamina = 30},
 	"meat_cooked": {name = "Gegrilltes Wildfleisch", kind = "food", price = 0, shops = [], heal = 40, stamina = 60, sell = {pub = 25}},
 	# Schnaps brennen
 	"sugar": {name = "Zucker", kind = "ingredient", price = 3, shops = ["super"]},

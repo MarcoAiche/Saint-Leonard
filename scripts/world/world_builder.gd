@@ -11,7 +11,9 @@ extends Node3D
 @export var baked_path := "res://data/world_baked.scn"
 @export var show_labels := true
 
-const BUILD_VERSION := 5
+const BUILD_VERSION := 6
+## Gebäude, die das Spiel selbst (begehbar) nachbaut: Feuerwehrhaus Korpitsch
+const SKIP_BUILDINGS := [424764105]
 const CHUNK := 250.0
 const C_GRASS := Color(0.40, 0.58, 0.26)
 const KIND_COLORS := {
@@ -761,6 +763,8 @@ func _build_buildings() -> void:
 		for p in poly:
 			c += p / poly.size()
 		if c.x < x0 + 5 or c.y < z0 + 5 or c.x > x0 + (nx - 2) * step or c.y > z0 + (nz - 2) * step:
+			continue
+		if int(b.id) in SKIP_BUILDINGS:
 			continue
 		_house(b, poly, _buf(walls, c.x, c.y), _buf(roofs, c.x, c.y), _buf(details, c.x, c.y))
 	for k in walls:

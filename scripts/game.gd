@@ -16,6 +16,9 @@ var landmarks: Landmarks
 var spawner: AnimalSpawner
 var police: PoliceManager
 var missions: Missions
+var casino: Casino
+var hall: FireHall
+var sitting := false
 var sky: SkyCycle
 var player: Player
 var car: Truck
@@ -76,6 +79,7 @@ func _ready() -> void:
 	hud.visible = false
 	landmarks.setup(world, self)
 	spawner.setup(world, landmarks)
+	_setup_hall()
 
 	if DebugTools.active and not DebugTools.args.has("showmenu"):
 		GameState.reset_new_game()
@@ -171,6 +175,7 @@ func _wait_connect() -> String:
 func _start_dedicated() -> void:
 	landmarks.setup(world, self)
 	spawner.setup(world, landmarks)
+	_setup_hall()
 	GameState.slot = "dedicated"
 	GameState.load_game()
 	var err := Net.start_dedicated()
@@ -180,6 +185,44 @@ func _start_dedicated() -> void:
 	missions.set_process(false)
 	_sync_world()
 	started = true
+
+
+## Feuerwehrhaus Korpitsch und Glücksspiel
+func _setup_hall() -> void:
+	var info := FireHall.find(world)
+	casino = Casino.new()
+	casino.name = "Casino"
+	casino.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(casino)
+	if not info.is_empty():
+		hall = FireHall.new()
+		hall.name = "FeuerwehrhausKorpitsch"
+		add_child(hall)
+		hall.setup(self, world, info)
+	casino.setup(self, hall)
+
+
+## Hinsetzen (Bank, Pokertisch): Figur sitzt, Kamera bleibt frei
+func sit_down(pos: Vector3, yaw: float) -> void:
+	if seat != "":
+		return
+	sitting = true
+	player.global_position = pos
+	player.velocity = Vector3.ZERO
+	player.input_enabled = false
+	player.sitting = true
+	player.model.rotation.y = yaw
+	player.reset_physics_interpolation()
+	hud.toast("[F] Aufstehen", 1.5)
+
+
+func stand_up() -> void:
+	if not sitting:
+		return
+	sitting = false
+	player.sitting = false
+	player.input_enabled = true
+	player.global_position += player.facing * 0.6 + Vector3.UP * 0.3
 
 
 func _start_game() -> void:
@@ -384,6 +427,11 @@ func set_waypoint(p: Vector2) -> void:
 # ------------------------------------------------------------------ Interaktion [F]
 
 func _interact() -> void:
+	if sitting:
+		if casino.at_poker:
+			casino.leave_poker()
+		stand_up()
+		return
 	if seat != "":
 		exit_vehicle()
 		return
@@ -415,6 +463,8 @@ func _interact() -> void:
 ## Was man gerade mit [F] tun kann (ohne Einsteigen)
 func _update_interaction() -> String:
 	_current_interaction = {}
+	if sitting:
+		return "[F] Aufstehen" + (" und auszahlen   (Pokertisch: Esc schließt das Fenster)" if casino.at_poker else "")
 	if seat != "":
 		return "[F] Aussteigen"
 	if player.on_stand:
@@ -802,6 +852,11 @@ func use_item(id: String) -> void:
 			"food": msg = GameState.eat(id)
 		if not msg.is_empty():
 			hud.toast(msg, 2.5)
+		if id == "beer" and randf() < 0.45:
+			get_tree().create_timer(1.4).timeout.connect(func():
+				Sfx.play_3d(player, Sfx.burp(), 2.0, randf_range(0.85, 1.1))
+				GameState.make_noise(player.global_position, 35.0, "burp")
+				hud.toast("*Rülps*", 1.2))
 		# zu viel: Ohnmacht
 		if GameState.promille() >= 3.0 and player.passed_out <= 0.0:
 			_pass_out("Zu viel Schnaps! Du bist umgekippt.")
@@ -1103,6 +1158,8 @@ func still_explode(entry: Dictionary) -> void:
 	if player.global_position.distance_to(pos) < 8.0:
 		GameState.damage(45.0)
 		rig.shake(2.0)
+		player.model.soot(90.0)
+		player.knockdown(2.5, "Rußgesicht!")
 	if is_instance_valid(n):
 		interactions.remove_node(n)
 	Net.request_remove(uid)
@@ -1133,6 +1190,7 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 			a.hit(RIFLE_DAMAGE, hit.position, dir, player)
 			if a.is_dead():
 				hud.hitmarker(true)
+				hud.toast("Waidmannsheil! %s erlegt" % Animal.SPECIES[a.species].name, 2.5)
 	elif col is PoliceCar:
 		GameState.police_heat += 2.0
 		hud.toast("Du hast auf die Polizei geschossen!", 3.0)
@@ -1274,6 +1332,8 @@ func _update_place(p: Vector2) -> void:
 		title = "Saint Leonard (%s)" % ("Riegersdorf" if title == "Riegersdorf" else "St. Leonhard")
 	if p.distance_to(landmarks.city_center) < 700.0:
 		title = "Die Stadt (Fürnitz)"
+	if hall and Vector2(hall.global_position.x, hall.global_position.z).distance_to(p) < 30.0:
+		title = "Feuerwehrhaus Korpitsch"
 	var sub := ""
 	if poi.dist < 45.0:
 		title = poi.name

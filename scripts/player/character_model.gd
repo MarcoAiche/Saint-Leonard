@@ -12,6 +12,13 @@ var _phase := 0.0
 var _lying := 0.0
 var _target_lying := 0.0
 var render_layer := 1
+var expression := "neutral"  # neutral, happy, angry, drunk, surprised, pain, focus
+var _brows: Array[MeshInstance3D] = []
+var _mouth: Array[MeshInstance3D] = []  # links, Mitte, rechts
+var _eyes: Array[MeshInstance3D] = []
+var _cheeks: Array[MeshInstance3D] = []
+var _nose: MeshInstance3D
+var _soot := 0.0
 
 
 func _init(o := {}, layer := 1) -> void:
@@ -63,10 +70,28 @@ func _build() -> void:
 	hm.radius = 0.28
 	hm.height = 0.54
 	_part(head, hm, skin, Vector3.ZERO)
+	head.scale = Vector3.ONE * 1.12  # etwas größerer Kopf: witziger
 	var nose := SphereMesh.new()
-	nose.radius = 0.07
-	nose.height = 0.13
-	_part(head, nose, skin.darkened(0.12), Vector3(0, -0.04, 0.27), false)
+	nose.radius = 0.075
+	nose.height = 0.14
+	_nose = _part(head, nose, skin.darkened(0.12), Vector3(0, -0.04, 0.27), false)
+	_nose.material_override = _nose.material_override.duplicate()
+	var cheek := SphereMesh.new()
+	cheek.radius = 0.06
+	cheek.height = 0.03
+	for x in [-0.17, 0.17]:
+		var ch := _part(head, cheek, Color(0.95, 0.35, 0.35), Vector3(x, -0.06, 0.21), false)
+		ch.rotation.x = PI / 2
+		ch.visible = false
+		_cheeks.append(ch)
+	var brow := BoxMesh.new()
+	brow.size = Vector3(0.11, 0.025, 0.03)
+	for x in [-0.1, 0.1]:
+		_brows.append(_part(head, brow, Color(0.25, 0.18, 0.12), Vector3(x, 0.17, 0.25), false))
+	var mpart := BoxMesh.new()
+	mpart.size = Vector3(0.06, 0.022, 0.03)
+	for x in [-0.055, 0.0, 0.055]:
+		_mouth.append(_part(head, mpart, Color(0.35, 0.1, 0.1), Vector3(x, -0.17, 0.235), false))
 	var eye := SphereMesh.new()
 	eye.radius = 0.06
 	eye.height = 0.12
@@ -74,7 +99,7 @@ func _build() -> void:
 	pupil.radius = 0.03
 	pupil.height = 0.06
 	for x in [-0.1, 0.1]:
-		_part(head, eye, Color(1, 1, 1), Vector3(x, 0.06, 0.22), false)
+		_eyes.append(_part(head, eye, Color(1, 1, 1), Vector3(x, 0.06, 0.22), false))
 		_part(head, pupil, Color(0.06, 0.06, 0.08), Vector3(x, 0.06, 0.28), false)
 	var moustache := BoxMesh.new()
 	moustache.size = Vector3(0.2, 0.04, 0.04)
@@ -164,6 +189,7 @@ func animate(delta: float, speed: float, on_floor := true, aiming := false, sitt
 			l.rotation.x = lerpf(l.rotation.x, -1.5, 0.3)
 		for a in arms:
 			a.rotation.x = lerpf(a.rotation.x, -0.6, 0.3)
+		_update_face(delta)
 		return 0.0
 	if on_floor and speed > 0.3:
 		var before := sin(_phase)
@@ -193,11 +219,76 @@ func animate(delta: float, speed: float, on_floor := true, aiming := false, sitt
 		arms[1].rotation.x = lerpf(arms[1].rotation.x, swing * 0.8, 0.3)
 	if not to_mouth:
 		arms[1].rotation.z = lerpf(arms[1].rotation.z, 0.0, 0.2)
+	_update_face(delta)
 	var bob := absf(sin(_phase)) * 0.06 if speed > 0.3 else 0.0
 	_lying = lerpf(_lying, _target_lying, 1.0 - exp(-delta * 4.0))
 	rotation.x = -_lying * PI * 0.5
 	position.y = bob + _lying * 0.3
 	return step_sign
+
+
+## Gesichtsausdruck (Augenbrauen, Mund, Wangen, Nase)
+func set_expression(e: String) -> void:
+	expression = e
+
+
+## Ruß im Gesicht (nach einer Explosion)
+func soot(seconds: float) -> void:
+	_soot = seconds
+
+
+func _update_face(delta: float) -> void:
+	if _mouth.is_empty():
+		return
+	var brow_y := 0.17
+	var brow_rot := 0.0
+	var smile := 0.0
+	var open := 1.0
+	var lids := 1.0
+	match expression:
+		"happy":
+			smile = 1.0
+			brow_y = 0.19
+		"angry":
+			brow_rot = 0.45
+			brow_y = 0.155
+			smile = -0.8
+		"drunk":
+			smile = 0.6
+			lids = 0.45
+			brow_y = 0.19
+			brow_rot = -0.25
+		"surprised":
+			brow_y = 0.21
+			open = 2.6
+			lids = 1.25
+		"pain":
+			brow_rot = -0.5
+			smile = -1.0
+			lids = 0.6
+		"focus":
+			brow_rot = 0.25
+			lids = 0.7
+	var k := 1.0 - exp(-delta * 10.0)
+	for i in 2:
+		var side := -1.0 if i == 0 else 1.0
+		_brows[i].position.y = lerpf(_brows[i].position.y, brow_y, k)
+		_brows[i].rotation.z = lerp_angle(_brows[i].rotation.z, brow_rot * -side, k)
+		_eyes[i].scale.y = lerpf(_eyes[i].scale.y, lids, k)
+	_mouth[0].position.y = lerpf(_mouth[0].position.y, -0.17 + smile * 0.025, k)
+	_mouth[2].position.y = lerpf(_mouth[2].position.y, -0.17 + smile * 0.025, k)
+	_mouth[0].rotation.z = lerpf(_mouth[0].rotation.z, smile * 0.5, k)
+	_mouth[2].rotation.z = lerpf(_mouth[2].rotation.z, -smile * 0.5, k)
+	_mouth[1].scale.y = lerpf(_mouth[1].scale.y, open, k)
+	var drunk := expression == "drunk"
+	for c in _cheeks:
+		c.visible = drunk
+	var skin: Color = outfit.skin
+	var nose_c := skin.darkened(0.12).lerp(Color(0.9, 0.25, 0.25), 0.8 if drunk else 0.0)
+	if _soot > 0.0:
+		_soot -= delta
+		nose_c = Color(0.15, 0.13, 0.12)
+	(_nose.material_override as StandardMaterial3D).albedo_color = nose_c
 
 
 ## Ohnmacht / Ragdoll-Ersatz: Figur kippt um

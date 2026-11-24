@@ -340,6 +340,8 @@ func _physics_process(delta: float) -> void:
 						_threat.take_hit(info.damage, global_position)
 					elif _threat is Player:
 						GameState.damage(info.damage)
+						if species == "bear" or _rng.randf() < 0.5:
+							(_threat as Player).knockdown(1.6, "Umgerannt!")
 				if d < 1.6:
 					speed = 0.0
 	var dir := goal - global_position

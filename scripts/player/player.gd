@@ -19,6 +19,7 @@ var crouched := false
 var on_stand: Node3D = null  # Hochstand, auf dem man sitzt
 var carrying: Node3D = null  # getragenes Wild
 var passed_out := 0.0  # Sekunden bis zum Aufwachen
+var sitting := false  # auf Bank oder Stuhl
 var hand: WeaponHand
 var model: CharacterModel
 
@@ -26,6 +27,9 @@ var _step_sound: AudioStreamPlayer3D
 var _drift := Vector3.ZERO
 var _noise_t := 0.0
 var _col: CollisionShape3D
+var _hic_t := 10.0
+var _fall_v := 0.0
+var _restore_fp := false
 
 
 func _ready() -> void:
@@ -83,11 +87,20 @@ func _physics_process(delta: float) -> void:
 		if passed_out <= 0.0:
 			model.set_lying(false)
 			input_enabled = true
+			if _restore_fp and camera_rig and not camera_rig.first_person:
+				camera_rig.toggle_view()
+			_restore_fp = false
 		return
 	if on_stand:
 		velocity = Vector3.ZERO
 		global_position = on_stand.global_transform * Vector3(0, 3.6, 0)
 		_hand_and_model(delta, Vector3.ZERO)
+		return
+	if sitting:
+		velocity = Vector3.ZERO
+		model.animate(delta, 0.0, true, false, true)
+		if hand:
+			hand.process_hand(delta, false, false, false)
 		return
 
 	if not is_on_floor():
@@ -125,7 +138,29 @@ func _physics_process(delta: float) -> void:
 	if input_enabled and is_on_floor() and Input.is_action_just_pressed("jump") and not crouched:
 		velocity.y = jump_velocity
 
+	var was_air := not is_on_floor()
 	move_and_slide()
+	# Sturz aus der Höhe: Hinfallen und Schaden
+	if was_air:
+		_fall_v = minf(_fall_v, velocity.y)
+	if was_air and is_on_floor():
+		if _fall_v < -11.0:
+			GameState.damage((-_fall_v - 11.0) * 6.0)
+			knockdown(2.0, "Autsch!")
+		_fall_v = 0.0
+	# Betrunken: Schluckauf und Stolpern
+	var dr := GameState.drunkness()
+	if dr > 0.15:
+		_hic_t -= delta
+		if _hic_t <= 0.0:
+			_hic_t = randf_range(6.0, 18.0) / (0.5 + dr)
+			Sfx.play_3d(self, Sfx.hiccup(), -2.0, randf_range(0.9, 1.15))
+			if is_on_floor():
+				velocity.y = 1.6
+			if camera_rig:
+				camera_rig.shake(0.5)
+		if sprint and dir.length() > 0.5 and dr > 0.35 and randf() < delta * 0.25 * dr:
+			knockdown(1.8, "Hoppla!")
 
 	# Geräusche fürs Wild: Laufen ist leise, Rennen laut, Ducken fast lautlos
 	var hspeed := Vector2(velocity.x, velocity.z).length()
@@ -151,6 +186,18 @@ func _hand_and_model(delta: float, dir: Vector3) -> void:
 		facing = camera_rig.ground_forward()
 	elif dir.length() > 0.05:
 		facing = dir.normalized()
+	# Gesicht
+	var expr := "neutral"
+	if GameState.drunkness() > 0.3:
+		expr = "drunk"
+	elif GameState.health < 35.0:
+		expr = "pain"
+	elif hand and hand.aiming:
+		expr = "focus"
+	elif GameState.smoke_time > 0.0:
+		expr = "happy"
+	if passed_out <= 0.0:
+		model.set_expression(expr)
 	var want := atan2(facing.x, facing.z)
 	model.rotation.y = lerp_angle(model.rotation.y, want, 1.0 - exp(-12.0 * delta))
 	var hspeed := Vector2(velocity.x, velocity.z).length()
@@ -168,6 +215,19 @@ func _hand_and_model(delta: float, dir: Vector3) -> void:
 		carrying.global_rotation = Vector3(0, atan2(facing.x, facing.z) + PI / 2, 0)
 
 
+## Hinfallen (Stolpern, Sturz, Wildschwein): kurz am Boden, dann wieder auf
+func knockdown(seconds: float, text := "") -> void:
+	if passed_out > 0.0:
+		return
+	Sfx.play_3d(self, Sfx.thump(), 0.0)
+	pass_out(seconds)
+	model.set_expression("surprised")
+	if not text.is_empty():
+		var g := get_tree().current_scene
+		if g and g.get("hud"):
+			g.hud.toast(text, 1.5)
+
+
 func toggle_crouch() -> void:
 	crouched = not crouched
 
@@ -180,3 +240,4 @@ func pass_out(seconds: float) -> void:
 	model.set_lying(true)
 	if camera_rig and camera_rig.first_person:
 		camera_rig.toggle_view()
+		_restore_fp = true

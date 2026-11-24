@@ -63,6 +63,9 @@ func setup(w: WorldBuilder, full_map := false) -> void:
 		_marks.append([Vector2(lm.gas.pos.x, lm.gas.pos.z), Color(0.1, 0.5, 0.25), "T", "Tankstelle"])
 		_marks.append([Vector2(lm.garage.pos.x, lm.garage.pos.z), Color(0.25, 0.25, 0.3), "W", "Werkstatt"])
 		_marks.append([Vector2(lm.pub.pos.x, lm.pub.pos.z), Color(1, 0.6, 0.1), "G", "Gasthaus Pirtscher"])
+		var fh = w.get_parent().get("hall")
+		if fh:
+			_marks.append([Vector2(fh.global_position.x, fh.global_position.z), Color(0.85, 0.1, 0.1), "F", "Feuerwehrhaus Korpitsch"])
 		for pl in lm.plots:
 			_marks.append([Vector2(pl.pos.x, pl.pos.z), Color(0.6, 0.45, 0.3), str(pl.idx + 1), ""])
 	_border = w.border.duplicate()

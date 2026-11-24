@@ -1,6 +1,6 @@
 # Saint Leonard
 
-**Jagen, Schnaps brennen, Offroad fahren und der Polizei entwischen: eine Koop-Sandbox in einem Kärntner Dorf.**
+**Jagen, Schnaps brennen, Offroad fahren, pokern und der Polizei entwischen: eine Koop-Sandbox in einem Kärntner Dorf.**
 
 Du ziehst nach Saint Leonard, einem kleinen Ort zwischen Feldern, Wäldern und steilen Bergen. Das Gasthaus Pirtscher, der Treffpunkt des Dorfes, ist pleite, und der Inspektor aus der Stadt will zusperren. Mit deinem 4x4-Pickup, einem Gewehr und einem versteckten Brennkessel im Wald rettest du es, allein oder mit Freunden.
 
@@ -15,6 +15,9 @@ Gebaut mit Godot 4 und GDScript. Die Landschaft entsteht aus echten Kartendaten,
 - **Schnaps brennen:** einen Brennkessel tief im Wald aufstellen, Maische ansetzen und die Temperatur halten. Wird er zu heiß, fliegt er in die Luft, und die Rauchsäule lockt die Polizei an.
 - **Der Polizei ausweichen:** Streifen auf den Hauptstraßen und eine Kontrolle vor der Stadt mit Alkotest und Durchsuchung. Du kannst kooperieren, bestechen, dich rausreden oder abhauen. Auf Feldwegen hängst du sie leichter ab.
 - **Leben im Dorf:** Haus kaufen und einrichten, Trophäen und Fotos an die Wand hängen, an der Werkbank Lederjacke und Jägerhut mit Gamsbart herstellen. Dazu Rauchen und Trinken mit Animationen und Rausch, ein Handy mit Aufträgen, Kamera und Pannenhilfe.
+- **Feuerwehrhaus Korpitsch:** der Treffpunkt der Truppe. Bar mit Kommandant Ferdl, Biertische, Darts und ein altes Löschfahrzeug vor dem Tor. Ab 20 Uhr läuft im Hinterzimmer die illegale Pokerrunde gegen Hias, Mitzi, Lois und deine Freunde. Wird es zu laut, kommt die Razzia.
+- **Glücksspiel:** Spielautomaten im Gasthaus, an der Tankstelle und in der Stadt, Roulette am Tisch (im Mehrspieler eine gemeinsame Runde) und Texas Hold'em. Gespielt wird nur mit Spielgeld.
+- **Schmäh:** Die Leute im Dorf reden mit dir. Betrunken bekommst du eine rote Nase und Schluckauf und stolperst über die eigenen Füße, nach dem Bier wird gerülpst, und wer beim Knall neben dem Kessel steht, hat danach ein Rußgesicht.
 - **Geschichte:** "Rettet das Gasthaus Pirtscher" in drei Kapiteln bis zum großen Fest, dazu Nebenaufträge.
 - **Welt:** Tag und Nacht, Morgennebel, Regen, Hochstand, Wildkamera und Feuerstelle.
 - **Mehrspieler:** Host oder dedizierter 24/7-Server, gemeinsame Welt mit gespeichertem Fortschritt, Mitfahren auf Beifahrersitz und Ladefläche, Sprachchat in der Nähe und per Funk.

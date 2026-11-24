@@ -324,6 +324,14 @@ func _build_props() -> void:
 	_npc(self, "Wirt Sepp", Vector3(wirt_pos.x, world.height_at(wirt_pos.x, wirt_pos.z), wirt_pos.z), 0.0, {shirt = Color(0.9, 0.9, 0.88), pants = Color(0.2, 0.2, 0.2), hat = "none"})
 	I.add(wirt_pos, 3.0, "Gasthaus Pirtscher: Wirt Sepp", func(): game.open_shop("pub"))
 
+	# Spielautomaten beim Gasthaus, an der Tankstelle und beim Supermarkt
+	var spots := [wirt_pos + Vector3(1.6, 0, 1.2)]
+	if shops.has("super"):
+		var sd: Vector3 = shops.super.door
+		spots.append(sd + Vector3(sin(shops.super.yaw + PI / 2), 0, cos(shops.super.yaw + PI / 2)) * 2.2)
+	for sp in spots:
+		_slot_machine(Vector3(sp.x, world.height_at(sp.x, sp.z), sp.z))
+
 	# Stadtläden
 	for id in shops:
 		var s: Dictionary = shops[id]
@@ -372,6 +380,8 @@ func _build_props() -> void:
 	_sign(gnode, "TANKSTELLE", Color(0.10, 0.45, 0.25), Vector3(shop_p.x - side.x * 3.1, gas_door.y + 3.8, shop_p.z - side.y * 3.1), atan2(-side.x, -side.y), 7.0)
 	_npc(gnode, "Tankwart Hias", gas_door, atan2(-side.x, -side.y), {shirt = Color(0.1, 0.45, 0.25), hat = "cap", hat_color = Color(0.1, 0.4, 0.2)})
 	I.add(gas_door, 3.0, "Tankstelle (Shop)", func(): game.open_shop("gas"))
+	var gsm: Vector3 = gas_door + Vector3(gas.dir.x, 0, gas.dir.y) * 2.2
+	_slot_machine(Vector3(gsm.x, world.height_at(gsm.x, gsm.z), gsm.z))
 	gas.door = gas_door
 
 	# Werkstatt
@@ -415,6 +425,16 @@ func _build_props() -> void:
 			var cone := _box(cnode, Vector3(0.3, 0.6, 0.3), v3(q, 0.3), Color(1.0, 0.45, 0.05))
 			cone.position.y += 0.05
 		checkpoint.node = cnode
+
+
+func _slot_machine(p: Vector3) -> void:
+	var n := Node3D.new()
+	add_child(n)
+	n.global_position = p
+	Placeables.box(n, Vector3(0.8, 1.7, 0.6), Vector3(0, 0.85, 0), Color(0.75, 0.1, 0.15), Vector3.ZERO, true)
+	Placeables.box(n, Vector3(0.6, 0.35, 0.62), Vector3(0, 1.25, 0), Color(0.95, 0.95, 0.9))
+	Placeables.box(n, Vector3(0.7, 0.2, 0.62), Vector3(0, 1.6, 0), Color(1.0, 0.85, 0.2))
+	game.interactions.add(Vector3(0, 1, 0), 2.0, "Spielautomat", func(): game.casino.open_slots(), null, n)
 
 
 func _hall(s: Dictionary) -> void:

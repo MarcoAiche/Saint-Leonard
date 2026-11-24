@@ -448,3 +448,76 @@ func send_chat(text: String) -> void:
 func _chat(from: String, text: String) -> void:
 	GameState.notify(from, text)
 	chat.emit(from, text)
+
+
+# ------------------------------------------------------------------ Glücksspiel
+
+func roulette_bet(text: String) -> void:
+	_roulette_bet.rpc(text)
+	_roulette_bet_local(text)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func _roulette_bet(text: String) -> void:
+	_roulette_bet_local(text)
+
+
+func _roulette_bet_local(text: String) -> void:
+	if game and game.casino:
+		game.casino.roulette_feed.append(text)
+
+
+## Server: Kugel für alle werfen
+func roulette_spin(result: int) -> void:
+	if not is_server():
+		return
+	_roulette_spin.rpc(result)
+	if game and game.casino:
+		game.casino.on_net_roulette_spin(result)
+
+
+@rpc("authority", "reliable", "call_remote")
+func _roulette_spin(result: int) -> void:
+	if game and game.casino:
+		game.casino.on_net_roulette_spin(result)
+
+
+## Pokeraktion an den Server (sit, leave, fold, check, call, raise, allin, seized)
+func poker_cmd(cmd: String, amount: int) -> void:
+	_poker_cmd.rpc_id(1, GameState.player_name, cmd, amount)
+
+
+@rpc("any_peer", "reliable")
+func _poker_cmd(pname: String, cmd: String, amount: int) -> void:
+	if is_server() and game and game.casino:
+		game.casino._server_poker_cmd(pname, multiplayer.get_remote_sender_id(), cmd, amount)
+
+
+func poker_state(peer: int, view: Dictionary) -> void:
+	_poker_state.rpc_id(peer, view)
+
+
+@rpc("authority", "reliable")
+func _poker_state(view: Dictionary) -> void:
+	if game and game.casino:
+		game.casino.on_net_poker_state(view)
+
+
+func poker_cashout(peer: int, chips: int) -> void:
+	_poker_cashout.rpc_id(peer, chips)
+
+
+@rpc("authority", "reliable")
+func _poker_cashout(chips: int) -> void:
+	if game and game.casino:
+		game.casino.on_net_cashout(chips)
+
+
+func raid() -> void:
+	_raid.rpc()
+
+
+@rpc("authority", "reliable", "call_remote")
+func _raid() -> void:
+	if game and game.casino:
+		game.casino.on_raid()

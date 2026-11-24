@@ -6,7 +6,7 @@ Stand: 2026-11-24. Diese Datei ist der Einstieg für neue Claude-Code-Chats (und
 
 **Saint Leonard** ist eine Koop-Sandbox für Marco und seine Freunde: jagen, Schnaps brennen, mit dem 4x4-Pickup über Feld- und Bergwege fahren, der Polizei ausweichen und gemeinsam das Gasthaus Pirtscher retten. Schauplatz ist ein Nachbau von Marcos Heimat in Kärnten (Gemeinde Arnoldstein), gebaut aus echten Kartendaten.
 
-Vorlage sind zwei Dokumente von Marco: "Saint Leonard - Full Game Brief" (Spielidee, Karte, Systeme, 3 Stufen) und "Saint Leonard - Co-Dev Kickoff & Questions" (Zusammenarbeit mit einem Mitentwickler). Der frühere Arbeitstitel war "Riegersdorf City" mit Feuerwehr-Thema; das ist durch den Brief abgelöst.
+Vorlage sind drei Dokumente von Marco: "Saint Leonard - Full Game Brief" (Spielidee, Karte, Systeme, 3 Stufen), "Saint Leonard - Co-Dev Kickoff & Questions" (Zusammenarbeit mit einem Mitentwickler) und "Saint Leonard - Update & New Ideas" (Stil und Ton wie das Steam-Spiel Redneck Redemption, aber ohne Aliens; Feuerwehrhaus Korpitsch als Treffpunkt; Spielautomaten, Roulette und illegales Poker). Vom Referenzspiel übernehmen wir Genre und Ton, nicht dessen Grafik oder Figuren. Der frühere Arbeitstitel war "Riegersdorf City" mit Feuerwehr-Thema; das ist durch den Brief abgelöst.
 
 ## 2. Entscheidungen
 
@@ -113,15 +113,28 @@ Katalog mit Preisen, Läden und Ankaufspreisen: Waffen und Ausrüstung, Getränk
 - `remote_player.gd`: Mitspieler-Figur mit Namen und Stimme.
 - Die Polizei läuft pro Spieler lokal und wird nicht abgeglichen.
 
+### Feuerwehrhaus Korpitsch (`scripts/world/fire_hall.gd`)
+Zweiter Treffpunkt neben dem Gasthaus Pirtscher, an der Stelle des echten Gebäudes (OSM-Weg 424764105, nördlich von Korpitsch 1; der WorldBuilder lässt das OSM-Gebäude über `SKIP_BUILDINGS` weg). Begehbare Halle mit offenem Tor, Schlauchturm mit Sirene, Schild "FF KORPITSCH", Lichterkette, Bar mit Kommandant Ferdl (Laden "fire": Bier, Schnaps, Wurstsemmel, kauft Schwarzgebrannten), Pokertisch, Roulette, Spielautomat, Darts und Festplakat, Biertischgarnitur zum Hinsetzen, altes Löschfahrzeug. Auf Minimap und Karte als "F".
+
+### Glücksspiel (`scripts/casino/`)
+Nur mit Spielgeld.
+- **Spielautomat "Goldener Hirsch"** beim Gasthaus Pirtscher, an der Tankstelle, beim Supermarkt und im Feuerwehrhaus: 3 Walzen (7, Geweih, Jägerhut, Edelweiß, Bier, Kirschen), Einsatz 1 bis 100 €, drei gleiche zahlen 3× bis 50×, zwei gleiche 1,2× (Kirschen 1,5×). Rücklauf ca. 90 %.
+- **Roulette** (europäisch, 0 bis 36) im Feuerwehrhaus: Zahl 35:1, Dutzend 2:1, Rot/Schwarz, Gerade/Ungerade, 1-18/19-36 1:1. Einzelspieler: "Drehen". Mehrspieler: gemeinsame Runde, alle 26 s wirft der Server die Kugel, alle sehen die Einsätze am Tisch.
+- **Illegales Poker** (`poker_game.gd`, Texas Hold'em No Limit, Blinds 5/10) von 20 bis 4 Uhr im Feuerwehrhaus gegen 3 NPCs (Hias, Mitzi, Lois) und Freunde. Einkauf 100, 250 oder 500 €, Aufstehen zahlt aus. Nebentöpfe bei All-in, NPCs spielen nach Handstärke mit Bluffs. Im Mehrspieler läuft der Tisch auf dem Server, jeder sieht nur seine eigenen Karten.
+- **Razzia:** Mit jeder Hand wird die Runde lauter und die Chance steigt (3 % plus Lautstärke plus Polizeidruck). Dann 20 s Warnung, Sirene und Streifenwagen. Wer noch im Feuerwehrhaus ist, verliert Einsatz und Jetons und zahlt 300 € Strafe.
+
+### Comedy
+Größere Köpfe, Gesichter mit Ausdrücken (fröhlich, wütend, betrunken mit roter Nase und Wangen, überrascht, Schmerz, konzentriert beim Zielen), Sprechblasen mit Kärntner Sprüchen bei allen NPCs (`scripts/npc/lines.gd`), Schluckauf und Stolpern im Rausch, Rülpser nach Bier (verscheucht Wild), Hinfallen bei Stürzen aus der Höhe und wenn Wildschwein oder Bär einen umrennen, Rußgesicht nach einer Kesselexplosion, "Waidmannsheil!" beim Erlegen.
+
 ### Ton (`scripts/audio/sfx.gd`)
-Alles synthetisch: Schritte, Tür, Hupe, Klick, Umgebung (Wind, Vögel), Schuss, Repetieren, Husten, Explosion, Sirene, Tierrufe, Regen, Benachrichtigung, Feuer, Kamera-Auslöser, Schluck.
+Alles synthetisch: Schritte, Tür, Hupe, Klick, Umgebung (Wind, Vögel), Schuss, Repetieren, Husten, Explosion, Sirene, Tierrufe, Regen, Benachrichtigung, Feuer, Kamera-Auslöser, Schluck, Walzen, Gewinnmelodie, Jetons, Roulettekugel, Schluckauf, Plumps, Rülpser.
 
 ## 7. Tests und Entwicklerhilfen
 
-- **Selbsttest:** `<godot> --headless --path . -- --selftest` spielt durch: Einkaufen, Schießen und Nachladen, Reh erlegen und ausnehmen, Wildschwein auf den Pickup und verkaufen, Werkstatt, Haus, Aufstellen, Brennkessel mit Explosion, Polizeikontrolle und Verfolgung, Handy, Inventar, Aufträge, Fahren, Radio, Seilwinde, Trinken bis zur Ohnmacht, Fest, Speichern und Laden, Server starten. Muss mit `SELBSTTEST FERTIG` und ohne `ERROR` enden.
+- **Selbsttest:** `<godot> --headless --path . -- --selftest` spielt durch: Einkaufen, Schießen und Nachladen, Reh erlegen und ausnehmen, Wildschwein auf den Pickup und verkaufen, Werkstatt, Haus, Aufstellen, Brennkessel mit Explosion, Polizeikontrolle und Verfolgung, Handy, Inventar, Aufträge, Fahren, Radio, Seilwinde, Trinken bis zur Ohnmacht, Fest, Feuerwehrhaus, Spielautomat (Rücklauf), Roulette, drei Pokerhände, Handwertung, Razzia, Speichern und Laden, Server starten. Muss mit `SELBSTTEST FERTIG` und ohne `ERROR` enden.
 - **Syntaxprüfung:** `<godot> --headless --path . --script tools/check_scripts.gd` (meldet fehlende Autoloads als Fehler; das ist in diesem Modus normal). Nach neuen `class_name` einmal `--import` laufen lassen.
 - **Mehrspieler-Test:** `-- --server` in einem Fenster, dann `-- --join=127.0.0.1 --name=Anna --wait=20` und ein zweiter Client.
-- **Debug-Parameter** (nach `--`, siehe `scripts/debug_tools.gd`): `player=x,z`, `drive`, `tp`, `cam=yaw,pitch`, `dist`, `time`, `weather`, `money`, `upgrades`, `animal=deer+boar` mit `freeze`, `shoot`, `use=beer`, `drunk=0.1`, `reloadtest`, `buyhouse=n`, `place=still+stand`, `police`, `menu=shop:gun|garage|inventory|phone|jobs|map`, `showmenu[=saves|settings]`, `hold=aktion:sek`, `aim`, `keytest`, `radiotest`, `join`, `host`, `name`, `wait`, `shot=bild.png`, `rebuild`.
+- **Debug-Parameter** (nach `--`, siehe `scripts/debug_tools.gd`): `player=x,z`, `drive`, `tp`, `cam=yaw,pitch`, `dist`, `time`, `weather`, `money`, `upgrades`, `animal=deer+boar` mit `freeze`, `shoot`, `use=beer`, `drunk=0.1`, `reloadtest`, `buyhouse=n`, `place=still+stand`, `police`, `menu=shop:gun|garage|inventory|phone|jobs|map|slots|roulette|poker|hall`, `showmenu[=saves|settings]`, `hold=aktion:sek`, `aim`, `keytest`, `radiotest`, `join`, `host`, `name`, `wait`, `shot=bild.png`, `rebuild`.
 - **Export:** `export_presets.cfg` mit Windows, Linux-Server und Raspberry-Pi-Server (ARM64). Dafür in Godot die Export-Templates installieren. Die gebakte Welt wird mit exportiert, wenn das Spiel vorher einmal lief.
 
 ## 8. Verlauf
@@ -133,6 +146,8 @@ Alles synthetisch: Schritte, Tür, Hupe, Klick, Umgebung (Wind, Vögel), Schuss,
 5. Umbau nach dem Brief: alle Systeme aus Stufe 1 bis 3.
 6. Nachbesserungen nach Marcos erstem Test: Waffenwechsel mit Anzeige, tödliche Treffer und Blutspur, Animationen für Nachladen, Rauchen, Trinken, Rausch-Effekt, weniger Nebel, Straßenränder repariert, kein Hochschießen mit R, realistischer Motorschaden, schneller nüchtern, Online-Radio, Raster-Inventar, Hauptmenü mit Spielständen und Einstellungen.
 
+7. Update "New Ideas": Feuerwehrhaus Korpitsch, Spielautomaten, Roulette, illegales Poker mit Razzien, Comedy-Ton.
+
 ## 9. Offene Punkte und Ideen
 
 - Polizei im Mehrspieler abgleichen (derzeit pro Spieler lokal).
@@ -141,3 +156,4 @@ Alles synthetisch: Schritte, Tür, Hupe, Klick, Umgebung (Wind, Vögel), Schuss,
 - Spielgefühl, Balancing (Preise, Polizei, Schaden) und Sound mit den Freunden testen.
 - Windows-Build für Freunde (itch.io) und Server auf dem Raspberry Pi einrichten.
 - Antworten des Mitentwicklers auf die Kickoff-Fragen fehlen noch.
+- Test-Clients ohne Fenster (headless) stürzen beim Beenden ab; im Fenster tritt das nicht auf.

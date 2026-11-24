@@ -2,7 +2,7 @@
 
 Welcome! This guide gets you from zero to contributing. It covers the engine decision, setup, how we work together without breaking each other's work, how the code is organised, how the main systems work, how to add new content, how to test, and what is still open.
 
-The full game idea is in "Saint Leonard - Full Game Brief". The German project summary for Marco and Claude is [ZUSAMMENFASSUNG.md](../ZUSAMMENFASSUNG.md).
+The full game idea is in "Saint Leonard - Full Game Brief" plus "Saint Leonard - Update & New Ideas" (tone like Redneck Redemption without aliens, Feuerwehrhaus Korpitsch, gambling). We take genre and tone from that reference, not its art or characters. The German project summary for Marco and Claude is [ZUSAMMENFASSUNG.md](../ZUSAMMENFASSUNG.md).
 
 ---
 
@@ -63,7 +63,9 @@ We use **GitHub** (no file locking), so we follow the golden rule from the kicko
 | `scripts/ui/` | `hud.gd`, `main_menu.gd`, `menus.gd` (shops, garage, inventory, still, settings), `inventory_view.gd` + `item_icons.gd` (grid inventory), `phone.gd`, `minimap.gd` |
 | `scripts/net/` | `net.gd` (autoload: host/join/server and sync), `voice.gd` (autoload: voice chat), `remote_player.gd` |
 | `scripts/audio/` | `sfx.gd` (synthesised sounds), `engine_sound.gd`, `radio.gd` (online radio, generated music, own files) |
-| `scripts/npc/npc.gd` | Standing NPCs (shopkeepers, police, stranded people) |
+| `scripts/npc/` | `npc.gd` (standing NPCs with speech bubbles), `lines.gd` (their sayings) |
+| `scripts/casino/` | `casino.gd` (slot machines, roulette, poker table, raids, UIs), `poker_game.gd` (Texas Hold'em engine, NPC players, hand evaluation) |
+| `scripts/world/fire_hall.gd` | Feuerwehrhaus Korpitsch (hangout, bar, casino tables) |
 | `scripts/debug_tools.gd` | Autoload: test parameters, self-test |
 | `tools/` | `build_world_data.mjs` (map pipeline), `map_border.json`, `map_border_fit.mjs`, `check_scripts.gd` |
 | `data/` | Generated world data (JSON, in Git) and the baked world (not in Git) |
@@ -96,6 +98,12 @@ The player is a CharacterBody3D; the camera rig follows the interpolated transfo
 
 ### Police
 `PoliceManager` spawns patrols on main roads near the player, watches for offences, runs the control dialog (breathalyzer, search, bribe, talk, flee) and chases. It is local per player in multiplayer.
+
+### Feuerwehrhaus and gambling
+`FireHall` replaces the real OSM building (id in `WorldBuilder.SKIP_BUILDINGS`) with an enterable hall. `Casino` handles slot machines (local), roulette (a shared server round every 26 s in multiplayer) and poker (`PokerGame` runs on the server or locally; clients send actions via `Net.poker_cmd` and get their own view via `Net.poker_state`; other players' hole cards stay hidden until showdown). Every poker hand raises the chance of a police raid.
+
+### Comedy
+`CharacterModel.set_expression()` (happy, angry, drunk, surprised, pain, focus), `soot()`, NPC speech bubbles (`Npc.say`, lines in `NpcLines`), hiccups, stumbling and knockdowns in `Player.knockdown()`.
 
 ### UI
 The HUD is a CanvasLayer built in code. Windows (shops, garage, inventory, phone) go into `hud.menu_root`; while one is open the mouse is free and game input is blocked. `Menus.window()` gives you a scrollable panel; `Menus.row()` adds a line with a button.
@@ -152,6 +160,11 @@ The console executable is `Godot_v4.7.2-stable_win64_console.exe` (shown as `<go
 
 **Stage 2: done (first version)**
 - City shops, gas station, Gasthaus Pirtscher, garage upgrades, cigarettes and alcohol with animations and screen effects, police patrols, checkpoint, bribes and chases, moonshine still with mini game and explosions, day/night and weather, hunting stands, trail cams, campfires, phone, story in 3 chapters, side jobs, houses, furniture, crafting, grid inventory, save slots and settings.
+
+**Update "New Ideas": done (first version)**
+- Feuerwehrhaus Korpitsch as a hangout with bar, slot machine, roulette and illegal poker (NPCs and friends), police raids.
+- Slot machines at the pub, gas station, supermarket and fire hall.
+- Comedy: facial expressions, red drunk nose, NPC sayings, hiccups, burps, stumbling, knockdowns, soot face.
 
 **Stage 3: done (first version)**
 - Host, join and dedicated server with persistent world and profiles; synced players, trucks, animals, placed objects and houses; passenger seats and truck bed; passenger-only GPS; proximity voice chat and group radio.

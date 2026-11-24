@@ -381,3 +381,143 @@ static func gulp() -> AudioStreamWAV:
 		s[i] = v * 0.7
 	_cache["gulp"] = _wav(s)
 	return _cache["gulp"]
+
+
+## Walzen drehen (Spielautomat)
+static func slot_spin() -> AudioStreamWAV:
+	if _cache.has("slot"):
+		return _cache["slot"]
+	var n := int(RATE * 1.9)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var rate := 18.0 if t < 0.8 else (12.0 if t < 1.3 else 8.0)
+		var u := fmod(t * rate, 1.0)
+		s[i] = sin(TAU * 1800.0 * t) * exp(-u * 40.0) * 0.35
+		for stop in [0.8, 1.3, 1.8]:
+			var d: float = t - stop
+			if d >= 0.0 and d < 0.08:
+				s[i] += sin(TAU * 220.0 * d) * exp(-d * 50.0) * 0.6
+	_cache["slot"] = _wav(s)
+	return _cache["slot"]
+
+
+## Gewinn-Melodie (big = Jackpot)
+static func jingle(big := false) -> AudioStreamWAV:
+	var key := "jingle_%s" % big
+	if _cache.has(key):
+		return _cache[key]
+	var notes := [523.25, 659.25, 783.99, 1046.5] if not big else [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.5]
+	var nl := 0.11
+	var n := int(RATE * (notes.size() * nl + 0.4))
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for k in notes.size():
+		var i0 := int(k * nl * RATE)
+		var len := int((nl + 0.3) * RATE)
+		for j in len:
+			if i0 + j >= n:
+				break
+			var t := float(j) / RATE
+			s[i0 + j] += (sin(TAU * notes[k] * t) + 0.3 * sin(TAU * notes[k] * 2.0 * t)) * 0.25 * exp(-t * 6.0)
+	_cache[key] = _wav(s)
+	return _cache[key]
+
+
+## Jetons klackern
+static func chips() -> AudioStreamWAV:
+	if _cache.has("chips"):
+		return _cache["chips"]
+	var n := int(RATE * 0.25)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 17
+	for i in n:
+		var t := float(i) / RATE
+		var v := 0.0
+		for c in [0.0, 0.05, 0.11, 0.16]:
+			var u: float = t - c
+			if u >= 0.0:
+				v += (sin(TAU * 3200.0 * u) * 0.5 + rng.randf_range(-0.3, 0.3)) * exp(-u * 160.0)
+		s[i] = v * 0.6
+	_cache["chips"] = _wav(s)
+	return _cache["chips"]
+
+
+## Roulettekugel
+static func roulette_ball() -> AudioStreamWAV:
+	if _cache.has("ball"):
+		return _cache["ball"]
+	var dur := 4.0
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	var lp := 0.0
+	var next_tick := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (rng.randf_range(-1, 1) - lp) * 0.3
+		var v := lp * 0.15 * (1.0 - t / dur)
+		if t > 2.5 and t >= next_tick:
+			next_tick = t + lerpf(0.05, 0.3, (t - 2.5) / 1.5)
+		var d := t - (next_tick - 0.0)
+		if t > 2.5:
+			v += sin(TAU * 2500.0 * t) * exp(-absf(fmod(t, 0.12)) * 120.0) * 0.2
+		s[i] = v
+	_cache["ball"] = _wav(s)
+	return _cache["ball"]
+
+
+## Schluckauf
+static func hiccup() -> AudioStreamWAV:
+	if _cache.has("hic"):
+		return _cache["hic"]
+	var n := int(RATE * 0.25)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		s[i] = sin(TAU * lerpf(500.0, 900.0, t * 4.0) * t) * exp(-t * 18.0) * 0.6
+	_cache["hic"] = _wav(s)
+	return _cache["hic"]
+
+
+## Plumps (Hinfallen)
+static func thump() -> AudioStreamWAV:
+	if _cache.has("thump"):
+		return _cache["thump"]
+	var n := int(RATE * 0.4)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (rng.randf_range(-1, 1) - lp) * 0.05
+		s[i] = (sin(TAU * 70.0 * t) * 0.8 + lp * 2.0) * exp(-t * 14.0)
+	_cache["thump"] = _wav(s)
+	return _cache["thump"]
+
+
+## Rülpser
+static func burp() -> AudioStreamWAV:
+	if _cache.has("burp"):
+		return _cache["burp"]
+	var n := int(RATE * 0.7)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		phase += TAU * (95.0 + 25.0 * sin(t * 30.0)) / RATE
+		var buzz: float = signf(sin(phase)) * 0.4 + sin(phase) * 0.3 + rng.randf_range(-0.2, 0.2)
+		s[i] = buzz * sin(PI * t / 0.7) * 0.7
+	_cache["burp"] = _wav(s)
+	return _cache["burp"]

@@ -8,6 +8,10 @@ var display_name := ""
 var look_at_player := true
 var _t := 0.0
 var _label: Label3D
+var _bubble: Label3D
+var _say_cd := 0.0
+var _say_t := 0.0
+var _rng := RandomNumberGenerator.new()
 
 
 func _init(npc_name := "", outfit := {}) -> void:
@@ -15,7 +19,28 @@ func _init(npc_name := "", outfit := {}) -> void:
 	model = CharacterModel.new(outfit)
 
 
+## Sprechblase über dem Kopf
+func say(text: String, seconds := 4.0) -> void:
+	if _bubble == null:
+		_bubble = Label3D.new()
+		_bubble.position.y = 2.95
+		_bubble.font_size = 34
+		_bubble.pixel_size = 0.006
+		_bubble.outline_size = 14
+		_bubble.modulate = Color(0.1, 0.08, 0.08)
+		_bubble.outline_modulate = Color(1, 1, 1)
+		_bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		_bubble.width = 380
+		_bubble.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		add_child(_bubble)
+	_bubble.text = text
+	_say_t = seconds
+	model.set_expression(["happy", "surprised", "happy", "neutral"][_rng.randi() % 4])
+
+
 func _ready() -> void:
+	_rng.randomize()
+	_say_cd = _rng.randf_range(1.0, 6.0)
 	add_child(model)
 	if not display_name.is_empty():
 		_label = Label3D.new()
@@ -31,6 +56,14 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_say_cd -= delta
+	_say_t -= delta
+	if _bubble:
+		_bubble.visible = _say_t > 0.0
+	var cam0 := get_viewport().get_camera_3d()
+	if cam0 and _say_cd <= 0.0 and cam0.global_position.distance_to(global_position) < 7.0:
+		say(NpcLines.pick(display_name, _rng))
+		_say_cd = _rng.randf_range(14.0, 26.0)
 	model.animate(delta, 0.0)
 	model.position.y = sin(_t * 1.7) * 0.01
 	if look_at_player:

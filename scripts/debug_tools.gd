@@ -123,6 +123,21 @@ func _ready() -> void:
 			Phone.open(game, "jobs")
 		elif m == "map":
 			game.hud.toggle_map()
+		elif m == "slots":
+			game.casino.open_slots()
+		elif m == "roulette":
+			game.casino.open_roulette()
+		elif m == "poker":
+			GameState.time = 21.0
+			GameState.money = 1000
+			game.casino._sit_poker(250)
+			await get_tree().create_timer(3.0).timeout
+		elif m == "hall":
+			var h: FireHall = game.hall
+			game.player.global_position = h.door + Vector3.UP * 0.5
+			game.player.reset_physics_interpolation()
+			var to: Vector3 = h.global_position - h.door
+			game.rig.yaw = atan2(-to.x, -to.z)
 	if args.has("shoot"):
 		# auf das erste Tier zielen und schießen
 		await get_tree().create_timer(0.5).timeout
@@ -200,6 +215,8 @@ func _report(game: Game) -> void:
 	print("Spieler %s, Boden %.2f, am Boden: %s" % [p, game.world.height_at(p.x, p.z), game.player.is_on_floor()])
 	print("Pickup %s, Boden %.2f, %.1f km/h, fährt: %s, aufrecht: %.2f, Untergrund: %s" % [c, game.world.height_at(c.x, c.z), game.car.speed_kmh(), game.driving, game.car.global_basis.y.y, WorldBuilder.TIER_NAMES[game.car.surface.tier]])
 	print("Tiere: %d, Polizei: %d, Uhrzeit %s, Wetter %s" % [game.spawner.animals.size(), game.police.patrols.size(), GameState.clock_text(), GameState.weather])
+	if not game.casino.poker_view.is_empty():
+		print("Pokertisch: %s, Straße %d" % [game.casino.poker_view.players.map(func(x): return "%s %d" % [x.name, x.chips]), game.casino.poker_view.street])
 	if Net.active():
 		print("Mehrspieler: Modus %s, Mitspieler sichtbar %d, fremde Pickups %d, Name %s" % [Net.mode, game.remote_players.size(), game.remote_trucks.size(), GameState.player_name])
 	print("Orte: Stadt %s, Tankstelle %s, Werkstatt %s, Bauplätze %d, Kontrolle %s, Läden %s" % [game.landmarks.city_center, game.landmarks.gas.pos, game.landmarks.garage.pos, game.landmarks.plots.size(), game.landmarks.checkpoint.get("pos", "-"), game.landmarks.shops.keys()])
@@ -325,6 +342,45 @@ func _selftest(game: Game) -> void:
 	game.decorate_pub_trophy()
 	game.start_festival()
 	game.hud.close_dialog()
+	step.call("Feuerwehrhaus und Glücksspiel")
+	print("  Feuerwehrhaus: ", game.hall != null, " bei ", game.hall.global_position if game.hall else Vector3.ZERO)
+	GameState.money = 5000
+	game.casino.open_slots()
+	await get_tree().process_frame
+	var total := 0
+	for i in 2000:
+		total += Casino._slot_payout([game.casino._slot_symbol(), game.casino._slot_symbol(), game.casino._slot_symbol()], 10)
+	print("  Spielautomat: Rücklauf %.0f %%" % (total / 200.0))
+	Menus.close_all(game.hud)
+	game.casino.open_roulette()
+	await get_tree().process_frame
+	game.casino.place_roulette_bet("Rot", Casino.RED, 2, 10)
+	game.casino._spin_roulette(7)
+	await get_tree().create_timer(4.3).timeout
+	print("  Roulette: Geld %d" % GameState.money)
+	Menus.close_all(game.hud)
+	game.player.global_position = game.hall.door
+	GameState.time = 21.0
+	game.casino._sit_poker(250)
+	var pk: PokerGame = game.casino.poker
+	var hands := 0
+	var t0 := Time.get_ticks_msec()
+	while hands < 3 and Time.get_ticks_msec() - t0 < 60000:
+		await get_tree().create_timer(0.2).timeout
+		var me := pk.index_of(GameState.player_name)
+		if pk.turn == me and pk.street >= 0 and pk.street < 4:
+			game.casino.poker_action("call")
+		if pk.street == 4:
+			hands = pk.hands_played
+	print("  Poker: %d Hände, Tisch: %s" % [pk.hands_played, ", ".join(pk.players.map(func(x): return "%s %d" % [x.name, x.chips]))])
+	print("  Wertung Royal Flush > Vierling: ", PokerGame.best_score([12, 11, 10, 9, 8]) > PokerGame.best_score([0, 13, 26, 39, 5]))
+	game.casino.on_raid()
+	game.casino.raid_t = 0.05
+	await get_tree().create_timer(0.3).timeout
+	game.hud.close_dialog()
+	print("  Razzia: am Tisch = %s, Geld %d" % [game.casino.at_poker, GameState.money])
+	Menus.close_all(game.hud)
+	game.stand_up()
 	step.call("Speichern und Laden")
 	var before := GameState.money
 	GameState.slot = "selbsttest"
