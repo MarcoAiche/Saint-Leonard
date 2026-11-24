@@ -7,6 +7,7 @@ extends Node3D
 
 enum Phase { NONE, PULL_OVER, CONTROL, CHASE }
 
+const ENABLED := false
 const MAX_PATROLS := 2
 const SPAWN_MIN := 350.0
 const SPAWN_MAX := 750.0
@@ -33,6 +34,8 @@ func setup(g: Node, w: WorldBuilder, lm: Landmarks) -> void:
 	world = w
 	landmarks = lm
 	_rng.randomize()
+	if not ENABLED:
+		return
 	for ri in world.data.roads.size():
 		var r: Dictionary = world.data.roads[ri]
 		if r.tunnel or r.tier == 0 or r.tier > WorldBuilder.TIER_VILLAGE or r.kind.begins_with("motorway"):
@@ -109,7 +112,7 @@ func _focus() -> Node3D:
 
 
 func _process(delta: float) -> void:
-	if get_tree().paused or not game.player:
+	if not ENABLED or get_tree().paused or not game.player:
 		return
 	_timer -= delta
 	_checked_t = maxf(0.0, _checked_t - delta)
@@ -378,6 +381,8 @@ func _end() -> void:
 
 ## Polizei fährt zu einem Vorfall (Explosion, Schüsse im Ort)
 func dispatch(pos: Vector3, reason: String) -> void:
+	if not ENABLED:
+		return
 	GameState.police_heat += 0.6
 	var c := _spawn_car()
 	var info := world.road_info(Vector2(pos.x, pos.z) + Vector2(250, 0), 300.0)
