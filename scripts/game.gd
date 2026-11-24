@@ -486,6 +486,9 @@ func set_waypoint(p: Vector2) -> void:
 	waypoint = p
 	hud.minimap.waypoint = p
 	hud.big_map.waypoint = p
+	var clr := hud.root.find_child("ClearWaypoint", true, false) as Button
+	if clr:
+		clr.disabled = p == Vector2.INF
 
 
 # ------------------------------------------------------------------ Interaktion [F]

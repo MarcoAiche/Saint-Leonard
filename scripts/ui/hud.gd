@@ -243,28 +243,225 @@ func _ready() -> void:
 
 	# Große Karte (M)
 	_map_panel = ColorRect.new()
-	(_map_panel as ColorRect).color = Color(0.05, 0.08, 0.15, 0.5)
+	(_map_panel as ColorRect).color = Color(0.03, 0.04, 0.06, 0.78)
 	_map_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_map_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_map_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_map_panel.visible = false
 	root.add_child(_map_panel)
-	var frame := panel(_map_panel)
+
+	var gold := Color(0.95, 0.79, 0.31)
+	var emerald := Color(0.06, 0.73, 0.51)
+	var border_col := Color(0.15, 0.20, 0.27)
+	var text_main := Color(0.88, 0.90, 0.94)
+	var text_dim := Color(0.58, 0.64, 0.72)
+
+	var map_box := func(bg: Color, bcol: Color, bw := 1, rad := 10, pad := 10) -> StyleBoxFlat:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = bg
+		sb.border_color = bcol
+		sb.set_border_width_all(bw)
+		sb.set_corner_radius_all(rad)
+		sb.set_content_margin_all(pad)
+		return sb
+
+	var map_btn := func(txt: String, bg: Color, fg: Color, bcol: Color, px := 12, py := 7) -> Button:
+		var b := Button.new()
+		b.text = txt
+		b.add_theme_font_size_override("font_size", 13)
+		b.add_theme_color_override("font_color", fg)
+		b.add_theme_color_override("font_hover_color", fg)
+		b.add_theme_color_override("font_pressed_color", fg)
+		b.add_theme_color_override("font_disabled_color", Color(0.45, 0.48, 0.54))
+		var n: StyleBoxFlat = map_box.call(bg, bcol, 1, 6, py)
+		n.content_margin_left = px
+		n.content_margin_right = px
+		var h: StyleBoxFlat = map_box.call(bg.lightened(0.08), bcol.lightened(0.15), 1, 6, py)
+		h.content_margin_left = px
+		h.content_margin_right = px
+		var d: StyleBoxFlat = map_box.call(Color(0.08, 0.10, 0.13, 0.6), Color(1, 1, 1, 0.05), 1, 6, py)
+		d.content_margin_left = px
+		d.content_margin_right = px
+		b.add_theme_stylebox_override("normal", n)
+		b.add_theme_stylebox_override("hover", h)
+		b.add_theme_stylebox_override("focus", h)
+		b.add_theme_stylebox_override("pressed", h)
+		b.add_theme_stylebox_override("disabled", d)
+		return b
+
+	var frame := PanelContainer.new()
+	frame.add_theme_stylebox_override("panel", map_box.call(Color(0.05, 0.07, 0.09, 0.98), Color(0.95, 0.79, 0.31, 0.45), 2, 14, 0))
 	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
-	frame.offset_left = 80
-	frame.offset_top = 60
-	frame.offset_right = -80
-	frame.offset_bottom = -60
-	frame.mouse_filter = Control.MOUSE_FILTER_PASS
+	frame.offset_left = 48
+	frame.offset_top = 36
+	frame.offset_right = -48
+	frame.offset_bottom = -36
+	frame.mouse_filter = Control.MOUSE_FILTER_STOP
+	_map_panel.add_child(frame)
+
 	var mv := VBoxContainer.new()
+	mv.add_theme_constant_override("separation", 0)
 	frame.add_child(mv)
+
+	# 1. Top Header Bar
+	var hdr := PanelContainer.new()
+	hdr.add_theme_stylebox_override("panel", map_box.call(Color(0.07, 0.09, 0.13, 0.98), border_col, 1, 12, 12))
+	mv.add_child(hdr)
+	var top_bar := HBoxContainer.new()
+	top_bar.add_theme_constant_override("separation", 10)
+	hdr.add_child(top_bar)
+	var title_vb := VBoxContainer.new()
+	title_vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_vb.add_theme_constant_override("separation", 2)
+	top_bar.add_child(title_vb)
 	var mt := Label.new()
-	mt.text = "Karte  (M schließen, Klick setzt Wegpunkt)"
+	mt.text = "KARTE — SAINT LEONARD"
 	mt.add_theme_font_size_override("font_size", 20)
-	mv.add_child(mt)
+	mt.add_theme_color_override("font_color", gold)
+	title_vb.add_child(mt)
+	var msub := Label.new()
+	msub.text = "Mausrad: Zoomen · Rechtsklick ziehen: Verschieben · Linksklick: Wegpunkt"
+	msub.add_theme_font_size_override("font_size", 12)
+	msub.add_theme_color_override("font_color", text_dim)
+	title_vb.add_child(msub)
+
+	var btn_me: Button = map_btn.call("Auf mich zentrieren", Color(0.09, 0.13, 0.17), text_main, border_col, 14, 8)
+	btn_me.pressed.connect(func(): big_map.center_on_player())
+	top_bar.add_child(btn_me)
+	var btn_all: Button = map_btn.call("Gesamtansicht", Color(0.09, 0.13, 0.17), text_main, border_col, 14, 8)
+	btn_all.pressed.connect(func(): big_map.fit_border())
+	top_bar.add_child(btn_all)
+	var btn_clear: Button = map_btn.call("Wegpunkt löschen", Color(0.26, 0.08, 0.12), Color(0.99, 0.65, 0.70), Color(0.60, 0.18, 0.25), 14, 8)
+	btn_clear.name = "ClearWaypoint"
+	btn_clear.disabled = true
+	btn_clear.pressed.connect(func(): big_map.clicked.emit(Vector2.INF))
+	top_bar.add_child(btn_clear)
+	var btn_close: Button = map_btn.call("Schließen [M / Esc]", gold, Color(0.08, 0.06, 0.02), gold, 16, 8)
+	btn_close.pressed.connect(func(): toggle_map())
+	top_bar.add_child(btn_close)
+
+	# 2. Content: Main Map + Right Legend Strip
+	var mid := HBoxContainer.new()
+	mid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid.add_theme_constant_override("separation", 0)
+	mv.add_child(mid)
+
+	var map_wrap := Control.new()
+	map_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	map_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	mid.add_child(map_wrap)
+
 	big_map = Minimap.new()
-	big_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	big_map.set_anchors_preset(Control.PRESET_FULL_RECT)
 	big_map.mouse_filter = Control.MOUSE_FILTER_STOP
-	mv.add_child(big_map)
+	map_wrap.add_child(big_map)
+
+	# Floating Bottom-Left: Active Waypoint Distance
+	var wp_card := PanelContainer.new()
+	wp_card.name = "WaypointCard"
+	wp_card.visible = false
+	wp_card.add_theme_stylebox_override("panel", map_box.call(Color(0.05, 0.07, 0.09, 0.92), border_col, 1, 8, 10))
+	wp_card.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 16)
+	wp_card.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	map_wrap.add_child(wp_card)
+	var wp_vb := VBoxContainer.new()
+	wp_vb.add_theme_constant_override("separation", 2)
+	wp_card.add_child(wp_vb)
+	var wp_cap := Label.new()
+	wp_cap.text = "AKTIVES ZIEL"
+	wp_cap.add_theme_font_size_override("font_size", 10)
+	wp_cap.add_theme_color_override("font_color", text_dim)
+	wp_vb.add_child(wp_cap)
+	var wp_dist := Label.new()
+	wp_dist.name = "WaypointDist"
+	wp_dist.text = "Wegpunkt"
+	wp_dist.add_theme_font_size_override("font_size", 14)
+	wp_dist.add_theme_color_override("font_color", Color(0.96, 0.45, 0.71))
+	wp_vb.add_child(wp_dist)
+
+	# Floating Bottom-Right: Zoom % Badge + +/- Controls
+	var zoom_vb := VBoxContainer.new()
+	zoom_vb.add_theme_constant_override("separation", 6)
+	zoom_vb.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 16)
+	zoom_vb.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	zoom_vb.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	map_wrap.add_child(zoom_vb)
+	var z_badge := PanelContainer.new()
+	z_badge.add_theme_stylebox_override("panel", map_box.call(Color(0.05, 0.07, 0.09, 0.94), border_col, 1, 6, 6))
+	zoom_vb.add_child(z_badge)
+	var z_lbl := Label.new()
+	z_lbl.name = "MapZoomLabel"
+	z_lbl.text = "100%"
+	z_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	z_lbl.add_theme_font_size_override("font_size", 12)
+	z_lbl.add_theme_color_override("font_color", gold)
+	z_badge.add_child(z_lbl)
+	var zoom_in: Button = map_btn.call("+", Color(0.06, 0.08, 0.11, 0.95), text_main, border_col, 12, 6)
+	zoom_in.custom_minimum_size = Vector2(38, 36)
+	zoom_in.pressed.connect(func():
+		big_map.zoom_by(0.75)
+		z_lbl.text = "%d%%" % big_map.zoom_percent())
+	zoom_vb.add_child(zoom_in)
+	var zoom_out: Button = map_btn.call("−", Color(0.06, 0.08, 0.11, 0.95), text_main, border_col, 12, 6)
+	zoom_out.custom_minimum_size = Vector2(38, 36)
+	zoom_out.pressed.connect(func():
+		big_map.zoom_by(1.33)
+		z_lbl.text = "%d%%" % big_map.zoom_percent())
+	zoom_vb.add_child(zoom_out)
+	big_map.draw.connect(func():
+		z_lbl.text = "%d%%" % big_map.zoom_percent()
+		var has_wp: bool = big_map.waypoint != Vector2.INF
+		wp_card.visible = has_wp
+		if has_wp:
+			wp_dist.text = "Wegpunkt · %d m" % roundi(big_map.player_pos.distance_to(big_map.waypoint)))
+
+	# 3. Right Legend Strip (~230px)
+	var leg := PanelContainer.new()
+	leg.custom_minimum_size = Vector2(235, 0)
+	leg.add_theme_stylebox_override("panel", map_box.call(Color(0.055, 0.078, 0.11, 0.98), border_col, 1, 0, 14))
+	mid.add_child(leg)
+	var leg_vb := VBoxContainer.new()
+	leg_vb.add_theme_constant_override("separation", 8)
+	leg.add_child(leg_vb)
+	var leg_h := Label.new()
+	leg_h.text = "LEGENDE"
+	leg_h.add_theme_font_size_override("font_size", 16)
+	leg_h.add_theme_color_override("font_color", gold)
+	leg_vb.add_child(leg_h)
+	for sec in [
+		["POSITIONEN", [["Spieler (Du)", gold], ["Mitspieler", Color(0.35, 0.65, 1.0)], ["Wegpunkt", Color(0.95, 0.35, 0.65)]]],
+		["ORTE (POI)", [["G  Gasthaus Pirtscher", Color(0.96, 0.65, 0.20)], ["F  Feuerwehrhaus Korpitsch", Color(0.95, 0.30, 0.30)], ["T  Tankstelle", emerald], ["W  Werkstatt", Color(0.25, 0.78, 0.92)], ["S  Geschäfte (Stadt)", Color(0.75, 0.48, 0.95)]]],
+		["STRASSENNETZ", [["Hauptstraße (Asphalt)", Color(0.92, 0.94, 0.96)], ["Dorfstraße", Color(0.55, 0.62, 0.72)], ["Schotterweg", Color(0.68, 0.58, 0.45)], ["Bergpfad", Color(0.80, 0.55, 0.20)]]],
+	]:
+		var sec_lbl := Label.new()
+		sec_lbl.text = sec[0]
+		sec_lbl.add_theme_font_size_override("font_size", 11)
+		sec_lbl.add_theme_color_override("font_color", text_dim)
+		leg_vb.add_child(sec_lbl)
+		for item in sec[1]:
+			var row_hb := HBoxContainer.new()
+			row_hb.add_theme_constant_override("separation", 8)
+			leg_vb.add_child(row_hb)
+			var dot := ColorRect.new()
+			dot.color = item[1]
+			dot.custom_minimum_size = Vector2(10, 10)
+			dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			row_hb.add_child(dot)
+			var il := Label.new()
+			il.text = item[0]
+			il.add_theme_font_size_override("font_size", 13)
+			il.add_theme_color_override("font_color", text_main)
+			row_hb.add_child(il)
+
+	# 4. Bottom Keybinding Bar
+	var ftr := PanelContainer.new()
+	ftr.add_theme_stylebox_override("panel", map_box.call(Color(0.04, 0.055, 0.08, 0.98), border_col, 1, 12, 8))
+	mv.add_child(ftr)
+	var ftr_l := Label.new()
+	ftr_l.text = "REGION: KÄRNTEN / SAINT LEONARD     |     L-KLICK: WEGPUNKT   ·   R-KLICK: ZIEHEN   ·   MAUSRAD: ZOOM   ·   M / ESC: SCHLIESSEN"
+	ftr_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ftr_l.add_theme_font_size_override("font_size", 12)
+	ftr_l.add_theme_color_override("font_color", text_dim)
+	ftr.add_child(ftr_l)
 
 	menu_root = Control.new()
 	menu_root.set_anchors_preset(Control.PRESET_FULL_RECT)
