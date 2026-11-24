@@ -1,188 +1,1405 @@
 class_name Game
 extends Node3D
-## Hauptszene: setzt Spielfigur, Auto, Kamera und GUI zusammen und regelt Ein-/Aussteigen.
+## Hauptszene "Saint Leonard": baut aus Welt, Orten, Tieren, Polizei, Aufträgen, Wetter und
+## Oberfläche das Spiel zusammen und regelt alles, was der Spieler mit [F] und anderen Tasten tut.
+## Mehrspieler: Net (Autoload) ruft die on_remote_*-Funktionen auf.
 
-const SPAWN_POI := "Gasthaus Pirtscher"
-const ENTER_DISTANCE := 3.8
+const ENTER_DISTANCE := 4.0
+const RIFLE_DAMAGE := 120.0
 
 @onready var world: WorldBuilder = $World
+@onready var sun: DirectionalLight3D = $Sun
+@onready var env_node: WorldEnvironment = $WorldEnvironment
 
+var interactions := Interactions.new()
+var landmarks: Landmarks
+var spawner: AnimalSpawner
+var police: PoliceManager
+var missions: Missions
+var sky: SkyCycle
 var player: Player
-var car: Car
+var car: Truck
 var rig: CameraRig
 var hud: Hud
+var menu: MainMenu
 var driving := false
+var seat := ""  # "" zu Fuß, sonst Sitz im eigenen oder fremden Pickup
+var seat_truck: Truck = null
+var started := false
+var waypoint := Vector2.INF
+
+var placed_nodes := {}  # uid -> Node3D
+var house_nodes := {}  # Bauplatz -> Node3D
+var remote_players := {}  # peer id -> RemotePlayer
+var remote_trucks := {}  # peer id -> Truck
+var _placing := ""
+var _ghost: Node3D
+var _ghost_rot := 0.0
+var _harvest_t := 0.0
+var _harvest_target: Carcass = null
 var _place_timer := 0.0
+var _current_interaction := {}
+var _festival: Node3D
 
 
 func _ready() -> void:
 	Controls.setup()
-	# Die Hauptszene muss Esc auch in der Pause hören, alles darunter pausiert normal
+	Net.game = self
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	world.process_mode = Node.PROCESS_MODE_PAUSABLE
+	if world.data.is_empty():
+		return
+	landmarks = Landmarks.new()
+	landmarks.name = "Orte"
+	add_child(landmarks)
+	spawner = AnimalSpawner.new()
+	spawner.name = "Wild"
+	spawner.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(spawner)
+	missions = Missions.new()
+	missions.name = "Auftraege"
+	add_child(missions)
+	sky = SkyCycle.new()
+	sky.name = "Himmel"
+	add_child(sky)
+	sky.setup(sun, env_node.environment)
 
-	# Start vor dem Gasthaus auf der Straße, das Auto parkt ein Stück weiter
-	var gasthaus := world.poi_position(SPAWN_POI)
-	var road := world.nearest_road(gasthaus, ["residential", "unclassified", "tertiary", "primary", "service"])
-	var side := Vector2(-road.dir.y, road.dir.x)
-	if side.dot(gasthaus - road.pos) < 0:
-		side = -side  # Seite zum Gasthaus
+	GameState.world_changed.connect(_sync_world)
+	GameState.message.connect(func(from, text): Phone.log_message(from, text))
+	Net.player_left.connect(_on_player_left)
 
+	if Net.is_dedicated():
+		_start_dedicated()
+		return
+	hud = Hud.new()
+	add_child(hud)
+	hud.visible = false
+	landmarks.setup(world, self)
+	spawner.setup(world, landmarks)
+
+	if DebugTools.active and not DebugTools.args.has("showmenu"):
+		GameState.reset_new_game()
+		if DebugTools.args.has("name"):
+			GameState.player_name = DebugTools.args.name
+		if DebugTools.args.has("join"):
+			Net.join(DebugTools.args.join)
+			var res = await _wait_connect()
+			print("Verbindung: ", "ok" if res == "" else res)
+		elif DebugTools.args.has("host"):
+			print(Net.host())
+		_start_game()
+		return
+	# Nach "Hauptmenü" oder "Laden" wird die Szene neu geladen; ein gewählter Spielstand startet direkt
+	if not GameState.pending.is_empty():
+		var pend: Dictionary = GameState.pending
+		GameState.pending = {}
+		_on_menu_start("single", "", pend.slot, pend.get("new", false), false)
+		return
+	var saves := GameState.list_saves()
+	if not saves.is_empty():
+		GameState.slot = saves[0].slot
+		GameState.load_game()
+	Settings.apply(get_tree())
+	menu = MainMenu.new()
+	add_child(menu)
+	menu.start.connect(_on_menu_start)
+	menu.quit.connect(func(): get_tree().quit())
+	# Hintergrund fürs Menü: Kamera über dem Dorf
+	var cam := Camera3D.new()
+	cam.name = "Menuekamera"
+	add_child(cam)
+	cam.global_position = Vector3(-60, world.height_at(0, 0) + 45.0, 140)
+	cam.look_at(Vector3(150, world.height_at(150, -50), -80))
+	cam.far = 6000.0
+	cam.make_current()
+
+
+func _on_menu_start(mode: String, address: String, slot: String, new_game: bool, keep_outfit := true) -> void:
+	var outfit := GameState.outfit.duplicate()
+	var title := GameState.slot_title
+	var err := ""
+	match mode:
+		"single":
+			GameState.slot = slot if not slot.is_empty() else "einzelspieler"
+			if new_game or not GameState.load_game():
+				GameState.reset_new_game()
+				GameState.slot_title = title if new_game else "Einzelspieler"
+				GameState.save_game()
+		"host":
+			GameState.slot = "server_" + GameState.player_name
+			if not GameState.load_game():
+				GameState.reset_new_game()
+			err = Net.host()
+		"client":
+			err = Net.join(address)
+			if err.is_empty():
+				menu.show_error("Verbinde mit %s ..." % address)
+				var res = await _wait_connect()
+				if res != "":
+					Net.leave()
+					menu.show_error(res)
+					return
+	if not err.is_empty():
+		menu.show_error(err)
+		return
+	if keep_outfit:
+		GameState.outfit = outfit
+	if menu:
+		menu.queue_free()
+	if has_node("Menuekamera"):
+		$Menuekamera.queue_free()
+	Settings.apply(get_tree())
+	_start_game()
+
+
+func _wait_connect() -> String:
+	var result := [""]
+	var done := [false]
+	var ok_cb := func(): done[0] = true
+	var fail_cb := func(reason): result[0] = reason; done[0] = true
+	Net.connected.connect(ok_cb, CONNECT_ONE_SHOT)
+	Net.connection_failed.connect(fail_cb, CONNECT_ONE_SHOT)
+	var t := 0.0
+	while not done[0] and t < 10.0:
+		await get_tree().process_frame
+		t += get_process_delta_time()
+	if not done[0]:
+		return "Keine Antwort vom Server"
+	return result[0]
+
+
+func _start_dedicated() -> void:
+	landmarks.setup(world, self)
+	spawner.setup(world, landmarks)
+	GameState.slot = "dedicated"
+	GameState.load_game()
+	var err := Net.start_dedicated()
+	if not err.is_empty():
+		push_error(err)
+		get_tree().quit(1)
+	missions.set_process(false)
+	_sync_world()
+	started = true
+
+
+func _start_game() -> void:
+	started = true
+	hud.visible = true
+	var sp: Dictionary = landmarks.spawn
 	player = Player.new()
 	player.name = "Spieler"
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
+	player.add_to_group("player_body")
 	add_child(player)
-	var pp: Vector2 = road.pos + side * 1.5
-	player.global_position = Vector3(pp.x, world.height_at(pp.x, pp.y) + 0.5, pp.y)
+	player.global_position = sp.pos
 	player.reset_physics_interpolation()
+	player.shot.connect(_on_shot)
 
-	car = Car.new()
-	car.name = "Auto"
+	car = Truck.new()
+	car.name = "Pickup"
+	car.world = world
+	car.owner_name = GameState.player_name
+	car.player_input = true
 	car.process_mode = Node.PROCESS_MODE_PAUSABLE
+	car.add_to_group("vehicle")
 	add_child(car)
-	var cp: Vector2 = road.pos + road.dir * 7.0 - side * 1.2
-	place_car(Vector3(cp.x, 0, cp.y), Vector3(road.dir.x, 0, road.dir.y))
+	car.place_at(sp.car_pos, sp.car_dir)
+	car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
 
 	rig = CameraRig.new()
 	rig.name = "Kamera"
 	rig.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(rig)
-	player.camera_rig = rig
-	var look: Vector2 = (cp - pp).normalized()  # Richtung Auto schauen
+	player.attach_camera(rig)
+	var look: Vector2 = sp.look
 	rig.yaw = atan2(-look.x, -look.y)
-	rig.set_target(player, 1.6, 5.0, false)
+	rig.set_target(player, 1.65, 5.0, false, true)
 
-	hud = Hud.new()
-	add_child(hud)
+	Animal.threats.assign([player, car])
+	spawner.players.assign([player])
+	police = PoliceManager.new()
+	police.name = "Polizei"
+	police.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(police)
+	police.setup(self, world, landmarks)
+	missions.setup(self)
+	missions._on_chapter_start()
+	spawner.died_hook = _on_animal_died
+
 	hud.minimap.setup(world)
 	hud.big_map.setup(world, true)
+	hud.big_map.clicked.connect(func(p): set_waypoint(p))
 	hud.resume_requested.connect(func(): set_paused(false))
-	hud.quit_requested.connect(func(): get_tree().quit())
-	hud.toast("Willkommen in Riegersdorf!", 4.0)
+	hud.quit_requested.connect(func():
+		GameState.save_game()
+		get_tree().quit())
+	hud.save_requested.connect(func():
+		GameState.save_game()
+		hud.toast("Gespeichert: %s" % GameState.slot_title, 2.0))
+	hud.menu_requested.connect(func():
+		GameState.save_game()
+		Net.leave()
+		get_tree().paused = false
+		get_tree().reload_current_scene())
+	hud.set_minimap(GameState.minimap_on)
+	_sync_world()
 
-	# Umgebungsgeräusch: Wind und Vögel
 	var amb := AudioStreamPlayer.new()
 	amb.stream = Sfx.ambience()
-	amb.volume_db = -13.0
+	amb.volume_db = -14.0
 	amb.autoplay = true
 	add_child(amb)
 
+	if not GameState.story.get("talked", false) and int(GameState.story.chapter) == 1:
+		hud.toast("Willkommen in Saint Leonard! Sprich mit Wirt Sepp (F).", 6.0)
+	else:
+		hud.toast("Willkommen zurück, %s!" % GameState.player_name, 4.0)
 	if not DebugTools.active:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
-func place_car(pos: Vector3, forward: Vector3) -> void:
-	var y := world.height_at(pos.x, pos.z) + 1.0
-	car.global_transform = Transform3D(Basis.looking_at(-forward.normalized(), Vector3.UP), Vector3(pos.x, y, pos.z))
-	car.linear_velocity = Vector3.ZERO
-	car.angular_velocity = Vector3.ZERO
-	car.reset_physics_interpolation()
-
+# ------------------------------------------------------------------ Eingaben
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause"):
-		set_paused(not get_tree().paused)
-	elif get_tree().paused:
+	if not started or Net.is_dedicated():
 		return
-	elif event.is_action_pressed("interact"):
-		if driving:
-			exit_car()
-		elif player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
-			enter_car()
+	if event.is_action_pressed("pause"):
+		if _placing != "":
+			_stop_placing()
+		elif hud.menus_open():
+			Menus.close_all(hud)
+		elif hud.map_open():
+			hud.toggle_map()
+		else:
+			set_paused(not get_tree().paused)
+		return
+	if get_tree().paused:
+		return
+	if hud.menus_open():
+		return
+	if _placing != "":
+		_placing_input(event)
+		return
+	if player.passed_out > 0.0:
+		return
+	if event.is_action_pressed("interact"):
+		_interact()
 	elif event.is_action_pressed("toggle_help"):
 		hud.toggle_help()
 	elif event.is_action_pressed("map"):
 		hud.toggle_map()
-	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if hud.map_open() else Input.MOUSE_MODE_CAPTURED
+	elif event.is_action_pressed("phone"):
+		Phone.open(self)
+	elif event.is_action_pressed("inventory"):
+		Menus.inventory(self)
+	elif event.is_action_pressed("toggle_view"):
+		rig.toggle_view()
+	elif event.is_action_pressed("minimap"):
+		toggle_minimap()
+	elif event.is_action_pressed("mute"):
+		Voice.muted = not Voice.muted
+		hud.toast("Mikrofon stumm" if Voice.muted else "Mikrofon an")
+	elif event.is_action_pressed("lights"):
+		if seat == "driver":
+			car.set_lights(not car.lights_on)
+		elif seat == "":
+			player.hand.toggle_flashlight()
+	elif seat == "driver":
+		_vehicle_input(event)
+	elif seat == "":
+		_foot_input(event)
+	if event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not hud.map_open():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _foot_input(event: InputEvent) -> void:
+	if event.is_action_pressed("slot_1"):
+		_select_slot("rifle", "Gewehr")
+	elif event.is_action_pressed("slot_2"):
+		_select_slot("binoculars", "Fernglas")
+	elif event.is_action_pressed("slot_3"):
+		_select_slot("none", "Hände frei")
+	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and rig.first_person and not player.hand.aiming:
+		var order := ["rifle", "binoculars", "none"].filter(func(s): return s == "none" or GameState.has(s))
+		var i: int = order.find(player.hand.slot)
+		var step := 1 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1
+		var nxt: String = order[(i + step + order.size()) % order.size()]
+		_select_slot(nxt, {rifle = "Gewehr", binoculars = "Fernglas", none = "Hände frei"}[nxt])
+	elif event.is_action_pressed("reload"):
+		player.hand.try_reload()
+	elif event.is_action_pressed("crouch"):
+		player.toggle_crouch()
+	elif event.is_action_pressed("smoke"):
+		use_item("cigarettes")
+	elif event.is_action_pressed("drink"):
+		for id in ["beer", "schnaps", "moonshine"]:
+			if GameState.has(id):
+				use_item(id)
+				break
+	elif event.is_action_pressed("cargo"):
+		_cargo_action()
+
+
+func _select_slot(s: String, label: String) -> void:
+	var err: String = player.hand.select(s)
+	hud.toast(err if not err.is_empty() else label, 1.2)
+
+
+func _vehicle_input(event: InputEvent) -> void:
+	if event.is_action_pressed("reset_vehicle"):
+		var why := car.can_flip()
+		if why.is_empty():
+			car.flip_upright()
+		else:
+			hud.toast(why, 1.5)
+	elif event.is_action_pressed("horn"):
+		car.honk()
+	elif event.is_action_pressed("radio"):
+		hud.toast(car.next_station())
+	elif event.is_action_pressed("winch"):
+		hud.toast(car.toggle_winch(), 3.0)
 
 
 func set_paused(on: bool) -> void:
 	get_tree().paused = on
 	hud.show_pause(on)
+	if on:
+		GameState.save_game()
 	if not DebugTools.active:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if on else Input.MOUSE_MODE_CAPTURED
 
 
-func enter_car() -> void:
-	driving = true
+func toggle_minimap() -> void:
+	GameState.minimap_on = not GameState.minimap_on
+	hud.set_minimap(GameState.minimap_on)
+
+
+func set_waypoint(p: Vector2) -> void:
+	waypoint = p
+	hud.minimap.waypoint = p
+	hud.big_map.waypoint = p
+
+
+# ------------------------------------------------------------------ Interaktion [F]
+
+func _interact() -> void:
+	if seat != "":
+		exit_vehicle()
+		return
+	if player.on_stand:
+		var st := player.on_stand
+		player.on_stand = null
+		player.global_position = st.global_transform * Vector3(0, 0.2, -2.2)
+		player.reset_physics_interpolation()
+		return
+	if player.carrying:
+		_drop_carried()
+		return
+	if not _current_interaction.is_empty():
+		(_current_interaction.action as Callable).call()
+		return
+	# Einsteigen
+	if player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
+		enter_vehicle(car, "driver")
+		return
+	for id in remote_trucks:
+		var t: Truck = remote_trucks[id]
+		if player.global_position.distance_to(t.global_position) < ENTER_DISTANCE:
+			var free := ["passenger", "bed_l", "bed_r"].filter(func(s): return not t.occupants.has(s))
+			if not free.is_empty():
+				enter_vehicle(t, free[0])
+			return
+
+
+## Was man gerade mit [F] tun kann (ohne Einsteigen)
+func _update_interaction() -> String:
+	_current_interaction = {}
+	if seat != "":
+		return "[F] Aussteigen"
+	if player.on_stand:
+		return "[F] Vom Hochstand steigen"
+	if player.carrying:
+		if car.global_position.distance_to(player.global_position) < 5.0:
+			return "[G] Auf die Ladefläche laden   [F] Ablegen"
+		return "[F] Ablegen"
+	var e := interactions.nearest(player.global_position)
+	if not e.is_empty():
+		_current_interaction = e
+		return "[F] " + Interactions.text_of(e)
+	# Kadaver
+	var c := _nearest_carcass(2.8)
+	if c:
+		return "[F] %s ausnehmen (halten)   [G] tragen" % c.display_name()
+	if player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
+		var t := "[F] Einsteigen"
+		if not car.cargo.is_empty():
+			t += "   [G] Abladen"
+		return t
+	for id in remote_trucks:
+		if player.global_position.distance_to(remote_trucks[id].global_position) < ENTER_DISTANCE:
+			return "[F] Mitfahren bei %s" % Net.peers.get(id, {name = "?"}).name
+	return ""
+
+
+func _nearest_carcass(r: float) -> Carcass:
+	var best: Carcass = null
+	var bd := r
+	for c in get_tree().get_nodes_in_group("carcass"):
+		if c.carried or c.get_parent() is Truck:
+			continue
+		var d: float = c.global_position.distance_to(player.global_position)
+		if d < bd:
+			bd = d
+			best = c
+	return best
+
+
+func _cargo_action() -> void:
+	if player.carrying:
+		if car.global_position.distance_to(player.global_position) < 5.0 and car.has_space():
+			var n := player.carrying
+			player.carrying = null
+			car.load_cargo(n)
+			hud.toast("Aufgeladen")
+		return
+	var c := _nearest_carcass(2.8)
+	if c:
+		c.set_carried(true)
+		player.carrying = c
+		player.hand.select("none")
+		return
+	if car.global_position.distance_to(player.global_position) < 5.0 and not car.cargo.is_empty():
+		var n := car.unload_last()
+		if n:
+			car.remove_child(n)
+			add_child(n)
+			n.scale = Vector3.ONE
+			if n is Carcass:
+				player.carrying = n
+			else:
+				n.global_position = player.global_position + player.facing * 1.5
+
+
+func _drop_carried() -> void:
+	var c := player.carrying
+	player.carrying = null
+	if c is Carcass:
+		c.set_carried(false)
+		c.global_position = player.global_position + player.facing * 1.2 + Vector3.UP * 0.5
+
+
+func _process_harvest(delta: float) -> void:
+	var c := _nearest_carcass(2.8)
+	var holding := Input.is_action_pressed("interact") and c != null and _current_interaction.is_empty() and seat == "" and player.carrying == null and not hud.menus_open()
+	if holding and c == _harvest_target:
+		_harvest_t += delta
+		if not GameState.has("knife"):
+			hud.toast("Dafür brauchst du ein Jagdmesser (Waffengeschäft)")
+			_harvest_t = 0.0
+		if _harvest_t >= 3.0:
+			_harvest(c)
+			_harvest_t = 0.0
+	else:
+		_harvest_target = c if holding else null
+		_harvest_t = 0.0
+	hud.set_progress(_harvest_t / 3.0)
+
+
+func _harvest(c: Carcass) -> void:
+	var loot := c.loot()
+	var parts := []
+	for id in loot:
+		GameState.give(id, int(loot[id]))
+		parts.append("%dx %s" % [loot[id], Items.display(id)])
+	if c.species == "legend":
+		missions.event("legend_killed")
+	hud.toast("Ausgenommen: " + ", ".join(parts), 3.5)
+	Net.carcass_removed(c.net_id)
+	c.queue_free()
+
+
+# ------------------------------------------------------------------ Fahrzeuge
+
+func enter_vehicle(t: Truck, s: String) -> void:
+	seat = s
+	seat_truck = t
+	driving = s == "driver" and t == car
 	player.visible = false
 	player.input_enabled = false
 	player.process_mode = Node.PROCESS_MODE_DISABLED
 	player.collision_layer = 0
-	player.global_position = car.global_position + Vector3.DOWN * 50.0  # aus dem Weg
-	car.driving = true
-	Sfx.play_3d(car, Sfx.door(), -2.0)
-	rig.set_target(car, 1.7, 8.5, true)
-	hud.set_driving(true)
+	player.hand.select("none")
+	player.hand.aiming = false
+	if driving:
+		car.driving = true
+		car.player_input = true
+		if GameState.is_night():
+			car.set_lights(true)
+	Sfx.play_3d(t, Sfx.door(), -2.0)
+	rig.seat_offset = Truck.SEATS[s] + Vector3(0, 0.6, 0)
+	rig.set_target(t, 1.9, 9.0, true, false)
+	rig.yaw = 0.0
+	hud.set_driving(driving)
 
 
-func exit_car() -> void:
-	if absf(car.speed_kmh()) > 15.0:
+func exit_vehicle() -> void:
+	var t := seat_truck
+	if driving and absf(car.speed_kmh()) > 15.0:
 		hud.toast("Zuerst langsamer werden!", 1.5)
 		return
-	driving = false
-	car.driving = false
-	var p := car.global_position + car.global_basis.x * 2.0  # links aussteigen
-	player.global_position = Vector3(p.x, maxf(world.height_at(p.x, p.z), car.global_position.y - 0.5) + 0.3, p.z)
+	if driving:
+		car.driving = false
+		car.winching = false
+	var side := -1.0 if seat == "passenger" else 1.0
+	var p := t.global_position + t.global_basis.x * 2.2 * side
+	if seat.begins_with("bed"):
+		p = t.global_position - t.global_basis.z * 3.5
+	player.global_position = Vector3(p.x, maxf(world.height_at(p.x, p.z), t.global_position.y - 0.5) + 0.3, p.z)
 	player.velocity = Vector3.ZERO
 	player.reset_physics_interpolation()
-	Sfx.play_3d(car, Sfx.door(), -2.0, 1.1)
+	Sfx.play_3d(t, Sfx.door(), -2.0, 1.1)
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
 	player.collision_layer = 2
 	player.input_enabled = true
 	player.visible = true
-	rig.set_target(player, 1.6, 5.0, false)
+	seat = ""
+	seat_truck = null
+	driving = false
+	rig.set_target(player, 1.65, 5.0, false, true)
 	hud.set_driving(false)
+	if GameState.has("rifle"):
+		player.hand.select("rifle")
 
+
+func truck_near(p: Vector3, r: float) -> bool:
+	return car and car.global_position.distance_to(p) < r
+
+
+func truck_has_game_near(p: Vector3, r: float) -> bool:
+	if not truck_near(p, r):
+		return false
+	for n in car.cargo:
+		if n is Carcass:
+			return true
+	return false
+
+
+func sell_truck_cargo() -> void:
+	var total := 0
+	var count := 0
+	for n in car.cargo.duplicate():
+		if n is Carcass:
+			total += (n as Carcass).sell_value()
+			count += 1
+			car.cargo.erase(n)
+			Net.carcass_removed(n.net_id)
+			n.queue_free()
+	GameState.add_money(total)
+	hud.toast("%d Stück Wild verkauft: +%d €" % [count, total], 3.5)
+	missions.event("sold_carcass")
+
+
+func fuel_prompt() -> String:
+	var need := int(ceil(Truck.TANK - float(GameState.truck.fuel)))
+	return "Volltanken (%d l, %d €)" % [need, int(need * 1.85)]
+
+
+func refuel() -> void:
+	var need := Truck.TANK - float(GameState.truck.fuel)
+	var cost := int(need * 1.85)
+	if need < 1.0:
+		hud.toast("Der Tank ist voll")
+		return
+	if not GameState.pay(cost):
+		var liters := float(maxi(GameState.money, 0)) / 1.85
+		GameState.pay(maxi(GameState.money, 0))
+		GameState.truck.fuel = float(GameState.truck.fuel) + liters
+		hud.toast("Für %d l hat's gereicht" % int(liters))
+		return
+	GameState.truck.fuel = Truck.TANK
+	hud.toast("Vollgetankt: %d €" % cost)
+
+
+func use_jerrycan() -> void:
+	if GameState.take("jerrycan"):
+		GameState.truck.fuel = minf(Truck.TANK, float(GameState.truck.fuel) + 20.0)
+		hud.toast("20 l nachgefüllt")
+
+
+func tow_truck_to_garage() -> void:
+	var bay: Vector3 = landmarks.garage.bay
+	car.place_at(bay, Vector3(sin(landmarks.garage.yaw), 0, cos(landmarks.garage.yaw)))
+	hud.toast("Der Pickup steht vor der Werkstatt")
+
+
+func tow_truck_to_player() -> void:
+	var p := player.global_position + player.facing * 6.0
+	var info := world.road_info(Vector2(p.x, p.z), 60.0)
+	if info.tier != 0:
+		p = Vector3(info.pos.x, 0, info.pos.y)
+	car.place_at(p, Vector3(info.dir.x, 0, info.dir.y) if info.tier != 0 else player.facing)
+	GameState.truck.fuel = maxf(float(GameState.truck.fuel), 10.0)
+	hud.toast("Pannenhilfe: Pickup steht bereit (10 l im Tank)")
+
+
+# ------------------------------------------------------------------ Läden, Werkstatt, Häuser
+
+func open_shop(id: String) -> void:
+	missions.event("shop_open", {id = id})
+	Menus.shop(self, id)
+
+
+func on_bought(item: String, _shop: String) -> void:
+	missions.event("bought", {id = item})
+	if item == "rifle" or item == "binoculars":
+		player.hand.select(item)
+
+
+func on_sold(item: String, n: int, _shop: String) -> void:
+	missions.event("sold", {id = item, n = n})
+
+
+func open_garage() -> void:
+	Menus.garage(self)
+
+
+func police_desk() -> void:
+	hud.show_dialog("Polizeiinspektion", police.pay_open_fines(), [["OK", func(): pass]])
+
+
+func buy_house(type_idx: int) -> void:
+	var h: Dictionary = Items.HOUSES[type_idx]
+	if GameState.house >= 0:
+		hud.toast("Du hast schon ein Haus")
+		return
+	# freien Bauplatz nahe Saint Leonard nehmen
+	var plot := -1
+	for pl in landmarks.plots:
+		if not GameState.houses.has(str(pl.idx)):
+			plot = pl.idx
+			break
+	if plot < 0:
+		hud.toast("Kein Bauplatz mehr frei")
+		return
+	if not GameState.pay(h.price):
+		hud.toast("Zu wenig Geld")
+		return
+	GameState.house = plot
+	Net.request_house(plot, type_idx)
+	missions.event("house")
+	var pl: Dictionary = landmarks.plots[plot]
+	set_waypoint(Vector2(pl.pos.x, pl.pos.z))
+	hud.show_dialog("Haus gekauft", "%s auf Bauplatz %d gehört jetzt dir! Der Wegpunkt zeigt hin.\nMöbel gibt es im Bauhaus, an der Werkbank stellst du Trophäen, Kleidung und Grillfleisch her, im Bett schläfst du bis zum Morgen." % [h.name, plot + 1], [["Super", func(): pass]])
+
+
+func refresh_plot(pl: Dictionary) -> void:
+	var n: Node3D = pl.node
+	for c in n.get_children():
+		c.queue_free()
+	interactions.remove_node(n)
+	var key := str(pl.idx)
+	if GameState.houses.has(key):
+		var info: Dictionary = GameState.houses[key]
+		var house := HouseBuilder.build(n, pl, int(info.type), str(info.owner), world)
+		house_nodes[pl.idx] = house
+		if info.owner == GameState.player_name:
+			var bench: Node3D = house.get_meta("bench")
+			var bed: Node3D = house.get_meta("bed")
+			interactions.add(Vector3(0, 1, 0.8), 2.2, "Werkbank", func(): Menus.inventory(self), null, bench)
+			interactions.add(Vector3(0, 0.6, 0), 2.2, "Schlafen bis zum Morgen", func(): _sleep(), null, bed)
+	else:
+		house_nodes.erase(pl.idx)
+		landmarks.plot_sign(pl)
+
+
+func inside_own_house(p: Vector3) -> bool:
+	if GameState.house < 0 or not house_nodes.has(GameState.house):
+		return false
+	var h: Node3D = house_nodes[GameState.house]
+	var local := h.global_transform.affine_inverse() * p
+	var half: Vector2 = h.get_meta("half")
+	return absf(local.x) < half.x and absf(local.z) < half.y and local.y > -1.0 and local.y < 7.0
+
+
+func _sleep() -> void:
+	hud.set_fade(1.0)
+	var target := 7.0
+	if GameState.time > target:
+		GameState.day += 1
+	GameState.time = target
+	GameState.health = 100.0
+	GameState.stamina = 100.0
+	GameState.bac = 0.0
+	GameState.save_game()
+	await get_tree().create_timer(1.0).timeout
+	hud.set_fade(0.0)
+	hud.toast("Guten Morgen! Tag %d" % GameState.day, 3.0)
+
+
+func wear(id: String) -> void:
+	match id:
+		"jacket": GameState.outfit.jacket = not GameState.outfit.get("jacket", false)
+		"hunter_hat": GameState.outfit.hat = "hunter_gams"
+	player.rebuild_model()
+
+
+func decorate_pub_trophy() -> void:
+	var t := Placeables.model("trophy")
+	add_child(t)
+	var door: Vector3 = landmarks.pub.door
+	var pubp: Vector3 = landmarks.pub.pos
+	var out := (door - pubp)
+	out.y = 0
+	out = out.normalized()
+	t.global_position = door + Vector3.UP * 3.2 - out * 0.1
+	t.scale = Vector3.ONE * 2.5
+	t.look_at(t.global_position + out, Vector3.UP)
+	t.rotate_object_local(Vector3.UP, PI)
+
+
+func start_festival() -> void:
+	if _festival:
+		return
+	_festival = Node3D.new()
+	add_child(_festival)
+	var door: Vector3 = landmarks.pub.door
+	_festival.global_position = door
+	for k in 14:
+		var a := TAU * k / 14.0
+		var l := OmniLight3D.new()
+		l.light_color = Color.from_hsv(k / 14.0, 0.7, 1.0)
+		l.omni_range = 6.0
+		l.light_energy = 2.0
+		l.position = Vector3(cos(a) * 9.0, 3.0, sin(a) * 9.0)
+		_festival.add_child(l)
+		Placeables.box(_festival, Vector3(0.3, 0.3, 0.3), l.position, l.light_color)
+	var r := Radio.new()
+	r.max_distance = 80.0
+	r.unit_size = 12.0
+	_festival.add_child(r)
+	r.next_station()
+	for k in 5:
+		var n := Npc.new("", {shirt = Color.from_hsv(randf(), 0.6, 0.8), hat = "hunter" if k % 2 == 0 else "cap"})
+		_festival.add_child(n)
+		n.position = Vector3(randf_range(-6, 6), 0, randf_range(-6, 6))
+	hud.show_dialog("Das Fest!", "Ganz Saint Leonard feiert beim Gasthaus Pirtscher. Der Inspektor gibt auf, das Gasthaus bleibt offen. Prost!", [["Prost!", func(): pass]])
+
+
+# ------------------------------------------------------------------ Konsum
+
+func use_item(id: String) -> void:
+	var it := Items.info(id)
+	if not GameState.has(id):
+		hud.toast("Keine %s mehr" % it.name)
+		return
+	var kind: String = {drink = "drink", smoke = "smoke", food = "eat"}.get(it.kind, "")
+	var effect := func():
+		var msg := ""
+		match it.kind:
+			"drink": msg = GameState.drink(id)
+			"smoke": msg = GameState.smoke()
+			"food": msg = GameState.eat(id)
+		if not msg.is_empty():
+			hud.toast(msg, 2.5)
+		# zu viel: Ohnmacht
+		if GameState.promille() >= 3.0 and player.passed_out <= 0.0:
+			_pass_out("Zu viel Schnaps! Du bist umgekippt.")
+	if seat == "" and rig.first_person and kind != "":
+		if not player.hand.play_action(kind, effect):
+			hud.toast("Gerade beschäftigt", 1.0)
+	else:
+		player.hand.action = kind
+		effect.call()
+		get_tree().create_timer(2.0).timeout.connect(func(): player.hand.action = "")
+
+
+func _pass_out(text: String) -> void:
+	if seat != "":
+		exit_vehicle()
+	hud.toast(text, 4.0)
+	player.pass_out(25.0)
+	var tw := create_tween()
+	tw.tween_method(func(v): hud.set_fade(v), 0.0, 0.85, 2.0)
+	tw.tween_interval(20.0)
+	tw.tween_method(func(v): hud.set_fade(v), 0.85, 0.0, 3.0)
+	GameState.bac = minf(GameState.bac, 0.2)
+
+
+# ------------------------------------------------------------------ Aufstellen
+
+func start_placing(id: String) -> void:
+	_placing = id
+	_ghost_rot = 0.0
+	_ghost = Placeables.model(id)
+	add_child(_ghost)
+	for mi in _ghost.find_children("*", "MeshInstance3D", true, false):
+		var m := (mi as MeshInstance3D).material_override as StandardMaterial3D
+		if m:
+			m = m.duplicate()
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.albedo_color.a = 0.6
+			m.next_pass = null
+			(mi as MeshInstance3D).material_override = m
+		for sb in mi.find_children("*", "StaticBody3D", true, false):
+			sb.queue_free()
+	hud.toast("[Maus links] aufstellen   [Mausrad] drehen   [Maus rechts / Esc] abbrechen", 5.0)
+
+
+func _stop_placing() -> void:
+	_placing = ""
+	if _ghost:
+		_ghost.queue_free()
+	_ghost = null
+
+
+func _placing_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_WHEEL_UP: _ghost_rot += 0.2
+			MOUSE_BUTTON_WHEEL_DOWN: _ghost_rot -= 0.2
+			MOUSE_BUTTON_RIGHT: _stop_placing()
+			MOUSE_BUTTON_LEFT: _confirm_place()
+
+
+func _ghost_transform() -> Transform3D:
+	var ray := rig.aim_ray()
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(ray[0], ray[0] + ray[1] * 7.0, 1)
+	var hit := space.intersect_ray(q)
+	var pos: Vector3
+	var basis := Basis(Vector3.UP, rig.yaw + PI + _ghost_rot)
+	if hit:
+		pos = hit.position
+		if Placeables.is_wall_item(_placing) and absf(hit.normal.y) < 0.4:
+			pos += hit.normal * 0.04
+			basis = Basis.looking_at(-hit.normal, Vector3.UP)
+			pos.y = maxf(pos.y, player.global_position.y + 1.2)
+	else:
+		pos = ray[0] + ray[1] * 5.0
+		pos.y = world.height_at(pos.x, pos.z)
+	return Transform3D(basis, pos)
+
+
+func _confirm_place() -> void:
+	var xf := _ghost_transform()
+	var err := Placeables.check(_placing, xf.origin, self)
+	if not err.is_empty():
+		hud.toast(err, 3.0)
+		return
+	if not GameState.take(_placing):
+		_stop_placing()
+		return
+	var data := {}
+	if _placing == "frame" and not GameState.photos.is_empty():
+		data.photo = GameState.photos[-1]
+	var e := {uid = GameState.new_uid(), type = _placing, pos = [xf.origin.x, xf.origin.y, xf.origin.z],
+		rot = xf.basis.get_euler().y, wall = Placeables.is_wall_item(_placing), owner = GameState.player_name, data = data}
+	if e.wall:
+		var q := xf.basis.get_rotation_quaternion()
+		e.quat = [q.x, q.y, q.z, q.w]
+	Net.request_place(e)
+	missions.event("placed", {type = _placing})
+	hud.toast("%s aufgestellt" % Items.display(_placing))
+	var id := _placing
+	_stop_placing()
+	if GameState.has(id):
+		start_placing(id)
+
+
+func pick_up_placed(entry: Dictionary) -> void:
+	GameState.give(entry.type)
+	Net.request_remove(int(entry.uid))
+
+
+func placed_changed(entry: Dictionary) -> void:
+	Net.update_placed(entry)
+
+
+## Aufgestellte Dinge und Häuser mit GameState abgleichen
+func _sync_world() -> void:
+	var seen := {}
+	for e in GameState.placed:
+		var uid := int(e.uid)
+		seen[uid] = true
+		if not placed_nodes.has(uid):
+			placed_nodes[uid] = _spawn_placed(e)
+	for uid in placed_nodes.keys():
+		if not seen.has(uid):
+			var n: Node3D = placed_nodes[uid]
+			if is_instance_valid(n):
+				interactions.remove_node(n)
+				n.queue_free()
+			placed_nodes.erase(uid)
+	if landmarks:
+		for pl in landmarks.plots:
+			var has_house := house_nodes.has(pl.idx)
+			if has_house != GameState.houses.has(str(pl.idx)) or (not has_house and pl.node.get_child_count() == 0):
+				refresh_plot(pl)
+	# eigenes Haus merken (Mehrspieler)
+	for k in GameState.houses:
+		if GameState.houses[k].owner == GameState.player_name:
+			GameState.house = int(k)
+
+
+func _spawn_placed(e: Dictionary) -> Node3D:
+	var n := Placeables.model(e.type)
+	n.set_meta("uid", int(e.uid))
+	add_child(n)
+	var pos := Vector3(e.pos[0], e.pos[1], e.pos[2])
+	if e.get("wall", false) and e.has("quat"):
+		n.global_transform = Transform3D(Basis(Quaternion(e.quat[0], e.quat[1], e.quat[2], e.quat[3])), pos)
+	else:
+		n.global_position = pos
+		n.rotation.y = float(e.rot)
+	var entry := e
+	match e.type:
+		"still":
+			interactions.add(Vector3(0, 1, 0), 3.0, "Brennkessel", func(): Menus.still(self, entry), null, n)
+		"stand":
+			interactions.add(Vector3(0, 0.5, -1.4), 2.5, "Hochstand besteigen", func():
+				player.on_stand = n
+				player.crouched = false, null, n)
+		"campfire":
+			var fire := _fire_fx()
+			n.add_child(fire)
+			interactions.add(Vector3.ZERO, 2.5, func(): return "Wildfleisch grillen (%d roh)" % GameState.count("meat"), func():
+				if GameState.take("meat"):
+					GameState.give("meat_cooked")
+					hud.toast("Fleisch gegrillt")
+				else:
+					hud.toast("Kein rohes Wildfleisch"), null, n)
+		"trailcam":
+			var cam_timer := Timer.new()
+			cam_timer.wait_time = 2.0
+			cam_timer.autostart = true
+			n.add_child(cam_timer)
+			var seen := {}
+			cam_timer.timeout.connect(func(): _trailcam_check(n, seen))
+			interactions.add(Vector3(0, 1, 0), 2.0, "Wildkamera abbauen", func(): pick_up_placed(entry), null, n)
+		"frame":
+			if e.data.has("photo"):
+				var img := Image.load_from_file(e.data.photo)
+				if img:
+					var q := MeshInstance3D.new()
+					var qm := QuadMesh.new()
+					qm.size = Vector2(0.52, 0.37)
+					q.mesh = qm
+					var m := StandardMaterial3D.new()
+					m.albedo_texture = ImageTexture.create_from_image(img)
+					m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+					q.material_override = m
+					q.position.z = 0.025
+					n.add_child(q)
+	if e.type in ["table", "chair", "bed", "sofa", "shelf", "lamp", "rug", "stove", "frame", "trophy"] and e.owner == GameState.player_name:
+		interactions.add(Vector3(0, 0.5, 0), 1.6, "%s einpacken" % Items.display(e.type), func(): pick_up_placed(entry), null, n)
+	return n
+
+
+func _fire_fx() -> Node3D:
+	var root := Node3D.new()
+	var p := GPUParticles3D.new()
+	p.amount = 40
+	p.lifetime = 0.9
+	p.position.y = 0.2
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3.UP
+	pm.spread = 15.0
+	pm.initial_velocity_min = 0.8
+	pm.initial_velocity_max = 1.6
+	pm.gravity = Vector3(0, 0.8, 0)
+	pm.scale_min = 0.3
+	pm.scale_max = 0.7
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 0.8, 0.2, 1.0))
+	grad.set_color(1, Color(0.8, 0.1, 0.0, 0.0))
+	var gt := GradientTexture1D.new()
+	gt.gradient = grad
+	pm.color_ramp = gt
+	p.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(0.4, 0.4)
+	var m := StandardMaterial3D.new()
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.vertex_color_use_as_albedo = true
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	q.material = m
+	p.draw_pass_1 = q
+	root.add_child(p)
+	var l := OmniLight3D.new()
+	l.position.y = 0.6
+	l.light_color = Color(1.0, 0.6, 0.25)
+	l.omni_range = 10.0
+	l.light_energy = 2.0
+	root.add_child(l)
+	var s := AudioStreamPlayer3D.new()
+	s.stream = Sfx.fire()
+	s.autoplay = true
+	s.unit_size = 3.0
+	s.volume_db = -6.0
+	root.add_child(s)
+	return root
+
+
+func _trailcam_check(cam: Node3D, seen: Dictionary) -> void:
+	for a in spawner.animals.values():
+		if not is_instance_valid(a):
+			continue
+		if a.global_position.distance_to(cam.global_position) < 30.0 and not seen.has(a.net_id):
+			seen[a.net_id] = true
+			var n: String = Animal.SPECIES[a.species].name
+			if a.species == "deer" and a.male:
+				n = "Rehbock"
+			Phone.trailcam_log.append("%s  %s bei Kamera %d" % [GameState.clock_text(), n, int(cam.get_meta("uid")) % 100])
+			if Phone.trailcam_log.size() > 50:
+				Phone.trailcam_log.pop_front()
+			if a.species in ["legend", "bear"]:
+				GameState.notify("Wildkamera", "%s gesichtet!" % n)
+
+
+func still_explode(entry: Dictionary) -> void:
+	var uid := int(entry.uid)
+	var n: Node3D = placed_nodes.get(uid)
+	var pos := Vector3(entry.pos[0], entry.pos[1], entry.pos[2])
+	var boom := Node3D.new()
+	add_child(boom)
+	boom.global_position = pos
+	Sfx.play_3d(boom, Sfx.explosion(), 10.0)
+	var flash := OmniLight3D.new()
+	flash.light_color = Color(1, 0.6, 0.2)
+	flash.omni_range = 30.0
+	flash.light_energy = 8.0
+	boom.add_child(flash)
+	create_tween().tween_property(flash, "light_energy", 0.0, 1.5)
+	# Rauchsäule, die man weit sieht
+	var smoke := GPUParticles3D.new()
+	smoke.amount = 60
+	smoke.lifetime = 12.0
+	smoke.visibility_aabb = AABB(Vector3(-20, 0, -20), Vector3(40, 120, 40))
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = Vector3.UP
+	pm.spread = 8.0
+	pm.initial_velocity_min = 5.0
+	pm.initial_velocity_max = 8.0
+	pm.gravity = Vector3(0.3, 0.2, 0)
+	pm.scale_min = 3.0
+	pm.scale_max = 7.0
+	pm.color = Color(0.2, 0.2, 0.22, 0.7)
+	smoke.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(2, 2)
+	var m := StandardMaterial3D.new()
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.vertex_color_use_as_albedo = true
+	q.material = m
+	smoke.draw_pass_1 = q
+	boom.add_child(smoke)
+	get_tree().create_timer(180.0).timeout.connect(boom.queue_free)
+	GameState.make_noise(pos, 1200.0, "shot")
+	if player.global_position.distance_to(pos) < 8.0:
+		GameState.damage(45.0)
+		rig.shake(2.0)
+	if is_instance_valid(n):
+		interactions.remove_node(n)
+	Net.request_remove(uid)
+	hud.toast("BUMM! Der Kessel ist explodiert. Die Rauchsäule lockt die Polizei an!", 5.0)
+	police.dispatch(pos, "Rauchsäule im Wald")
+
+
+# ------------------------------------------------------------------ Schießen
+
+func _on_shot(from: Vector3, dir: Vector3) -> void:
+	var space := get_world_3d().direct_space_state
+	var q := PhysicsRayQueryParameters3D.create(from, from + dir * 700.0, 1 | 4 | 8 | 16)
+	q.exclude = [player.get_rid()]
+	var hit := space.intersect_ray(q)
+	# Schüsse im Ort rufen die Polizei
+	if landmarks.near_village(Vector2(from.x, from.z)) and randf() < 0.5:
+		police.dispatch(from, "Schüsse im Ortsgebiet")
+	if not hit:
+		return
+	var col: Object = hit.collider
+	_impact(hit.position, hit.normal)
+	if col is Animal:
+		var a := col as Animal
+		hud.hitmarker()
+		if Net.is_client():
+			Net.hit_animal(a.net_id, RIFLE_DAMAGE, hit.position, dir)
+		else:
+			a.hit(RIFLE_DAMAGE, hit.position, dir, player)
+			if a.is_dead():
+				hud.hitmarker(true)
+	elif col is PoliceCar:
+		GameState.police_heat += 2.0
+		hud.toast("Du hast auf die Polizei geschossen!", 3.0)
+	elif col is Carcass:
+		(col as RigidBody3D).apply_impulse(dir * 40.0, hit.position - (col as Node3D).global_position)
+
+
+func _impact(pos: Vector3, normal: Vector3) -> void:
+	var p := GPUParticles3D.new()
+	p.amount = 12
+	p.lifetime = 0.6
+	p.one_shot = true
+	p.explosiveness = 1.0
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = normal
+	pm.spread = 35.0
+	pm.initial_velocity_min = 2.0
+	pm.initial_velocity_max = 4.0
+	pm.scale_min = 0.1
+	pm.scale_max = 0.25
+	pm.color = Color(0.45, 0.38, 0.3)
+	p.process_material = pm
+	var q := QuadMesh.new()
+	q.size = Vector2(0.3, 0.3)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.vertex_color_use_as_albedo = true
+	q.material = m
+	p.draw_pass_1 = q
+	add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	get_tree().create_timer(1.5).timeout.connect(p.queue_free)
+
+
+func _on_animal_died(a: Animal, c: Carcass) -> void:
+	if a.species == "legend":
+		GameState.notify("Wirt Sepp", "Der Riesenhirsch! Nimm ihn aus und bring mir das Geweih.")
+	if Net.is_server():
+		Net.animal_killed_on_server(a.net_id, Vector3.ZERO)
+	c.net_id = a.net_id
+
+
+func take_photo() -> void:
+	hud.visible = false
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	hud.visible = true
+	DirAccess.make_dir_recursive_absolute("user://photos")
+	var path := "user://photos/foto_%d.png" % Time.get_unix_time_from_system()
+	img.save_png(path)
+	GameState.photos.append(path)
+	Sfx.play_2d(self, Sfx.shutter(), -2.0)
+	hud.toast("Foto gespeichert (Fotorahmen im Bauhaus)")
+
+
+# ------------------------------------------------------------------ Ablauf
 
 func _process(delta: float) -> void:
-	if get_tree().paused:
+	if not started or Net.is_dedicated() or get_tree().paused:
 		return
 	# Sicherheitsnetz: niemand fällt durch die Welt
 	for body: Node3D in [player, car]:
 		var g := world.height_at(body.global_position.x, body.global_position.z)
-		if body.global_position.y < g - 4.0 and not (body == player and driving):
+		if body.global_position.y < g - 4.0 and not (body == player and seat != ""):
 			if body == car:
-				place_car(car.global_position, car.global_basis.z)
+				car.place_at(car.global_position, car.global_basis.z)
 			else:
 				body.global_position.y = g + 1.0
-
-	var focus: Node3D = car if driving else player
-	var pos2 := Vector2(focus.global_position.x, focus.global_position.z)
-	var head: Vector3 = car.global_basis.z if driving else player.facing
-	hud.minimap.center = pos2
-	hud.minimap.player_pos = pos2
-	hud.minimap.heading = Vector2(head.x, head.z)
-	hud.big_map.player_pos = pos2
-	hud.big_map.heading = Vector2(head.x, head.z)
-
-	if driving:
-		hud.set_speed(car.speed_kmh())
-		hud.set_prompt("[F] Aussteigen")
-	elif player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
-		hud.set_prompt("[F] Einsteigen")
+	# Gesundheit
+	if GameState.health <= 0.0 and player.passed_out <= 0.0:
+		GameState.health = 35.0
+		GameState.add_money(-mini(150, maxi(GameState.money, 0)))
+		_pass_out("Schwer verletzt! Der Notarzt kostet 150 €.")
+	if _placing != "" and _ghost:
+		_ghost.global_transform = _ghost_transform()
+		var ok := Placeables.check(_placing, _ghost.global_position, self).is_empty()
+		hud.set_prompt("Aufstellen: %s%s" % [Items.display(_placing), "" if ok else "  (hier nicht erlaubt)"])
 	else:
-		hud.set_prompt("")
+		hud.set_prompt(_update_interaction() if player.passed_out <= 0.0 else "")
+	_process_harvest(delta)
 
+	var focus: Node3D = seat_truck if seat != "" else player
+	var pos2 := Vector2(focus.global_position.x, focus.global_position.z)
+	var head: Vector3 = seat_truck.global_basis.z if seat != "" else player.facing
+	for m in [hud.minimap, hud.big_map]:
+		m.player_pos = pos2
+		m.heading = Vector2(head.x, head.z)
+		m.others = _other_markers()
+		m.show_route = _gps_allowed()
+	hud.minimap.center = pos2
+	hud.update_status()
+	hud.set_view(rig.first_person, player.hand.aiming, player.hand.slot, seat != "")
+	if seat == "driver":
+		hud.set_speed(car.speed_kmh(), GameState.truck.fuel, GameState.truck.damage, WorldBuilder.TIER_NAMES[car.surface.tier] + (" (matschig)" if GameState.wetness > 0.4 and car.surface.tier != 1 and car.surface.tier != 2 else ""))
+		if GameState.truck.fuel <= 0.0:
+			hud.set_alert("Tank leer! Reservekanister oder Pannenhilfe (Handy)")
+		elif car.broken:
+			hud.set_alert("Motorschaden! Werkstatt oder Pannenhilfe (Handy)")
+	if waypoint != Vector2.INF and pos2.distance_to(waypoint) < 15.0:
+		set_waypoint(Vector2.INF)
+		hud.toast("Ziel erreicht")
 	_place_timer -= delta
 	if _place_timer <= 0.0:
 		_place_timer = 0.4
 		_update_place(pos2)
 
 
+## Im Auto mit Beifahrer sieht nur der Beifahrer das Navi (Rallye-Ansage)
+func _gps_allowed() -> bool:
+	if seat != "driver":
+		return true
+	for id in remote_players:
+		var rp: RemotePlayer = remote_players[id]
+		if rp.seat_owner == Net.my_id() and rp.seat == "passenger":
+			return false
+	return true
+
+
+func _other_markers() -> Array:
+	var out := []
+	for id in remote_players:
+		var rp: RemotePlayer = remote_players[id]
+		out.append([Vector2(rp.global_position.x, rp.global_position.z), rp.player_name])
+	var lp := spawner.legend_pos()
+	if lp != Vector3.INF and GameState.story.get("talked", false):
+		out.append([Vector2(lp.x, lp.z) + Vector2(60, -40), "Riesenhirsch gesichtet?"])
+	return out
+
+
 func _update_place(p: Vector2) -> void:
 	var poi := world.nearest_poi(p)
-	var road := world.nearest_road(p, [], 30.0)
+	var road := world.road_info(p, 15.0)
 	var place := world.nearest_place(p)
 	var title: String = place.name
+	if title in ["Riegersdorf", "Sankt Leonhard bei Siebenbrünn"]:
+		title = "Saint Leonard (%s)" % ("Riegersdorf" if title == "Riegersdorf" else "St. Leonhard")
+	if p.distance_to(landmarks.city_center) < 700.0:
+		title = "Die Stadt (Fürnitz)"
 	var sub := ""
 	if poi.dist < 45.0:
 		title = poi.name
 		sub = place.name
-	if road.dist < 15.0 and not road.name.is_empty() and road.name != title:
-		sub = road.name if sub.is_empty() else "%s, %s" % [road.name, sub]
+	if road.tier != 0:
+		var rn: String = road.name if not road.name.is_empty() else WorldBuilder.TIER_NAMES[road.tier]
+		if rn != sub and rn != title:
+			sub = rn if sub.is_empty() else "%s, %s" % [rn, sub]
+	elif landmarks.in_mountains(p):
+		sub = "Südberge (Bären!)"
 	var to_border := world.border_distance(p)
 	if to_border < 60.0:
 		sub = "Achtung: Grenze der Spielwelt"
 	hud.set_place(title, sub, to_border < 60.0)
+
+
+# ------------------------------------------------------------------ Mehrspieler
+
+func send_net_state() -> void:
+	if not started or not player:
+		return
+	var flags := 0
+	if seat != "":
+		flags |= 1
+	if player.crouched:
+		flags |= 2
+	if player.hand.aiming:
+		flags |= 4
+	if player.passed_out > 0.0:
+		flags |= 8
+	var owner_id := 0
+	if seat_truck == car and seat != "":
+		owner_id = Net.my_id()
+	else:
+		for id in remote_trucks:
+			if remote_trucks[id] == seat_truck:
+				owner_id = id
+	var pos: Vector3 = seat_truck.global_transform * Truck.SEATS.get(seat, Vector3.ZERO) if seat != "" else player.global_position
+	Net.pstate.rpc(pos, rig.yaw if rig.first_person else atan2(player.facing.x, player.facing.z), rig.pitch, flags, owner_id, seat)
+	Net.vstate.rpc(car.global_transform, car.linear_velocity, {paint = GameState.truck.paint, up = GameState.truck.upgrades.keys(), lights = car.lights_on})
+
+
+func on_remote_player(id: int, pos: Vector3, yaw: float, pitch: float, flags: int, owner_id: int, s: String) -> void:
+	if not remote_players.has(id):
+		var info: Dictionary = Net.peers.get(id, {name = "Spieler %d" % id, outfit = {}})
+		var rp := RemotePlayer.new()
+		add_child(rp)
+		rp.setup(id, info.name, info.outfit)
+		rp.global_position = pos
+		remote_players[id] = rp
+		Animal.threats.append(rp)
+		spawner.players.append(rp)
+	var r: RemotePlayer = remote_players[id]
+	r.apply_state(pos, yaw, pitch, flags, owner_id, s)
+	# Sitzplätze im eigenen Pickup belegen
+	if car and owner_id == Net.my_id():
+		car.occupants[s] = r.player_name
+
+
+func on_remote_truck(id: int, xf: Transform3D, vel: Vector3, look: Dictionary) -> void:
+	if not remote_trucks.has(id):
+		var t := Truck.new()
+		t.world = world
+		t.owner_name = Net.peers.get(id, {name = "?"}).name
+		t.freeze = true
+		t.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		t.add_to_group("vehicle")
+		add_child(t)
+		remote_trucks[id] = t
+		t.set_meta("look", "")
+	var tr: Truck = remote_trucks[id]
+	tr.global_transform = tr.global_transform.interpolate_with(xf, 0.5) if tr.global_position.distance_to(xf.origin) < 10.0 else xf
+	tr.linear_velocity = vel
+	var key := str(look)
+	if tr.get_meta("look", "") != key:
+		tr.set_meta("look", key)
+		# fremden Pickup nach dessen Umbauten aussehen lassen (kurz eigene Werte tauschen)
+		var mine: Dictionary = GameState.truck.duplicate(true)
+		GameState.truck.paint = look.get("paint", 0)
+		GameState.truck.upgrades = {}
+		for u in look.get("up", []):
+			GameState.truck.upgrades[u] = true
+		tr.rebuild()
+		GameState.truck = mine
+	tr.set_lights(look.get("lights", false))
+
+
+func _on_player_left(id: int) -> void:
+	if remote_players.has(id):
+		Animal.threats.erase(remote_players[id])
+		spawner.players.erase(remote_players[id])
+		remote_players[id].queue_free()
+		remote_players.erase(id)
+	if remote_trucks.has(id):
+		if seat_truck == remote_trucks[id]:
+			exit_vehicle()
+		remote_trucks[id].queue_free()
+		remote_trucks.erase(id)
+
+
+func on_animal_states(data: PackedFloat32Array) -> void:
+	for k in range(0, data.size(), 6):
+		var a = spawner.animals.get(int(data[k]))
+		if is_instance_valid(a) and a.remote:
+			var target := Vector3(data[k + 1], data[k + 2], data[k + 3])
+			a.global_position = a.global_position.lerp(target, 0.5) if a.global_position.distance_to(target) < 8.0 else target
+			a.rotation.y = data[k + 4]
+			a.velocity = Vector3(0, 0, data[k + 5])
+
+
+func on_remote_animal_died(id: int, dir: Vector3) -> void:
+	var a = spawner.animals.get(id)
+	if is_instance_valid(a) and a.remote:
+		spawner.animals.erase(id)
+		a.die(dir if dir != Vector3.ZERO else Vector3.FORWARD)
+
+
+func on_carcass_gone(id: int) -> void:
+	for c in get_tree().get_nodes_in_group("carcass"):
+		if c.net_id == id and not c.get_parent() is Truck:
+			c.queue_free()
+
+
+func on_voice(id: int, samples: PackedFloat32Array, radio: bool) -> void:
+	if not remote_players.has(id):
+		return
+	var rp: RemotePlayer = remote_players[id]
+	var muffled := (rp.flags & 1) != 0 and seat_truck == null or (seat != "" and (rp.flags & 1) == 0)
+	rp.push_voice(samples, radio, muffled)

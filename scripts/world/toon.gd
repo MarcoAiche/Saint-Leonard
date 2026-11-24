@@ -1,6 +1,6 @@
 class_name Toon
 extends RefCounted
-## Materialien für den leicht cartoonigen Look: Toon-Licht, keine Glanzlichter,
+## Materialien für den Look (Mischung aus Cartoon und semi-realistisch): weiches Licht, keine Glanzlichter,
 ## Farbe kommt aus den Vertexfarben, optional mit dunkler Umrisslinie.
 
 static var _cache := {}
@@ -13,7 +13,7 @@ static func material(outline := false, double_sided := false) -> StandardMateria
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
 	m.vertex_color_is_srgb = true
-	m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
+	m.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT_WRAP
 	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	m.roughness = 1.0
 	if double_sided:
@@ -28,7 +28,7 @@ static func material(outline := false, double_sided := false) -> StandardMateria
 static func solid(color: Color, outline := true, outline_width := 0.025) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
-	m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
+	m.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT_WRAP
 	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	m.roughness = 1.0
 	if outline:
@@ -52,7 +52,7 @@ static func water() -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
 	m.vertex_color_is_srgb = true
-	m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
+	m.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT_WRAP
 	m.specular_mode = BaseMaterial3D.SPECULAR_TOON
 	m.roughness = 0.15
 	m.emission_enabled = true

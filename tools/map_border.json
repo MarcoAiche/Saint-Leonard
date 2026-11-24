@@ -1,5 +1,5 @@
 {
- "note": "Spielgrenze [lat, lon], aus Marcos Kartenbild umgerechnet",
+ "note": "Spielgrenze [lat, lon], aus Marcos Kartenbild umgerechnet; im Süden um die Berge Richtung Wurzenpass erweitert (Saint-Leonard-Brief)",
  "border": [
   [
    46.568469,
@@ -58,28 +58,36 @@
    13.81538
   ],
   [
-   46.543066,
-   13.809851
+   46.5395,
+   13.8135
   ],
   [
-   46.541996,
-   13.804614
+   46.533,
+   13.808
   ],
   [
-   46.541502,
-   13.795885
+   46.5275,
+   13.799
   ],
   [
-   46.541708,
-   13.787157
+   46.5245,
+   13.788
   ],
   [
-   46.541831,
-   13.779592
+   46.524,
+   13.777
   ],
   [
-   46.54142,
-   13.772609
+   46.5262,
+   13.769
+  ],
+  [
+   46.532,
+   13.764
+  ],
+  [
+   46.5385,
+   13.765
   ],
   [
    46.543066,

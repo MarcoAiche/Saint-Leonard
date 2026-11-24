@@ -239,7 +239,8 @@ function convertOsm(osm) {
     } else if (t.highway && ROAD_WIDTH[t.highway] && t.area !== "yes") {
       const layer = num(t.layer) ?? 0;
       out.roads.push({ kind: t.highway, width: ROAD_WIDTH[t.highway], bridge: !!t.bridge && t.bridge !== "no",
-        tunnel: !!t.tunnel && t.tunnel !== "no", layer, name: t.name || t.ref || null, pts: ringFromWay(w, nodes) });
+        tunnel: !!t.tunnel && t.tunnel !== "no", layer, name: t.name || t.ref || null,
+        tracktype: t.tracktype || null, surface: t.surface || null, pts: ringFromWay(w, nodes) });
     } else if (t.railway === "rail" || t.railway === "platform") {
       out.rails.push({ kind: t.railway, width: t.railway === "rail" ? 3.2 : 3, bridge: !!t.bridge && t.bridge !== "no",
         tunnel: !!t.tunnel && t.tunnel !== "no", pts: ringFromWay(w, nodes) });

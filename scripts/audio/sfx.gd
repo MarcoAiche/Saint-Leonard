@@ -148,3 +148,236 @@ static func play_3d(parent: Node3D, stream: AudioStream, volume_db := 0.0, pitch
 	parent.add_child(p)
 	p.finished.connect(p.queue_free)
 	p.play()
+
+
+## Gewehrschuss: lauter Knall mit Nachhall
+static func gunshot() -> AudioStreamWAV:
+	if _cache.has("shot"):
+		return _cache["shot"]
+	var n := int(RATE * 1.4)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	var lp := 0.0
+	var lp2 := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var noise := rng.randf_range(-1, 1)
+		lp += (noise - lp) * 0.5
+		lp2 += (noise - lp2) * 0.03
+		var crack := lp * exp(-t * 60.0) * 1.4
+		var boom := sin(TAU * 55.0 * t * (1.0 - t * 0.3)) * exp(-t * 9.0) * 0.8
+		var tail := lp2 * 3.0 * exp(-t * 3.0) * minf(1.0, t * 30.0)
+		s[i] = crack + boom + tail * 0.6
+	_cache["shot"] = _wav(s)
+	return _cache["shot"]
+
+
+## Repetieren / Nachladen
+static func reload_sound() -> AudioStreamWAV:
+	if _cache.has("reload"):
+		return _cache["reload"]
+	var n := int(RATE * 0.6)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	for i in n:
+		var t := float(i) / RATE
+		var v := 0.0
+		for c in [0.0, 0.18, 0.42]:
+			var u: float = t - c
+			if u >= 0.0:
+				v += rng.randf_range(-1, 1) * exp(-u * 120.0) * 0.8 + sin(TAU * 2400.0 * u) * exp(-u * 90.0) * 0.3
+		s[i] = v
+	_cache["reload"] = _wav(s)
+	return _cache["reload"]
+
+
+## Husten
+static func cough() -> AudioStreamWAV:
+	if _cache.has("cough"):
+		return _cache["cough"]
+	var n := int(RATE * 0.9)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 9
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (rng.randf_range(-1, 1) - lp) * 0.15
+		var env := 0.0
+		for c in [0.0, 0.3, 0.55]:
+			var u: float = t - c
+			if u >= 0.0:
+				env += exp(-u * 14.0) * minf(1.0, u * 200.0)
+		s[i] = (lp * 1.8 + sin(TAU * 180.0 * t) * 0.3) * env
+	_cache["cough"] = _wav(s)
+	return _cache["cough"]
+
+
+## Explosion (Brennkessel)
+static func explosion() -> AudioStreamWAV:
+	if _cache.has("boom"):
+		return _cache["boom"]
+	var n := int(RATE * 2.5)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 21
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (rng.randf_range(-1, 1) - lp) * 0.06
+		s[i] = (lp * 4.0 + sin(TAU * 38.0 * t) * 0.8) * exp(-t * 2.2) * minf(1.0, t * 200.0)
+	_cache["boom"] = _wav(s)
+	return _cache["boom"]
+
+
+## Polizeisirene (österreichisches Tatütata) als Schleife
+static func siren() -> AudioStreamWAV:
+	if _cache.has("siren"):
+		return _cache["siren"]
+	var dur := 2.0
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var f := 440.0 if t < 1.0 else 587.0
+		phase += TAU * f / RATE
+		s[i] = (sin(phase) + 0.3 * sin(phase * 3.0)) * 0.3
+	_cache["siren"] = _wav(s, true)
+	return _cache["siren"]
+
+
+## Tiergeräusche: Reh (Schrecken / Bellen), Wildschwein (Grunzen), Bär (Brüllen)
+static func animal_call(kind: String) -> AudioStreamWAV:
+	var key := "call_" + kind
+	if _cache.has(key):
+		return _cache[key]
+	var dur := {deer = 0.5, boar = 0.7, bear = 1.4, rabbit = 0.2}.get(kind, 0.5) as float
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = kind.hash()
+	var lp := 0.0
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var u := t / dur
+		lp += (rng.randf_range(-1, 1) - lp) * (0.3 if kind == "deer" else 0.08)
+		var v := 0.0
+		match kind:
+			"deer":
+				phase += TAU * lerpf(900.0, 500.0, u) / RATE
+				v = (sin(phase) * 0.4 + lp * 0.6) * sin(PI * u)
+			"boar":
+				phase += TAU * (90.0 + 30.0 * sin(t * 40.0)) / RATE
+				v = (sign(sin(phase)) * 0.3 + lp * 1.2) * sin(PI * u) * (0.6 + 0.4 * sin(t * 25.0))
+			"bear":
+				phase += TAU * lerpf(120.0, 80.0, u) / RATE
+				v = (sin(phase) * 0.5 + sign(sin(phase * 2.01)) * 0.2 + lp * 1.5) * sin(PI * u)
+			_:
+				v = lp * sin(PI * u)
+		s[i] = v * 0.8
+	_cache[key] = _wav(s)
+	return _cache[key]
+
+
+## Regen als Schleife
+static func rain() -> AudioStreamWAV:
+	if _cache.has("rain"):
+		return _cache["rain"]
+	var dur := 4.0
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var lp := 0.0
+	for i in n:
+		lp += (rng.randf_range(-1, 1) - lp) * 0.4
+		s[i] = lp * 0.5 + (rng.randf_range(-1, 1) * 0.8 if rng.randf() < 0.002 else 0.0)
+	_cache["rain"] = _wav(s, true)
+	return _cache["rain"]
+
+
+## Kurzer Ton für Nachrichten am Handy
+static func ping() -> AudioStreamWAV:
+	if _cache.has("ping"):
+		return _cache["ping"]
+	var n := int(RATE * 0.35)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var f := 1320.0 if t < 0.12 else 1760.0
+		s[i] = sin(TAU * f * t) * 0.35 * exp(-fmod(t, 0.12) * 18.0)
+	_cache["ping"] = _wav(s)
+	return _cache["ping"]
+
+
+## Feuer knistern (Schleife)
+static func fire() -> AudioStreamWAV:
+	if _cache.has("fire"):
+		return _cache["fire"]
+	var dur := 3.0
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 33
+	var lp := 0.0
+	for i in n:
+		lp += (rng.randf_range(-1, 1) - lp) * 0.05
+		var crack := rng.randf_range(-1, 1) * 0.9 if rng.randf() < 0.0015 else 0.0
+		s[i] = lp * 0.6 + crack
+	_cache["fire"] = _wav(s, true)
+	return _cache["fire"]
+
+
+## Kamera-Auslöser
+static func shutter() -> AudioStreamWAV:
+	if _cache.has("shutter"):
+		return _cache["shutter"]
+	var n := int(RATE * 0.15)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2
+	for i in n:
+		var t := float(i) / RATE
+		var v := rng.randf_range(-1, 1) * exp(-t * 90.0)
+		if t > 0.07:
+			v += rng.randf_range(-1, 1) * exp(-(t - 0.07) * 90.0)
+		s[i] = v * 0.6
+	_cache["shutter"] = _wav(s)
+	return _cache["shutter"]
+
+
+## Schluck (Trinken)
+static func gulp() -> AudioStreamWAV:
+	if _cache.has("gulp"):
+		return _cache["gulp"]
+	var n := int(RATE * 0.9)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 13
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (rng.randf_range(-1, 1) - lp) * 0.1
+		var v := 0.0
+		for c in [0.0, 0.32, 0.6]:
+			var u: float = t - c
+			if u >= 0.0 and u < 0.25:
+				v += (sin(TAU * lerpf(180.0, 90.0, u * 4.0) * u) * 0.6 + lp) * sin(PI * u * 4.0)
+		s[i] = v * 0.7
+	_cache["gulp"] = _wav(s)
+	return _cache["gulp"]

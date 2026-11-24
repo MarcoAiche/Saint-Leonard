@@ -11,22 +11,28 @@ extends Node3D
 @export var baked_path := "res://data/world_baked.scn"
 @export var show_labels := true
 
-const BUILD_VERSION := 3
+const BUILD_VERSION := 5
 const CHUNK := 250.0
-const C_GRASS := Color(0.47, 0.72, 0.30)
+const C_GRASS := Color(0.40, 0.58, 0.26)
 const KIND_COLORS := {
-	"grass": Color(0.47, 0.72, 0.30),
-	"meadow": Color(0.52, 0.76, 0.33),
-	"farmland": Color(0.78, 0.76, 0.38),
-	"scrub": Color(0.38, 0.60, 0.28),
-	"residential": Color(0.50, 0.70, 0.34),
-	"industrial": Color(0.62, 0.62, 0.55),
-	"cemetery": Color(0.40, 0.60, 0.33),
-	"forest": Color(0.26, 0.50, 0.22),
-	"pitch": Color(0.36, 0.70, 0.30),
-	"parking": Color(0.55, 0.55, 0.56),
-	"water": Color(0.25, 0.55, 0.85),
+	"grass": Color(0.40, 0.58, 0.26),
+	"meadow": Color(0.45, 0.62, 0.28),
+	"farmland": Color(0.66, 0.62, 0.36),
+	"scrub": Color(0.33, 0.47, 0.24),
+	"residential": Color(0.43, 0.58, 0.29),
+	"industrial": Color(0.60, 0.58, 0.48),
+	"cemetery": Color(0.36, 0.52, 0.28),
+	"forest": Color(0.24, 0.36, 0.18),
+	"pitch": Color(0.34, 0.58, 0.26),
+	"parking": Color(0.50, 0.50, 0.51),
+	"water": Color(0.22, 0.42, 0.58),
 }
+## Straßenklassen laut Spielkonzept
+const TIER_MAIN := 1  # Hauptstraße (Asphalt, Mittellinie): viel Polizei, Kontrollen
+const TIER_VILLAGE := 2  # Dorfstraße: wenig Polizei
+const TIER_DIRT := 3  # Feld- und Waldweg: keine Polizei, holprig
+const TIER_EXTREME := 4  # Bergpfad: nur mit Umbauten befahrbar
+const TIER_NAMES := ["Gelände", "Hauptstraße", "Dorfstraße", "Schotterweg", "Bergpfad"]
 const ROAD_STYLE := {
 	# Art: [Rang, Belag, Rand, Mittellinie]
 	"motorway": [9, Color(0.34, 0.34, 0.38), Color(0.88, 0.88, 0.84), true],
@@ -43,7 +49,8 @@ const ROAD_STYLE := {
 	"residential": [5, Color(0.41, 0.41, 0.45), Color(0.70, 0.68, 0.60), false],
 	"living_street": [5, Color(0.41, 0.41, 0.45), Color(0.70, 0.68, 0.60), false],
 	"service": [4, Color(0.46, 0.45, 0.47), null, false],
-	"track": [3, Color(0.66, 0.56, 0.40), null, false],
+	"track": [3, Color(0.55, 0.45, 0.32), null, false],
+	"extreme": [3, Color(0.46, 0.42, 0.38), null, false],
 	"cycleway": [2, Color(0.62, 0.42, 0.40), null, false],
 	"path": [1, Color(0.72, 0.62, 0.45), null, false],
 	"footway": [1, Color(0.70, 0.66, 0.58), null, false],
@@ -104,7 +111,130 @@ func load_data() -> bool:
 	classes = Marshalls.base64_to_raw(g.classes)
 	kinds = g.kinds
 	border = to_v2_array(data.border)
+	_index_roads()
+	_index_trees()
 	return true
+
+
+## Straßenklasse aus OSM-Art, Belag und Steigung
+func _road_tier(r: Dictionary) -> int:
+	var k: String = r.kind
+	if k in ["motorway", "trunk", "primary", "secondary", "motorway_link", "trunk_link", "primary_link", "secondary_link"]:
+		return TIER_MAIN
+	var surface: String = str(r.surface) if r.get("surface") != null else ""
+	var grade: String = str(r.tracktype) if r.get("tracktype") != null else ""
+	if k in ["tertiary", "tertiary_link", "unclassified", "residential", "living_street"]:
+		return TIER_VILLAGE
+	if k == "service":
+		return TIER_DIRT if surface in ["unpaved", "gravel", "ground", "dirt", "grass", "compacted"] else TIER_VILLAGE
+	if grade in ["grade4", "grade5"]:
+		return TIER_EXTREME
+	if k in ["track", "path"]:
+		# steile Wege in den Bergen sind Bergpfade
+		var pts: Array = r.pts
+		var a := Vector2(pts[0][0], pts[0][1])
+		var b := Vector2(pts[-1][0], pts[-1][1])
+		var len := maxf(a.distance_to(b), 1.0)
+		if absf(height_at(a.x, a.y) - height_at(b.x, b.y)) / len > 0.14:
+			return TIER_EXTREME
+	return TIER_DIRT
+
+
+# ------------------------------------------------------------------ Schneller Zugriff auf Straßen und Bäume
+
+const ROAD_CELL := 64.0
+const TREE_CELL := 32.0
+var _road_grid := {}  # Vector2i -> Array von Vector2i(Straße, Segment)
+var _tree_pos := PackedFloat32Array()
+var _tree_grid := {}  # Vector2i -> PackedInt32Array
+
+
+func _index_roads() -> void:
+	_road_grid.clear()
+	for ri in data.roads.size():
+		var r: Dictionary = data.roads[ri]
+		r.tier = _road_tier(r)
+		if r.tunnel:
+			continue
+		var pts: Array = r.pts
+		for k in range(1, pts.size()):
+			var a := Vector2(pts[k - 1][0], pts[k - 1][1])
+			var b := Vector2(pts[k][0], pts[k][1])
+			var lo := Vector2i(floori((minf(a.x, b.x) - 10.0) / ROAD_CELL), floori((minf(a.y, b.y) - 10.0) / ROAD_CELL))
+			var hi := Vector2i(floori((maxf(a.x, b.x) + 10.0) / ROAD_CELL), floori((maxf(a.y, b.y) + 10.0) / ROAD_CELL))
+			for cx in range(lo.x, hi.x + 1):
+				for cz in range(lo.y, hi.y + 1):
+					var key := Vector2i(cx, cz)
+					if not _road_grid.has(key):
+						_road_grid[key] = []
+					_road_grid[key].append(Vector2i(ri, k))
+
+
+func _index_trees() -> void:
+	_tree_pos = Marshalls.base64_to_raw(data.trees).to_float32_array()
+	_tree_grid.clear()
+	var tmp := {}
+	for k in range(0, _tree_pos.size(), 4):
+		var key := Vector2i(floori(_tree_pos[k] / TREE_CELL), floori(_tree_pos[k + 1] / TREE_CELL))
+		if not tmp.has(key):
+			tmp[key] = []
+		tmp[key].append(k)
+	for key in tmp:
+		_tree_grid[key] = PackedInt32Array(tmp[key])
+
+
+## Straße unter / neben einem Punkt (schnell): {tier, kind, name, dist, pos, dir, road}
+## tier 0 = keine Straße in der Nähe (Gelände)
+func road_info(p: Vector2, max_dist := 12.0) -> Dictionary:
+	var best := {tier = 0, kind = "", name = "", dist = INF, pos = p, dir = Vector2.RIGHT, road = -1}
+	var key := Vector2i(floori(p.x / ROAD_CELL), floori(p.y / ROAD_CELL))
+	if not _road_grid.has(key):
+		return best
+	for e: Vector2i in _road_grid[key]:
+		var r: Dictionary = data.roads[e.x]
+		var pts: Array = r.pts
+		var a := Vector2(pts[e.y - 1][0], pts[e.y - 1][1])
+		var b := Vector2(pts[e.y][0], pts[e.y][1])
+		var q := Geometry2D.get_closest_point_to_segment(p, a, b)
+		var d: float = q.distance_to(p) - r.width * 0.5
+		if d < best.dist and d < max_dist:
+			best = {tier = r.tier, kind = r.kind, name = r.name if r.name else "", dist = maxf(d, 0.0), pos = q, dir = (b - a).normalized(), road = e.x}
+	return best
+
+
+## Bäume im Umkreis (für Seilwinde und Platzierung)
+func trees_near(p: Vector2, radius: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var lo := Vector2i(floori((p.x - radius) / TREE_CELL), floori((p.y - radius) / TREE_CELL))
+	var hi := Vector2i(floori((p.x + radius) / TREE_CELL), floori((p.y + radius) / TREE_CELL))
+	for cx in range(lo.x, hi.x + 1):
+		for cz in range(lo.y, hi.y + 1):
+			var key := Vector2i(cx, cz)
+			if not _tree_grid.has(key):
+				continue
+			for k in _tree_grid[key]:
+				var t := Vector2(_tree_pos[k], _tree_pos[k + 1])
+				if t.distance_to(p) <= radius:
+					out.append(t)
+	return out
+
+
+## Flächenart an einem Punkt (forest, meadow, residential ...)
+func kind_at(x: float, z: float) -> String:
+	var i := clampi(roundi((x - x0) / step), 0, nx - 1)
+	var j := clampi(roundi((z - z0) / step), 0, nz - 1)
+	return kinds[classes[j * nx + i]]
+
+
+## Steigung (0 = flach, 1 = 45°)
+func slope_at(x: float, z: float) -> float:
+	var dx := height_at(x + 2.0, z) - height_at(x - 2.0, z)
+	var dz := height_at(x, z + 2.0) - height_at(x, z - 2.0)
+	return Vector2(dx, dz).length() / 4.0
+
+
+func ground_normal(x: float, z: float) -> Vector3:
+	return Vector3(height_at(x - 1.0, z) - height_at(x + 1.0, z), 2.0, height_at(x, z - 1.0) - height_at(x, z + 1.0)).normalized()
 
 
 # ------------------------------------------------------------------ Speichern / Laden
@@ -459,10 +589,12 @@ func _resample(pts: Array, max_seg := 2.5) -> PackedVector2Array:
 ## Band entlang einer Linie, dem Gelände folgend, aufgeteilt auf Kacheln.
 ## dash > 0 ergibt eine Strichlinie, caps rundet die Enden ab (saubere Kreuzungen).
 func _ribbon(bufs: Dictionary, line: PackedVector2Array, width: float, yoff: float, color: Color,
-		offset := 0.0, dash := 0.0, bridge := false, caps := false) -> void:
+		offset := 0.0, dash := 0.0, bridge := false, caps := false, sample_width := -1.0) -> void:
 	if line.size() < 2:
 		return
 	var hw := width * 0.5
+	# Höhe wird über diese Breite bestimmt (Rand und Belag gleich, sonst schaut der Rand durch)
+	var sw := (sample_width if sample_width > 0.0 else width) * 0.5
 	var h_start := height_at(line[0].x, line[0].y)
 	var h_end := height_at(line[line.size() - 1].x, line[line.size() - 1].y)
 	var total := 0.0
@@ -489,7 +621,7 @@ func _ribbon(bufs: Dictionary, line: PackedVector2Array, width: float, yoff: flo
 			var t := lens[k] / maxf(total, 0.01)
 			y = lerpf(h_start, h_end, t) + sin(t * PI) * minf(total * 0.02, 1.5) + yoff
 		else:
-			y = maxf(height_at(p.x - side.x * hw, p.y - side.y * hw), height_at(p.x + side.x * hw, p.y + side.y * hw))
+			y = maxf(height_at(p.x - side.x * sw, p.y - side.y * sw), height_at(p.x + side.x * sw, p.y + side.y * sw))
 			y = maxf(y, height_at(p.x, p.y)) + yoff
 		ys.append(y)
 		var l := p - side * hw
@@ -533,15 +665,17 @@ func _build_lines() -> void:
 			continue
 		var line := _resample(r.pts)
 		var target := bridge_bufs if r.bridge else roads
-		_ribbon(target, line, r.width + 1.0, 0.05, style[2], 0.0, 0.0, r.bridge, true)
+		_ribbon(target, line, r.width + 1.0, 0.04, style[2], 0.0, 0.0, r.bridge, true, r.width)
 	for r in sorted:
-		var style: Array = ROAD_STYLE[r.kind]
+		var style: Array = ROAD_STYLE["extreme"] if r.tier == TIER_EXTREME else ROAD_STYLE[r.kind]
+		if r.kind == "service" and r.tier == TIER_DIRT:
+			style = ROAD_STYLE["track"]
 		var line := _resample(r.pts)
 		var target := bridge_bufs if r.bridge else roads
 		var y: float = 0.07 + style[0] * 0.004
 		_ribbon(target, line, r.width, y, style[1], 0.0, 0.0, r.bridge, true)
 		if style[3]:
-			_ribbon(target, line, 0.18, y + 0.012, Color(0.96, 0.96, 0.9), 0.0, 3.0, r.bridge)
+			_ribbon(target, line, 0.18, y + 0.012, Color(0.96, 0.96, 0.9), 0.0, 3.0, r.bridge, false, r.width)
 	_commit_chunks(roads, group, "S", Toon.material())
 	# Brücken bekommen eine eigene Kollision, sonst fällt man ins Tal
 	_commit_chunks(bridge_bufs, group, "Bruecke", Toon.material(), true)
@@ -895,13 +1029,14 @@ func _box(buf: MeshBuffer, o: Dictionary, y0: float, y1: float, color: Color) ->
 func _tree_meshes() -> Array[ArrayMesh]:
 	var trunk_c := Color(0.45, 0.30, 0.18)
 	var fir := MeshBuffer.new()
-	_cone(fir, Vector3.ZERO, 0.25, 2.0, 6, trunk_c)
-	_cone(fir, Vector3(0, 1.5, 0), 2.2, 4.5, 7, Color(0.20, 0.45, 0.24))
-	_cone(fir, Vector3(0, 3.8, 0), 1.6, 3.8, 7, Color(0.24, 0.52, 0.27))
+	_cone(fir, Vector3.ZERO, 0.28, 3.0, 6, trunk_c)
+	_cone(fir, Vector3(0, 2.0, 0), 2.4, 4.2, 8, Color(0.13, 0.28, 0.16))
+	_cone(fir, Vector3(0, 4.4, 0), 1.9, 3.8, 8, Color(0.15, 0.31, 0.18))
+	_cone(fir, Vector3(0, 6.6, 0), 1.3, 3.4, 8, Color(0.17, 0.34, 0.19))
 	var leaf := MeshBuffer.new()
-	_cone(leaf, Vector3.ZERO, 0.3, 3.0, 6, trunk_c, 0.2)
-	_blob(leaf, Vector3(0, 4.2, 0), 2.6, Color(0.36, 0.62, 0.25))
-	return [fir.to_mesh(Toon.material(true)), leaf.to_mesh(Toon.material(true))]
+	_cone(leaf, Vector3.ZERO, 0.3, 3.4, 6, trunk_c, 0.2)
+	_blob(leaf, Vector3(0, 4.6, 0), 2.6, Color(0.28, 0.46, 0.20))
+	return [fir.to_mesh(Toon.material()), leaf.to_mesh(Toon.material())]
 
 
 func _cone(buf: MeshBuffer, base: Vector3, r: float, h: float, sides: int, color: Color, top_r := 0.0) -> void:

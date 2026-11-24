@@ -1,26 +1,31 @@
 class_name Player
 extends CharacterBody3D
-## Spielfigur: läuft relativ zur Kamera, Shift rennt, Leertaste springt.
-## Das Modell ist aus einfachen Formen gebaut (Cartoon-Stil) und hat eine kleine Laufanimation.
+## Spielfigur. Standard ist die Ego-Perspektive (V schaltet auf Third Person).
+## WASD laufen, Shift rennen (kostet Ausdauer), C ducken (leiser), Leertaste springen.
+## Trägt Gewehr, Fernglas und Taschenlampe (WeaponHand) und kann erlegtes Wild tragen.
 
-@export var walk_speed := 4.5
-@export var run_speed := 9.0
-@export var jump_velocity := 5.5
-@export var shirt_color := Color(0.85, 0.22, 0.20)
-@export var pants_color := Color(0.20, 0.30, 0.55)
-@export var skin_color := Color(0.98, 0.80, 0.66)
-@export var hat_color := Color(0.15, 0.45, 0.30)
+signal shot(from: Vector3, dir: Vector3)
+
+@export var walk_speed := 4.2
+@export var run_speed := 8.0
+@export var crouch_speed := 2.0
+@export var jump_velocity := 5.2
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var camera_rig: CameraRig
 var input_enabled := true
-var facing := Vector3.BACK  # Blickrichtung des Modells (Welt)
+var facing := Vector3.BACK
+var crouched := false
+var on_stand: Node3D = null  # Hochstand, auf dem man sitzt
+var carrying: Node3D = null  # getragenes Wild
+var passed_out := 0.0  # Sekunden bis zum Aufwachen
+var hand: WeaponHand
+var model: CharacterModel
 
-var _model: Node3D
-var _legs: Array[Node3D] = []
-var _arms: Array[Node3D] = []
-var _walk_phase := 0.0
 var _step_sound: AudioStreamPlayer3D
+var _drift := Vector3.ZERO
+var _noise_t := 0.0
+var _col: CollisionShape3D
 
 
 func _ready() -> void:
@@ -28,14 +33,16 @@ func _ready() -> void:
 	collision_mask = 1 | 4
 	floor_snap_length = 0.6
 	floor_max_angle = deg_to_rad(50)
-	var cs := CollisionShape3D.new()
+	_col = CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.35
 	cap.height = 1.8
-	cs.shape = cap
-	cs.position.y = 0.9
-	add_child(cs)
-	_build_model()
+	_col.shape = cap
+	_col.position.y = 0.9
+	add_child(_col)
+	model = CharacterModel.new(GameState.outfit, 2)
+	model.name = "Modell"
+	add_child(model)
 	_step_sound = AudioStreamPlayer3D.new()
 	_step_sound.stream = Sfx.footstep()
 	_step_sound.volume_db = -6.0
@@ -43,7 +50,46 @@ func _ready() -> void:
 	add_child(_step_sound)
 
 
+func attach_camera(rig: CameraRig) -> void:
+	camera_rig = rig
+	hand = WeaponHand.new()
+	hand.name = "Hand"
+	rig.hand.add_child(hand)
+	hand.setup(rig, self)
+	hand.fired.connect(func(f, d): shot.emit(f, d))
+	if not GameState.has("rifle"):
+		hand.select("none")
+
+
+func rebuild_model() -> void:
+	model.queue_free()
+	model = CharacterModel.new(GameState.outfit, 2)
+	add_child(model)
+
+
+func is_busy() -> bool:
+	return passed_out > 0.0 or not input_enabled
+
+
 func _physics_process(delta: float) -> void:
+	if passed_out > 0.0:
+		passed_out -= delta
+		velocity.x = 0.0
+		velocity.z = 0.0
+		if not is_on_floor():
+			velocity.y -= gravity * delta
+		move_and_slide()
+		model.animate(delta, 0.0)
+		if passed_out <= 0.0:
+			model.set_lying(false)
+			input_enabled = true
+		return
+	if on_stand:
+		velocity = Vector3.ZERO
+		global_position = on_stand.global_transform * Vector3(0, 3.6, 0)
+		_hand_and_model(delta, Vector3.ZERO)
+		return
+
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
@@ -55,112 +101,82 @@ func _physics_process(delta: float) -> void:
 	var dir := (right * input.x - fwd * input.y)
 	if dir.length() > 1.0:
 		dir = dir.normalized()
-	var speed := run_speed if Input.is_action_pressed("sprint") else walk_speed
+	# Betrunken: man läuft nicht ganz geradeaus
+	var drunk := GameState.drunkness()
+	if drunk > 0.0 and dir.length() > 0.1:
+		_drift = _drift.lerp(Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)), delta * 0.8)
+		dir = (dir + _drift * drunk * 0.6).normalized() * dir.length()
+
+	var sprint := Input.is_action_pressed("sprint") and input_enabled and GameState.stamina > 5.0 and not crouched and carrying == null
+	var speed := run_speed if sprint else walk_speed
+	if crouched:
+		speed = crouch_speed
+	if carrying:
+		speed *= 0.6
+	if hand and hand.aiming:
+		speed *= 0.5
+	if sprint and dir.length() > 0.1:
+		GameState.stamina = maxf(0.0, GameState.stamina - delta * 14.0)
 	var accel := 14.0 if is_on_floor() else 3.0
 	var target := dir * speed
 	velocity.x = lerpf(velocity.x, target.x, 1.0 - exp(-accel * delta))
 	velocity.z = lerpf(velocity.z, target.z, 1.0 - exp(-accel * delta))
 
-	if input_enabled and is_on_floor() and Input.is_action_just_pressed("jump"):
+	if input_enabled and is_on_floor() and Input.is_action_just_pressed("jump") and not crouched:
 		velocity.y = jump_velocity
 
 	move_and_slide()
-	_animate(delta, dir)
 
-
-func _animate(delta: float, dir: Vector3) -> void:
-	if dir.length() > 0.05:
-		facing = dir.normalized()
-		var want := atan2(facing.x, facing.z)
-		_model.rotation.y = lerp_angle(_model.rotation.y, want, 1.0 - exp(-12.0 * delta))
+	# Geräusche fürs Wild: Laufen ist leise, Rennen laut, Ducken fast lautlos
 	var hspeed := Vector2(velocity.x, velocity.z).length()
-	var swing := 0.0
-	if is_on_floor() and hspeed > 0.3:
-		var before := sin(_walk_phase)
-		_walk_phase += delta * (4.0 + hspeed * 1.3)
-		swing = sin(_walk_phase) * clampf(hspeed / 6.0, 0.25, 0.9)
-		if signf(before) != signf(sin(_walk_phase)):
-			_step_sound.pitch_scale = randf_range(0.85, 1.15)
-			_step_sound.play()
-	elif not is_on_floor():
-		swing = 0.5
-	else:
-		_walk_phase = 0.0
-	_legs[0].rotation.x = lerpf(_legs[0].rotation.x, swing, 0.3)
-	_legs[1].rotation.x = lerpf(_legs[1].rotation.x, -swing, 0.3)
-	_arms[0].rotation.x = lerpf(_arms[0].rotation.x, -swing * 0.8, 0.3)
-	_arms[1].rotation.x = lerpf(_arms[1].rotation.x, swing * 0.8, 0.3)
-	_model.position.y = absf(sin(_walk_phase)) * 0.06 if hspeed > 0.3 else 0.0
+	_noise_t -= delta
+	if hspeed > 0.5 and _noise_t <= 0.0:
+		_noise_t = 0.5
+		var r := 6.0 if crouched else (35.0 if sprint else 16.0)
+		GameState.make_noise(global_position, r, "step")
+	# Husten vom Rauchen
+	if GameState.smoke_time > 0.0 and GameState.cough_timer <= 0.0:
+		GameState.cough_timer = randf_range(10.0, 30.0)
+		Sfx.play_3d(self, Sfx.cough(), 0.0, randf_range(0.9, 1.1))
+		GameState.make_noise(global_position, 80.0, "cough")
+		if camera_rig:
+			camera_rig.shake(0.4)
+	_hand_and_model(delta, dir)
 
 
-# ------------------------------------------------------------------ Modell (schaut nach +Z)
+func _hand_and_model(delta: float, dir: Vector3) -> void:
+	var fp := camera_rig and camera_rig.first_person
+	var aiming := hand and hand.aiming
+	if fp or aiming or on_stand:
+		facing = camera_rig.ground_forward()
+	elif dir.length() > 0.05:
+		facing = dir.normalized()
+	var want := atan2(facing.x, facing.z)
+	model.rotation.y = lerp_angle(model.rotation.y, want, 1.0 - exp(-12.0 * delta))
+	var hspeed := Vector2(velocity.x, velocity.z).length()
+	if model.animate(delta, hspeed, is_on_floor(), aiming or (hand and hand.slot == "rifle" and fp), on_stand != null, hand and hand.action != "", hand and hand.reloading()) > 0.0:
+		_step_sound.pitch_scale = randf_range(0.85, 1.15)
+		_step_sound.volume_db = -14.0 if crouched else -6.0
+		_step_sound.play()
+	model.scale.y = lerpf(model.scale.y, 0.72 if crouched else 1.0, 0.2)
+	if camera_rig and camera_rig.target == self:
+		camera_rig.height = lerpf(camera_rig.height, 1.15 if crouched else 1.65, 0.15)
+	if hand:
+		hand.process_hand(delta, input_enabled and (Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or DebugTools.active), crouched, on_stand != null)
+	if carrying:
+		carrying.global_position = global_position + Vector3.UP * 1.35 - facing * 0.3
+		carrying.global_rotation = Vector3(0, atan2(facing.x, facing.z) + PI / 2, 0)
 
-func _part(parent: Node3D, mesh: Mesh, color: Color, pos: Vector3, outline := true) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = Toon.solid(color, outline, 0.02)
-	mi.position = pos
-	parent.add_child(mi)
-	return mi
+
+func toggle_crouch() -> void:
+	crouched = not crouched
 
 
-func _build_model() -> void:
-	_model = Node3D.new()
-	_model.name = "Modell"
-	add_child(_model)
-
-	var body := CapsuleMesh.new()
-	body.radius = 0.3
-	body.height = 0.95
-	_part(_model, body, shirt_color, Vector3(0, 1.15, 0))
-
-	var head := SphereMesh.new()
-	head.radius = 0.27
-	head.height = 0.52
-	_part(_model, head, skin_color, Vector3(0, 1.82, 0))
-
-	var nose := SphereMesh.new()
-	nose.radius = 0.06
-	nose.height = 0.12
-	_part(_model, nose, skin_color.darkened(0.1), Vector3(0, 1.79, 0.26), false)
-
-	var eye := SphereMesh.new()
-	eye.radius = 0.045
-	eye.height = 0.09
-	for x in [-0.1, 0.1]:
-		_part(_model, eye, Color(0.08, 0.08, 0.1), Vector3(x, 1.88, 0.23), false)
-
-	# Kappe mit Schirm
-	var cap := CylinderMesh.new()
-	cap.top_radius = 0.24
-	cap.bottom_radius = 0.29
-	cap.height = 0.16
-	_part(_model, cap, hat_color, Vector3(0, 2.04, 0))
-	var brim := BoxMesh.new()
-	brim.size = Vector3(0.36, 0.04, 0.22)
-	_part(_model, brim, hat_color.darkened(0.15), Vector3(0, 1.98, 0.3))
-
-	var leg := BoxMesh.new()
-	leg.size = Vector3(0.18, 0.72, 0.2)
-	var shoe := BoxMesh.new()
-	shoe.size = Vector3(0.2, 0.12, 0.3)
-	for x in [-0.14, 0.14]:
-		var hip := Node3D.new()
-		hip.position = Vector3(x, 0.78, 0)
-		_model.add_child(hip)
-		_part(hip, leg, pants_color, Vector3(0, -0.36, 0))
-		_part(hip, shoe, Color(0.25, 0.18, 0.14), Vector3(0, -0.72, 0.05))
-		_legs.append(hip)
-
-	var arm := BoxMesh.new()
-	arm.size = Vector3(0.14, 0.62, 0.16)
-	var hand := SphereMesh.new()
-	hand.radius = 0.09
-	hand.height = 0.18
-	for x in [-0.38, 0.38]:
-		var shoulder := Node3D.new()
-		shoulder.position = Vector3(x, 1.5, 0)
-		_model.add_child(shoulder)
-		_part(shoulder, arm, shirt_color, Vector3(0, -0.3, 0))
-		_part(shoulder, hand, skin_color, Vector3(0, -0.64, 0))
-		_arms.append(shoulder)
+## Ohnmacht (zu viel Schnaps oder schwer verletzt)
+func pass_out(seconds: float) -> void:
+	passed_out = seconds
+	input_enabled = false
+	crouched = false
+	model.set_lying(true)
+	if camera_rig and camera_rig.first_person:
+		camera_rig.toggle_view()

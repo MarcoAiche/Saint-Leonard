@@ -1,7 +1,10 @@
 class_name Minimap
 extends Control
 ## Karte, Norden oben. Straßen, Bäche, Häuser und die Spielgrenze kommen aus den Weltdaten.
-## full = true: ganze Karte mit Ortsnamen (Taste M), sonst kleine Karte um die Spielfigur.
+## full = true: ganze Karte mit Ortsnamen (Taste M, Klick setzt Wegpunkt), sonst kleine Karte um die Spielfigur.
+## Zeigt Läden, Tankstelle, Werkstatt, Bauplätze, Mitspieler und den Wegpunkt (Navi).
+
+signal clicked(world_pos: Vector2)
 
 var world: WorldBuilder
 var full := false
@@ -9,6 +12,10 @@ var center := Vector2.ZERO  # Weltposition (x, z) in der Mitte
 var player_pos := Vector2.ZERO
 var heading := Vector2(0, 1)
 var meters_per_px := 1.6
+var waypoint := Vector2.INF
+var others: Array = []  # [[Position, Name]]
+var show_route := true
+var _marks: Array = []  # [Position, Farbe, Kürzel, Name]
 
 var _roads: Array = []  # [PackedVector2Array, Breite, Farbe, Rect2]
 var _water: Array = []
@@ -48,6 +55,16 @@ func setup(w: WorldBuilder, full_map := false) -> void:
 		var col := Color(1, 0.6, 0.1) if p.kind in ["pub", "restaurant", "bar", "cafe"] else Color(0.95, 0.2, 0.15) if p.kind == "fire_station" else Color.TRANSPARENT
 		if col.a > 0:
 			_pois.append([Vector2(p.pos[0], p.pos[1]), col, p.name])
+	var lm = w.get_parent().get("landmarks")
+	if lm:
+		for id in lm.shops:
+			var sp: Vector3 = lm.shops[id].door
+			_marks.append([Vector2(sp.x, sp.z), Landmarks.SHOP_SIGNS[id][1], Landmarks.SHOP_SIGNS[id][0].left(1), Items.SHOP_NAMES.get(id, "Polizei")])
+		_marks.append([Vector2(lm.gas.pos.x, lm.gas.pos.z), Color(0.1, 0.5, 0.25), "T", "Tankstelle"])
+		_marks.append([Vector2(lm.garage.pos.x, lm.garage.pos.z), Color(0.25, 0.25, 0.3), "W", "Werkstatt"])
+		_marks.append([Vector2(lm.pub.pos.x, lm.pub.pos.z), Color(1, 0.6, 0.1), "G", "Gasthaus Pirtscher"])
+		for pl in lm.plots:
+			_marks.append([Vector2(pl.pos.x, pl.pos.z), Color(0.6, 0.45, 0.3), str(pl.idx + 1), ""])
 	_border = w.border.duplicate()
 	_border.append(w.border[0])
 	# Fläche außerhalb der Grenze abdunkeln: Ring aus Streifen von der Grenze nach außen
@@ -100,6 +117,11 @@ func to_screen(p: Vector2) -> Vector2:
 	return size * 0.5 + (p - center) / meters_per_px
 
 
+func _gui_input(event: InputEvent) -> void:
+	if full and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		clicked.emit(center + (event.position - size * 0.5) * meters_per_px)
+
+
 func _draw() -> void:
 	var s := size
 	draw_rect(Rect2(Vector2.ZERO, s), Color(0.55, 0.78, 0.40))
@@ -121,6 +143,33 @@ func _draw() -> void:
 	for p in _pois:
 		draw_circle(p[0], (5.0 if full else 9.0) * meters_per_px, p[1])
 	draw_set_transform(Vector2.ZERO)
+
+	var font0 := get_theme_default_font()
+	for m in _marks:
+		var sp := to_screen(m[0])
+		if Rect2(Vector2.ZERO, s).grow(10).has_point(sp):
+			draw_circle(sp, 9.0, m[1])
+			draw_arc(sp, 9.0, 0, TAU, 16, Color(0.1, 0.1, 0.1), 1.5)
+			draw_string(font0, sp + Vector2(-4, 5), m[2], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
+			if full and not m[3].is_empty():
+				draw_string(font0, sp + Vector2(12, 5), m[3], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.12, 0.1, 0.1))
+	for o in others:
+		var op := to_screen(o[0])
+		draw_circle(op, 6.0, Color(0.2, 0.6, 1.0))
+		draw_arc(op, 6.0, 0, TAU, 12, Color.WHITE, 2.0)
+		if full:
+			draw_string(font0, op + Vector2(9, 5), o[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.1, 0.2, 0.5))
+	if waypoint != Vector2.INF and show_route:
+		var wp := to_screen(waypoint)
+		var me := to_screen(player_pos)
+		var r := Rect2(Vector2.ZERO, s).grow(-12)
+		var shown := wp
+		if not r.has_point(wp):
+			# Pfeil am Rand
+			var dir := (wp - me).normalized()
+			shown = me + dir * minf(s.x, s.y) * 0.45
+		draw_dashed_line(me, shown, Color(0.95, 0.2, 0.6), 3.0, 8.0)
+		draw_circle(shown, 7.0, Color(0.95, 0.2, 0.6))
 
 	var font := get_theme_default_font()
 	if full:
