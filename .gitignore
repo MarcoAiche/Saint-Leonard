@@ -2,7 +2,7 @@
 .godot/
 /android/
 *.translation
-build/
+/build/
 
 # wird beim ersten Start aus data/riegersdorf.json gebaut
 data/world_baked.scn
