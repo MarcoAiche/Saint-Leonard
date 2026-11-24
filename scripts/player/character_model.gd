@@ -19,6 +19,14 @@ var _eyes: Array[MeshInstance3D] = []
 var _cheeks: Array[MeshInstance3D] = []
 var _nose: MeshInstance3D
 var _soot := 0.0
+var _glb_root: Node3D
+var _anim: AnimationPlayer
+var _skeleton: Skeleton3D
+var _hand_bone_idx := -1
+var _aiming_glb := false
+var hand_anchor: Node3D
+var _held_node: Node3D
+var _held_slot := ""
 
 
 func _init(o := {}, layer := 1) -> void:
@@ -31,7 +39,18 @@ func _init(o := {}, layer := 1) -> void:
 
 
 func _ready() -> void:
+	process_priority = 10
 	_build()
+
+
+func _process(_delta: float) -> void:
+	if _glb_root and _skeleton and _hand_bone_idx >= 0 and is_inside_tree():
+		if _aiming_glb:
+			var rest_q := _skeleton.get_bone_rest(_hand_bone_idx).basis.get_rotation_quaternion()
+			_skeleton.set_bone_pose_rotation(_hand_bone_idx, rest_q * Quaternion(Vector3.RIGHT, -PI * 0.45))
+		var xf := global_transform.affine_inverse() * _skeleton.global_transform * _skeleton.get_bone_global_pose(_hand_bone_idx)
+		hand_anchor.position = xf.origin + (Vector3(0, 0.18, 0.18) if _aiming_glb else Vector3.ZERO)
+		hand_anchor.basis = Basis.IDENTITY if _aiming_glb else Basis(Vector3.RIGHT, deg_to_rad(40))
 
 
 func _part(parent: Node3D, mesh: Mesh, color: Color, pos: Vector3, outline := true) -> MeshInstance3D:
@@ -45,6 +64,13 @@ func _part(parent: Node3D, mesh: Mesh, color: Color, pos: Vector3, outline := tr
 
 
 func _build() -> void:
+	var gender_str := str(outfit.get("gender", ""))
+	if gender_str in ["male", "female"] and not outfit.get("uniform", false):
+		var path := "res://assets/characters/female.glb" if gender_str == "female" else "res://assets/characters/male.glb"
+		var scene := load(path) as PackedScene
+		if scene:
+			_build_glb(scene)
+			return
 	var shirt: Color = outfit.shirt
 	var skin: Color = outfit.skin
 	if outfit.uniform:
@@ -178,10 +204,114 @@ func _build() -> void:
 		_part(shoulder, arm, shirt if not outfit.jacket else Color(0.45, 0.30, 0.18), Vector3(0, -0.3, 0))
 		_part(shoulder, hand, skin, Vector3(0, -0.64, 0))
 		arms.append(shoulder)
+	if arms.size() >= 2:
+		hand_anchor = Node3D.new()
+		hand_anchor.position = Vector3(0, -0.64, 0.06)
+		arms[1].add_child(hand_anchor)
+
+
+func _build_glb(scene: PackedScene) -> void:
+	_glb_root = scene.instantiate() as Node3D
+	add_child(_glb_root)
+	var min_y := INF
+	var max_y := -INF
+	for mi in _glb_root.find_children("*", "MeshInstance3D", true, false):
+		var mesh_inst := mi as MeshInstance3D
+		mesh_inst.layers = render_layer
+		if mesh_inst.mesh:
+			var a := mesh_inst.mesh.get_aabb()
+			var xf := _glb_root.global_transform.affine_inverse() * mesh_inst.global_transform
+			for corner_i in 8:
+				var c := xf * a.get_endpoint(corner_i)
+				min_y = minf(min_y, c.y)
+				max_y = maxf(max_y, c.y)
+	var h := max_y - min_y
+	if h > 0.001 and is_finite(h):
+		var s := 1.82 / h
+		_glb_root.scale = Vector3.ONE * s
+		_glb_root.position.y = -min_y * s - 0.38
+	for ap in _glb_root.find_children("*", "AnimationPlayer", true, false):
+		_anim = ap as AnimationPlayer
+		break
+	for sk in _glb_root.find_children("*", "Skeleton3D", true, false):
+		var s3 := sk as Skeleton3D
+		var idx := s3.find_bone("Hand.R")
+		if idx >= 0:
+			_skeleton = s3
+			_hand_bone_idx = idx
+			hand_anchor = Node3D.new()
+			add_child(hand_anchor)
+			break
+	head = Node3D.new()
+	head.position = Vector3(0, 1.08, 0)
+	add_child(head)
+
+
+## Hält ein Item/eine Waffe direkt an der rechten Hand (3rd-Person, NPCs, Mitspieler)
+func set_held_item(slot: String) -> void:
+	if slot == _held_slot or hand_anchor == null:
+		return
+	_held_slot = slot
+	if is_instance_valid(_held_node):
+		_held_node.queue_free()
+		_held_node = null
+	if slot == "" or slot == "none":
+		return
+	var root := Node3D.new()
+	hand_anchor.add_child(root)
+	_held_node = root
+	var glb_map := {
+		"pistol": ["res://assets/weapons/pistol.glb", 0.055, Vector3(0, PI, 0)],
+		"assault_rifle": ["res://assets/weapons/assault_rifle.glb", 0.14, Vector3(0, PI, 0)],
+		"sniper": ["res://assets/weapons/sniper_rifle.glb", 0.075, Vector3(0, -PI * 0.5, 0)],
+	}
+	if glb_map.has(slot):
+		var cfg: Array = glb_map[slot]
+		var sc := load(cfg[0]) as PackedScene
+		if sc:
+			var inst := sc.instantiate() as Node3D
+			inst.scale = Vector3.ONE * float(cfg[1])
+			inst.rotation = cfg[2]
+			inst.position = Vector3(0, 0.02, 0.06)
+			for mi in inst.find_children("*", "MeshInstance3D", true, false):
+				(mi as MeshInstance3D).layers = render_layer
+			root.add_child(inst)
+			return
+	var mesh := BoxMesh.new()
+	var col := Color(0.25, 0.25, 0.28)
+	if slot in ["beer", "moonshine"]:
+		mesh.size = Vector3(0.08, 0.22, 0.08)
+		col = Color(0.25, 0.45, 0.18) if slot == "beer" else Color(0.85, 0.85, 0.75)
+	else:
+		mesh.size = Vector3(0.10, 0.08, 0.18)
+		col = Color(0.18, 0.20, 0.22)
+	_part(root, mesh, col, Vector3(0, 0, 0.12), false)
 
 
 ## speed in m/s; aiming hebt die Arme
 func animate(delta: float, speed: float, on_floor := true, aiming := false, sitting := false, to_mouth := false, reloading := false) -> float:
+	if _glb_root:
+		var step_sign := 0.0
+		if speed > 0.3 and on_floor and not sitting:
+			var before := sin(_phase)
+			_phase += delta * (4.0 + speed * 1.3)
+			if signf(before) != signf(sin(_phase)):
+				step_sign = 1.0
+		if _anim:
+			var want := "Armature|Idle"
+			if not on_floor:
+				want = "Armature|Jump"
+			elif speed > 5.0:
+				want = "Armature|Sprint"
+			elif speed > 0.3:
+				want = "Armature|Walk"
+			if _anim.has_animation(want) and _anim.current_animation != want:
+				_anim.play(want, 0.15)
+		_lying = lerpf(_lying, _target_lying, 1.0 - exp(-delta * 4.0))
+		rotation.x = -_lying * PI * 0.5
+		position.y = _lying * 0.3
+		_aiming_glb = aiming
+		return step_sign
 	var swing := 0.0
 	var step_sign := 0.0
 	if sitting:

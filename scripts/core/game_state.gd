@@ -25,7 +25,7 @@ var stamina := 100.0
 var bac := 0.0  # Promille / 1000 (0.05 = 0,5 Promille)
 var smoke_time := 0.0  # Sekunden ruhige Hand nach einer Zigarette
 var cough_timer := 0.0
-var outfit := {shirt = Color(0.35, 0.42, 0.25), pants = Color(0.30, 0.26, 0.20), skin = Color(0.98, 0.80, 0.66), hat = "cap", hat_color = Color(0.22, 0.30, 0.18), jacket = false}
+var outfit := {gender = "male", shirt = Color(0.35, 0.42, 0.25), pants = Color(0.30, 0.26, 0.20), skin = Color(0.98, 0.80, 0.66), hat = "hunter", hat_color = Color(0.22, 0.30, 0.18), jacket = false}
 var truck := {paint = 0, upgrades = {}, fuel = 70.0, damage = 0.0, cargo = []}
 var house := -1  # Bauplatz-Nummer des eigenen Hauses
 var furniture: Array = []  # [{id, pos:[x,y,z], rot}]
@@ -346,7 +346,7 @@ static func new_slot_name(title: String) -> String:
 func reset_new_game() -> void:
 	playtime = 0.0
 	money = 600
-	inv = {"pistol": 1, "rifle": 1, "assault_rifle": 1, "sniper": 1, "ammo": 80, "knife": 1, "flashlight": 1, "binoculars": 1, "beer": 3, "cigarettes": 10, "snack": 2}
+	inv = {"pistol": 1, "assault_rifle": 1, "sniper": 1, "ammo": 80, "knife": 1, "flashlight": 1, "beer": 3, "cigarettes": 10, "snack": 2}
 	loaded = MAG_SIZE
 	health = 100.0
 	stamina = 100.0
@@ -375,5 +375,5 @@ static func _colors_in(d: Dictionary) -> Dictionary:
 	var o := {}
 	for k in d:
 		var v = d[k]
-		o[k] = Color.html(v) if v is String and k != "hat" and Color.html_is_valid(v) else v
+		o[k] = Color.html(v) if v is String and k not in ["hat", "gender"] and Color.html_is_valid(v) else v
 	return o

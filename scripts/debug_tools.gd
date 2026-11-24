@@ -260,13 +260,13 @@ func _selftest(game: Game) -> void:
 		game.open_shop(shop)
 		await get_tree().process_frame
 	Menus.close_all(game.hud)
-	for id in ["ammo", "binoculars", "scope8", "sugar", "sugar", "yeast", "fruit", "fruit", "still", "stand", "campfire", "trailcam", "table", "frame", "jerrycan", "crate", "straps"]:
+	for id in ["ammo", "scope8", "sugar", "sugar", "yeast", "fruit", "fruit", "still", "stand", "campfire", "trailcam", "table", "frame", "jerrycan", "crate", "straps"]:
 		var err := GameState.buy(id)
 		if not err.is_empty():
 			push_error("Kauf fehlgeschlagen: " + id)
 		game.on_bought(id, "x")
 	step.call("Schießen und Nachladen")
-	game.player.hand.select("rifle")
+	game.player.hand.select("sniper")
 	game.player.hand._fire()
 	await get_tree().create_timer(0.7).timeout
 	game.player.hand.try_reload()

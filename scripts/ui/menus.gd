@@ -228,7 +228,7 @@ static func _inv_action(game: Node, view: InventoryView, id: String, what: Strin
 				hud.toast("Pickup ist nicht in der Nähe")
 			inventory(game)
 		"equip":
-			if id in ["rifle", "binoculars"]:
+			if id in ["sniper", "pistol", "assault_rifle"]:
 				game._select_slot(id, Items.display(id))
 			view.queue_redraw()
 		"drop":
