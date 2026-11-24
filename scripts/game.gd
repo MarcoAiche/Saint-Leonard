@@ -406,18 +406,32 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _foot_input(event: InputEvent) -> void:
+	var slot_labels := {
+		rifle = "Repetierbüchse",
+		pistol = "Pistole",
+		assault_rifle = "Sturmgewehr",
+		sniper = "Scharfschützengewehr",
+		binoculars = "Fernglas",
+		none = "Hände frei",
+	}
 	if event.is_action_pressed("slot_1"):
-		_select_slot("rifle", "Gewehr")
+		_select_slot("rifle", slot_labels.rifle)
 	elif event.is_action_pressed("slot_2"):
-		_select_slot("binoculars", "Fernglas")
+		_select_slot("pistol", slot_labels.pistol)
 	elif event.is_action_pressed("slot_3"):
-		_select_slot("none", "Hände frei")
+		_select_slot("assault_rifle", slot_labels.assault_rifle)
+	elif event.is_action_pressed("slot_4"):
+		_select_slot("sniper", slot_labels.sniper)
+	elif event.is_action_pressed("slot_5"):
+		_select_slot("binoculars", slot_labels.binoculars)
+	elif event.is_action_pressed("slot_6"):
+		_select_slot("none", slot_labels.none)
 	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and rig.first_person and not player.hand.aiming:
-		var order := ["rifle", "binoculars", "none"].filter(func(s): return s == "none" or GameState.has(s))
+		var order := ["rifle", "pistol", "assault_rifle", "sniper", "binoculars", "none"].filter(func(s): return s == "none" or GameState.has(s))
 		var i: int = order.find(player.hand.slot)
 		var step := 1 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1
 		var nxt: String = order[(i + step + order.size()) % order.size()]
-		_select_slot(nxt, {rifle = "Gewehr", binoculars = "Fernglas", none = "Hände frei"}[nxt])
+		_select_slot(nxt, slot_labels[nxt])
 	elif event.is_action_pressed("reload"):
 		player.hand.try_reload()
 	elif event.is_action_pressed("crouch"):
@@ -1256,11 +1270,12 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 	_impact(hit.position, hit.normal)
 	if col is Animal:
 		var a := col as Animal
+		var dmg := player.hand.current_damage()
 		hud.hitmarker()
 		if Net.is_client():
-			Net.hit_animal(a.net_id, RIFLE_DAMAGE, hit.position, dir)
+			Net.hit_animal(a.net_id, dmg, hit.position, dir)
 		else:
-			a.hit(RIFLE_DAMAGE, hit.position, dir, player)
+			a.hit(dmg, hit.position, dir, player)
 			if a.is_dead():
 				hud.hitmarker(true)
 				hud.toast("Waidmannsheil! %s erlegt" % Animal.SPECIES[a.species].name, 2.5)

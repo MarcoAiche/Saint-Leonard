@@ -13,13 +13,20 @@ const RELOAD_TIME := 2.4
 const FIRE_DELAY := 1.1  # Repetieren
 const RIFLE_POS := Vector3(0.24, -0.27, -0.62)
 const ACTION_LEN := {smoke = 4.5, drink = 2.6, eat = 2.2}
+const WEAPONS := {
+	pistol = {name = "Pistole", auto = false, delay = 0.22, mag = 12, dmg = 55.0, recoil = 0.025, spread = 0.004, scope = false, zoom_fov = 54.0, reload = 1.5, bolt = false, pos = Vector3(0.22, -0.22, -0.48)},
+	rifle = {name = "Repetierbüchse", auto = false, delay = 1.1, mag = 5, dmg = 120.0, recoil = 0.06, spread = 0.001, scope = true, zoom_fov = 18.0, reload = 2.4, bolt = true, pos = Vector3(0.24, -0.27, -0.62)},
+	assault_rifle = {name = "Sturmgewehr", auto = true, delay = 0.11, mag = 30, dmg = 65.0, recoil = 0.028, spread = 0.005, scope = false, zoom_fov = 50.0, reload = 2.0, bolt = false, pos = Vector3(0.24, -0.25, -0.58)},
+	sniper = {name = "Scharfschützengewehr", auto = false, delay = 1.4, mag = 5, dmg = 220.0, recoil = 0.09, spread = 0.0004, scope = true, zoom_fov = 8.0, reload = 2.6, bolt = true, pos = Vector3(0.25, -0.27, -0.64)},
+}
 
 var rig: CameraRig
 var player: Node3D
-var slot := "rifle"  # rifle, binoculars, none
+var slot := "rifle"  # pistol, rifle, assault_rifle, sniper, binoculars, none
 var aiming := false
 var flashlight_on := false
 var action := ""  # smoke, drink, eat (gerade läuft eine Animation)
+var _mags := {pistol = 12, rifle = 5, assault_rifle = 30, sniper = 5}
 var _action_t := 0.0
 var _action_cb: Callable
 var _action_done := false
@@ -27,6 +34,7 @@ var _cool := 0.0
 var _reload := 0.0
 var _swap := 0.0  # Waffenwechsel (1 -> 0)
 var _rifle: Node3D
+var _weapon_nodes := {}  # id -> Node3D
 var _bolt: Node3D
 var _bino: Node3D
 var _cig: Node3D
@@ -47,6 +55,12 @@ func setup(r: CameraRig, p: Node3D) -> void:
 	_rifle = _build_rifle()
 	_rifle.position = RIFLE_POS
 	add_child(_rifle)
+	_weapon_nodes = {
+		rifle = _rifle,
+		pistol = _load_glb("res://assets/weapons/pistol.glb", Vector3.ONE * 0.075, Vector3.ZERO, WEAPONS.pistol.pos),
+		assault_rifle = _load_glb("res://assets/weapons/assault_rifle.glb", Vector3.ONE * 0.18, Vector3.ZERO, WEAPONS.assault_rifle.pos),
+		sniper = _load_glb("res://assets/weapons/sniper_rifle.glb", Vector3.ONE * 0.095, Vector3(0, PI * 0.5, 0), WEAPONS.sniper.pos),
+	}
 	_bino = _build_binoculars()
 	_bino.position = Vector3(0, -0.14, -0.3)
 	add_child(_bino)
@@ -199,17 +213,49 @@ func _make_puff() -> GPUParticles3D:
 	return p
 
 
+static func is_weapon(s: String) -> bool:
+	return WEAPONS.has(s)
+
+
+static func has_scope(s: String) -> bool:
+	return bool(WEAPONS.get(s, {}).get("scope", false))
+
+
+func current_damage() -> float:
+	return float(WEAPONS.get(slot, {}).get("dmg", 120.0))
+
+
+func _load_glb(path: String, scl: Vector3, rot: Vector3, pos: Vector3) -> Node3D:
+	var holder := Node3D.new()
+	holder.position = pos
+	var res = load(path)
+	if res is PackedScene:
+		var inst := (res as PackedScene).instantiate() as Node3D
+		inst.scale = scl
+		inst.rotation = rot
+		for mi in inst.find_children("*", "MeshInstance3D", true, false):
+			(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		holder.add_child(inst)
+	add_child(holder)
+	return holder
+
+
 # ------------------------------------------------------------------ Steuerung
 
 ## Gibt eine Meldung zurück, wenn der Wechsel nicht geht
 func select(s: String) -> String:
-	if s == "rifle" and not GameState.has("rifle"):
-		return "Kein Gewehr (Waffengeschäft)"
+	if is_weapon(s) and not GameState.has(s):
+		return "Nicht im Besitz (Waffengeschäft)"
 	if s == "binoculars" and not GameState.has("binoculars"):
 		return "Kein Fernglas (Waffengeschäft)"
 	if s == slot:
 		return ""
+	if is_weapon(slot):
+		_mags[slot] = GameState.loaded
 	slot = s
+	if is_weapon(s):
+		GameState.loaded = int(_mags.get(s, WEAPONS[s].mag))
+		GameState.inventory_changed.emit()
 	aiming = false
 	_reload = 0.0
 	_swap = 1.0
@@ -229,7 +275,9 @@ func toggle_flashlight() -> void:
 func _update_visual() -> void:
 	var fp := rig.first_person
 	var busy := action != ""
-	_rifle.visible = slot == "rifle" and fp and not (aiming and slot == "rifle") and not busy
+	for wid in _weapon_nodes:
+		var n: Node3D = _weapon_nodes[wid]
+		n.visible = slot == wid and fp and not (aiming and has_scope(wid)) and not busy
 	_bino.visible = slot == "binoculars" and fp and not aiming and not busy
 	_cig.visible = fp and action == "smoke"
 	_bottle.visible = fp and action == "drink"
@@ -241,12 +289,15 @@ func reloading() -> bool:
 
 
 func try_reload() -> void:
-	if slot != "rifle" or _reload > 0.0 or action != "" or GameState.loaded >= GameState.MAG_SIZE or not GameState.has("ammo"):
+	if not is_weapon(slot) or _reload > 0.0 or action != "" or not GameState.has("ammo"):
 		return
-	_reload = RELOAD_TIME
+	var cap: int = WEAPONS[slot].mag
+	if GameState.loaded >= cap:
+		return
+	_reload = float(WEAPONS[slot].reload)
 	aiming = false
 	Sfx.play_3d(player, Sfx.reload_sound(), -4.0)
-	get_tree().create_timer(1.2).timeout.connect(_rack_sound)
+	get_tree().create_timer(1.0).timeout.connect(_rack_sound)
 
 
 ## Rauchen, Trinken, Essen: Animation abspielen, Wirkung (cb) zur Hälfte
@@ -300,10 +351,13 @@ func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) 
 	if _reload > 0.0:
 		_reload -= delta
 		if _reload <= 0.0:
-			var need := GameState.MAG_SIZE - GameState.loaded
+			var cap: int = int(WEAPONS.get(slot, {}).get("mag", GameState.MAG_SIZE))
+			var need := cap - GameState.loaded
 			var have := mini(need, GameState.count("ammo"))
 			GameState.take("ammo", have)
 			GameState.loaded += have
+			if is_weapon(slot):
+				_mags[slot] = GameState.loaded
 			GameState.inventory_changed.emit()
 	_process_action(delta)
 	var want_aim := input_on and Input.is_action_pressed("aim") and slot != "none" and _reload <= 0.0 and action == ""
@@ -311,7 +365,12 @@ func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) 
 		aiming = want_aim
 	var fov := rig.base_fov
 	if aiming:
-		fov = BINO_FOV if slot == "binoculars" else (SCOPE_FOV.scope8 if GameState.has("scope8") else SCOPE_FOV.base)
+		if slot == "binoculars":
+			fov = BINO_FOV
+		elif slot == "rifle" and GameState.has("scope8"):
+			fov = SCOPE_FOV.scope8
+		elif is_weapon(slot):
+			fov = float(WEAPONS[slot].zoom_fov)
 	rig.fov_target = fov
 	_update_visual()
 	# Waffe bewegt sich
@@ -319,36 +378,38 @@ func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) 
 	var sw := sway_amount(crouched, on_stand)
 	_kick = move_toward(_kick, 0.0, delta * 3.0)
 	var swap_off := Vector3(0, -0.35, 0.1) * _swap
-	if _rifle.visible:
-		var bob := Vector3(sin(_sway_t * 1.3) * sw * 2.0, sin(_sway_t * 2.1) * sw * 1.5, _kick * 0.12)
-		var rot := Vector3(_kick * 0.3, 0, 0)
-		var pos := RIFLE_POS + bob + swap_off
-		var bolt_back := 0.0
-		if _reload > 0.0:
-			# Gewehr kippen und senken, Kammer auf, Patronen rein, Kammer zu
-			var t := RELOAD_TIME - _reload
-			var tilt := _raise(t, 0.35, RELOAD_TIME - 0.8, 0.45)
-			pos += Vector3(-0.08, -0.06, 0.12) * tilt
-			rot += Vector3(0.25, 0.35, 0.75) * tilt
-			if t > 0.4 and t < RELOAD_TIME - 0.5:
-				bolt_back = 1.0
-				pos.y += sin(t * 14.0) * 0.006 * tilt  # Patronen eindrücken
-		elif _cool > FIRE_DELAY - 0.75:
-			# Repetieren nach dem Schuss
-			var c := FIRE_DELAY - _cool
-			bolt_back = _raise(c - 0.35, 0.12, 0.08, 0.15) if c > 0.35 else 0.0
-			rot.z += bolt_back * 0.15
-		_bolt.position = Vector3(0.035, 0.03, 0.06 + bolt_back * 0.08)
-		_bolt.rotation.z = -bolt_back * 1.2
-		_rifle.position = pos
-		_rifle.rotation = rot
+	if is_weapon(slot) and _weapon_nodes.has(slot):
+		var wn: Node3D = _weapon_nodes[slot]
+		if wn.visible:
+			var w: Dictionary = WEAPONS[slot]
+			var bob := Vector3(sin(_sway_t * 1.3) * sw * 2.0, sin(_sway_t * 2.1) * sw * 1.5, _kick * 0.12)
+			var rot := Vector3(_kick * 0.25, 0, 0)
+			var pos: Vector3 = w.pos + bob + swap_off
+			var bolt_back := 0.0
+			var rlen := float(w.reload)
+			if _reload > 0.0:
+				var t := rlen - _reload
+				var tilt := _raise(t, 0.3, rlen - 0.7, 0.4)
+				pos += Vector3(-0.08, -0.06, 0.12) * tilt
+				rot += Vector3(0.25, 0.35, 0.75) * tilt
+				if slot == "rifle" and t > 0.4 and t < rlen - 0.5:
+					bolt_back = 1.0
+					pos.y += sin(t * 14.0) * 0.006 * tilt
+			elif slot == "rifle" and _cool > float(w.delay) - 0.75:
+				var c := float(w.delay) - _cool
+				bolt_back = _raise(c - 0.35, 0.12, 0.08, 0.15) if c > 0.35 else 0.0
+				rot.z += bolt_back * 0.15
+			if slot == "rifle":
+				_bolt.position = Vector3(0.035, 0.03, 0.06 + bolt_back * 0.08)
+				_bolt.rotation.z = -bolt_back * 1.2
+			wn.position = pos
+			wn.rotation = rot
 	if _bino.visible:
 		_bino.position = Vector3(0, -0.14, -0.3) + swap_off
-	# Zielfernrohr wackelt (wirkt auf die Kamera)
-	if aiming:
-		rig.yaw += sin(_sway_t * 0.9) * sw * delta * 2.5
-		rig.pitch += cos(_sway_t * 1.3) * sw * delta * 2.0
-	if input_on and Input.is_action_just_pressed("fire") and slot == "rifle" and action == "" and _swap < 0.2:
+	var want_fire := false
+	if input_on and is_weapon(slot) and action == "" and _swap < 0.2:
+		want_fire = Input.is_action_pressed("fire") if bool(WEAPONS[slot].auto) else Input.is_action_just_pressed("fire")
+	if want_fire:
 		_fire()
 
 
@@ -386,27 +447,31 @@ func _process_action(delta: float) -> void:
 
 
 func _fire() -> void:
-	if _cool > 0.0 or _reload > 0.0:
+	if _cool > 0.0 or _reload > 0.0 or not is_weapon(slot):
 		return
 	if GameState.loaded <= 0:
 		Sfx.play_3d(player, Sfx.click(), -2.0, 0.6)
 		if GameState.has("ammo"):
 			try_reload()
 		return
+	var w: Dictionary = WEAPONS[slot]
 	GameState.loaded -= 1
+	_mags[slot] = GameState.loaded
 	GameState.inventory_changed.emit()
-	_cool = FIRE_DELAY
+	_cool = float(w.delay)
 	_flash_t = 0.06
 	_kick = 1.0
 	var ray := rig.aim_ray()
-	var spread := 0.001 if aiming else 0.006
+	var spread := float(w.spread) * (0.35 if aiming else 1.5)
 	var dir: Vector3 = (ray[1] + Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * spread).normalized()
-	rig.add_recoil(0.06 if aiming else 0.04)
-	rig.shake(0.6)
-	Sfx.play_3d(player, Sfx.gunshot(), 4.0, randf_range(0.95, 1.05))
+	rig.add_recoil(float(w.recoil) * (1.2 if aiming else 0.9))
+	rig.shake(0.35 if slot == "assault_rifle" else 0.6)
+	var pitch := 1.25 if slot == "pistol" else (1.1 if slot == "assault_rifle" else (0.85 if slot == "sniper" else randf_range(0.95, 1.05)))
+	Sfx.play_3d(player, Sfx.gunshot(), 4.0, pitch)
 	GameState.make_noise(player.global_position, 900.0, "shot")
 	fired.emit(ray[0], dir)
-	get_tree().create_timer(0.45).timeout.connect(_rack_sound)
+	if bool(w.bolt):
+		get_tree().create_timer(0.45).timeout.connect(_rack_sound)
 
 
 func _rack_sound() -> void:
