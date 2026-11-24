@@ -11,7 +11,8 @@ extends Node3D
 @export var baked_path := "res://data/world_baked.scn"
 @export var show_labels := true
 
-const BUILD_VERSION := 6
+const BUILD_VERSION := 8
+const MAP_SCALE := 1.7
 ## Gebäude, die das Spiel selbst (begehbar) nachbaut: Feuerwehrhaus Korpitsch
 const SKIP_BUILDINGS := [424764105]
 const CHUNK := 250.0
@@ -103,6 +104,7 @@ func load_data() -> bool:
 		push_error("Weltdaten fehlen: %s (node tools/build_world_data.mjs ausführen)" % data_path)
 		return false
 	data = JSON.parse_string(text)
+	_apply_map_scale(MAP_SCALE)
 	var g: Dictionary = data.grid
 	x0 = g.x0
 	z0 = g.z0
@@ -116,6 +118,45 @@ func load_data() -> bool:
 	_index_roads()
 	_index_trees()
 	return true
+
+
+func _apply_map_scale(s: float) -> void:
+	if is_equal_approx(s, 1.0):
+		return
+	var g: Dictionary = data.grid
+	g.x0 = float(g.x0) * s
+	g.z0 = float(g.z0) * s
+	g.step = float(g.step) * s
+	for p in data.border:
+		p[0] = float(p[0]) * s
+		p[1] = float(p[1]) * s
+	for arr in [data.roads, data.rails, data.water_lines]:
+		for r in arr:
+			r.width = float(r.width) * s
+			for pt in r.pts:
+				pt[0] = float(pt[0]) * s
+				pt[1] = float(pt[1]) * s
+	# Häuser behalten ihre Größe, aber ihre Position/Abstände skalieren mit
+	for b in data.buildings:
+		var pts: Array = b.pts
+		if pts.is_empty():
+			continue
+		var cx := 0.0
+		var cz := 0.0
+		for pt in pts:
+			cx += float(pt[0])
+			cz += float(pt[1])
+		cx /= pts.size()
+		cz /= pts.size()
+		var dx := cx * (s - 1.0)
+		var dz := cz * (s - 1.0)
+		for pt in pts:
+			pt[0] = float(pt[0]) + dx
+			pt[1] = float(pt[1]) + dz
+	for arr2 in [data.pois, data.places]:
+		for item in arr2:
+			item.pos[0] = float(item.pos[0]) * s
+			item.pos[1] = float(item.pos[1]) * s
 
 
 ## Straßenklasse aus OSM-Art, Belag und Steigung
@@ -1082,8 +1123,8 @@ func _build_trees() -> void:
 	var t := Marshalls.base64_to_raw(data.trees).to_float32_array()
 	var per_chunk := {}  # Vector2i -> [Array fir, Array leaf]
 	for k in range(0, t.size(), 4):
-		var x := t[k]
-		var z := t[k + 1]
+		var x := t[k] * MAP_SCALE
+		var z := t[k + 1] * MAP_SCALE
 		var key := _chunk_key(x, z)
 		if not per_chunk.has(key):
 			per_chunk[key] = [[], []]
