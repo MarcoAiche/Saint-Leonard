@@ -48,6 +48,21 @@ func _ready() -> void:
 		return
 	while not game.started:
 		await get_tree().process_frame
+	if args.has("mptest"):
+		_nan_watch(game)
+	if Net.is_dedicated():
+		# Testserver: eine Weile laufen, dann Spielstand prüfen und beenden
+		await get_tree().create_timer(float(args.get("quit_after", 120))).timeout
+		GameState.save_game()
+		var d = JSON.parse_string(FileAccess.get_file_as_string("%s/%s.json" % [GameState.SAVE_DIR, GameState.slot]))
+		print("[Server] Gespeichert: Profile %s, %d aufgestellt, Häuser %s" % [d.get("profiles", {}).keys(), d.world.placed.size(), d.world.houses])
+		get_tree().quit()
+		return
+	if args.has("mptest") and Net.is_client():
+		var t := MpTest.new(game, str(args.mptest))
+		await t.run()
+		get_tree().quit()
+		return
 	await get_tree().create_timer(0.5).timeout
 	if args.has("money"):
 		GameState.money = int(args.money)
@@ -207,6 +222,20 @@ func _ready() -> void:
 		get_viewport().get_texture().get_image().save_png(args.shot)
 		print("Screenshot gespeichert: ", args.shot)
 	get_tree().quit()
+
+
+## Sucht Knoten mit ungültiger Position (NaN) und meldet sie einmal
+func _nan_watch(game: Node) -> void:
+	var seen := {}
+	while is_instance_valid(game):
+		await get_tree().create_timer(0.5).timeout
+		for n in game.find_children("*", "Node3D", true, false):
+			var p: Vector3 = (n as Node3D).global_position
+			if not p.is_finite() and not seen.has(n.get_path()):
+				seen[n.get_path()] = true
+				print("NAN: ", n.get_path(), " ", n.get_class(), " Eltern ", n.get_parent().name)
+				if seen.size() > 5:
+					return
 
 
 func _report(game: Game) -> void:
@@ -393,8 +422,9 @@ func _selftest(game: Game) -> void:
 	print("  Geld vorher %d, nachher %d" % [before, GameState.money])
 	DirAccess.remove_absolute("user://saves/selbsttest.json")
 	step.call("Mehrspieler: Server starten und stoppen")
-	print("  ", Net.host(24699) if true else "")
-	Net.leave()
+	var test_peer := ENetMultiplayerPeer.new()
+	print("  Server-Port frei: ", test_peer.create_server(24699) == OK)
+	test_peer.close()
 	print("SELBSTTEST FERTIG")
 
 

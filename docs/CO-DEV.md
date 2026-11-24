@@ -109,11 +109,16 @@ The player is a CharacterBody3D; the camera rig follows the interpolated transfo
 The HUD is a CanvasLayer built in code. Windows (shops, garage, inventory, phone) go into `hud.menu_root`; while one is open the mouse is free and game input is blocked. `Menus.window()` gives you a scrollable panel; `Menus.row()` adds a line with a button.
 
 ### Multiplayer
+There is **one dedicated server everyone connects to** (no listen/host mode). Start it with `tools/start_server.bat` / `tools/start_server.sh` or `<godot> --headless --path . -- --server`, options `--port=`, `--password=`, `--name=`, `--max=` (also stored in `user://server.cfg`). The main menu can also start a server process on the local PC and connect to it.
+
 Authority model:
-- **Server:** animals, placed objects, houses, time, weather, all player profiles (by name).
-- **Each client:** its own player and its own truck position (15 updates per second, unreliable).
-- **Requests:** clients ask the server to place, remove or buy a house; the server applies and broadcasts.
-- Hits on animals and noises go to the server. Voice goes peer to peer through the server relay.
+- **Server:** animals (AI, hits, deaths), placed objects and their data, houses (confirms purchases, refunds the loser of a race), time, weather, roulette rounds, the poker table, raids, all player profiles (by name, saved on every disconnect).
+- **Each client:** its own player, truck (with upgrades, lights, cargo) and its own police cars (others see them), 15 updates per second (police 5 per second), unreliable.
+- **Requests:** clients ask the server to place, remove, update or buy a house; the server applies and broadcasts.
+- **Effects for everyone:** `Net.fx(kind, pos)` for shots, horn, explosions, burps. Chat and voice go through the server relay.
+- **Joining:** the client sends name, outfit, `Net.VERSION` and password; the server rejects wrong versions, wrong passwords, duplicate names and full servers with a reason shown in the menu.
+- Remote vehicles are puppets (`Vehicle.puppet`, moved with `puppet_to`); do not freeze VehicleBody3D nodes, Godot then produces NaN wheel transforms.
+- Bump `Net.VERSION` whenever an RPC signature changes, so old clients get a clear message.
 
 Godot RPCs live in `net.gd`. If you add a synced feature, add an RPC there and a callback in `game.gd` (`on_remote_*`).
 
@@ -145,7 +150,8 @@ The console executable is `Godot_v4.7.2-stable_win64_console.exe` (shown as `<go
   Plays shopping, shooting, reloading, hunting, gutting, selling, garage, house, placing, still and explosion, police control and chase, phone, inventory, jobs, driving, radio, winch, drinking, festival, save/load and server start.
 - **Syntax check:** `<godot> --headless --path . --script tools/check_scripts.gd` (missing autoloads are reported in this mode; ignore those). After adding a new `class_name`, run `<godot> --headless --path . --import` once.
 - **Screenshots without playing:** for example `<godot> --path . -- --player=300,900 --animal=deer+boar --freeze --tp --time=12 --shot=test.png --wait=1`. All parameters are listed at the top of `scripts/debug_tools.gd`.
-- **Multiplayer on one PC:** `<godot> --headless --path . -- --server`, then two clients with `<godot> --path . -- --join=127.0.0.1 --name=Anna --wait=60`.
+- **Multiplayer test (run before pushing network changes):** start `<godot> --headless --path . -- --server --mptest --quit_after=290`, wait ~8 s, then start both clients at the same time: `<godot> --headless --path . -- --join=127.0.0.1 --name=Anna --mptest=a` and `... --name=Bert --mptest=b`. Both must end with `MPTEST a FERTIG: 0 Fehler` / `MPTEST b FERTIG: 0 Fehler` (57 checks: presence, positions, trucks, chat, placing, house race, animal kill and carcass, passenger seat and GPS rule, effects, voice, police, roulette, poker with hidden cards, raid, profile after reconnect). See `scripts/mp_test.gd`.
+- **Manual multiplayer on one PC:** `tools/start_server.bat`, then start the game twice and connect to `127.0.0.1` with different names.
 - **Logs:** `%APPDATA%\Godot\app_userdata\Saint-Leonard\logs\godot.log`.
 
 ---
@@ -170,7 +176,7 @@ The console executable is `Godot_v4.7.2-stable_win64_console.exe` (shown as `<go
 - Host, join and dedicated server with persistent world and profiles; synced players, trucks, animals, placed objects and houses; passenger seats and truck bed; passenger-only GPS; proximity voice chat and group radio.
 
 **Not done or limited**
-- Police is not synced in multiplayer.
+- Police AI runs on each player's client (it only chases that player); everyone sees the cars.
 - No trailer; cargo straps are only an inventory item.
 - Spotify is not possible (no allowed API for games). The radio streams real Austrian stations from radio-browser.info instead.
 - House interiors are simple; Gasthaus Pirtscher is not enterable yet.
@@ -183,7 +189,7 @@ The console executable is `Godot_v4.7.2-stable_win64_console.exe` (shown as `<go
 
 - Trailer with hitch and physical cargo straps.
 - Enterable Gasthaus Pirtscher (bar, tables, trophy wall).
-- Sync police between players (server-owned patrols).
+- Run police AI on the server (server-owned patrols that can chase anyone).
 - Real 3D models for the pickup and animals (Blender), replacing primitives one by one.
 - Balancing pass on prices, fines, damage and animal behaviour after the first group playtest.
 
@@ -194,6 +200,6 @@ The console executable is `Godot_v4.7.2-stable_win64_console.exe` (shown as `<go
 - OS: Windows 11. Engine: Godot 4.7.2. Tools: Claude Code and the Godot editor.
 - Version control: GitHub (private repo).
 - Multiplayer: Godot's built-in ENet.
-- Hosting: ZeroTier or a server on Marco's Raspberry Pi.
+- Hosting: one dedicated server for everyone (Marco's PC, Raspberry Pi or a rented server), friends via ZeroTier.
 
 Please send your own answers (experience, OS, which parts you want to own, time per week) to Marco via WhatsApp or as a GitHub issue.

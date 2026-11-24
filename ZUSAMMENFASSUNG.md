@@ -19,7 +19,7 @@ Vorlage sind drei Dokumente von Marco: "Saint Leonard - Full Game Brief" (Spieli
 | Google Maps | wird nicht verwendet | Nutzungsbedingungen verbieten das Übernehmen von Karten- und 3D-Daten. Marcos Kartenbild diente nur zum Abzeichnen der Spielgrenze. |
 | Umfang | alles aus dem Brief, alle 3 Stufen | Marcos Wahl ("Alles") |
 | Versionsverwaltung | GitHub, privates Repo `MarcoAiche/Saint-Leonard` | Commits mit `MarcoAiche@users.noreply.github.com` |
-| Mehrspieler | Godot ENet, Host oder dedizierter Server | Hosting über ZeroTier oder Marcos Raspberry Pi |
+| Mehrspieler | Godot ENet, ein dedizierter Server für alle (kein Host-Modus) | Marcos Wunsch: alle verbinden sich mit einem Server. Läuft auf Marcos PC, dem Raspberry Pi oder einem Mietserver; Freunde über ZeroTier |
 | Assets | alles im Code erzeugt | Modelle, Geräusche, Symbole und erzeugte Radiomusik brauchen keine Dateien |
 
 ## 3. Projekt und Werkzeuge
@@ -105,13 +105,20 @@ Katalog mit Preisen, Läden und Ankaufspreisen: Waffen und Ausrüstung, Getränk
 - `minimap.gd`: Karte mit Straßen, Häusern, Grenze, Läden, Bauplätzen, Mitspielern, Wegpunkt (Klick auf die große Karte) und Navi-Linie.
 
 ### Mehrspieler (`scripts/net/`)
-- `net.gd` (Autoload `Net`): Einzelspieler, Host, Client, dedizierter Server (`-- --server` oder Export mit Feature `dedicated_server`), Port 24680 UDP.
-- Der Server verwaltet Tiere, aufgestellte Dinge, Häuser, Uhrzeit, Wetter und die Profile aller Spieler (nach Name, Speichern alle 20 s vom Client).
-- Jeder Client schickt 15-mal pro Sekunde seine Position und die seines Pickups. Treffer auf Tiere werden an den Server gemeldet, Geräusche ebenfalls.
+Seit 2026-11-24 gilt: **ein Server, mit dem sich alle verbinden** (Marcos Wunsch). Den Host-Modus (Spieler ist gleichzeitig Server) gibt es nicht mehr.
+- `net.gd` (Autoload `Net`, Version `VERSION` = 0.5): Modi Einzelspieler, Client, Server. Server-Start mit `-- --server` (oder Export mit Feature `dedicated_server`), Startskripte `tools/start_server.bat` und `tools/start_server.sh`. Einstellungen in `user://server.cfg` (Name, Passwort, Port, max. Spieler), Startparameter `--port=`, `--password=`, `--name=`, `--max=` überschreiben sie.
+- **Anmelden:** Der Client schickt Name, Kleidung, Version und Passwort. Der Server lehnt ab bei falscher Version, falschem Passwort, doppeltem Namen oder vollem Server (Grund erscheint im Menü).
+- **Hauptmenü:** Seite "Mehrspieler" mit Serveradresse (wird gemerkt, `adresse:port` möglich), Passwort, "Verbinden" und "Server auf diesem PC starten und verbinden" (startet das Spiel ohne Fenster als eigenen Prozess mit `--server` und verbindet sich mit bis zu 8 Versuchen).
+- **Der Server verwaltet:** Tiere (KI, Treffer, Tod), aufgestellte Dinge samt Kesseldaten, Häuser (mit Bestätigung: wer gleichzeitig denselben Bauplatz kauft, bekommt das Geld zurück; jeder nur ein Haus), Uhrzeit und Wetter (Clients würfeln kein eigenes Wetter), Roulette-Takt, Pokertisch und Razzien, die Profile aller Spieler (der Client schickt sein Profil alle 20 s und beim Verlassen; der Server speichert bei jedem Verlassen und automatisch).
+- **Jeder Client schickt:** Position und Zustand (15 pro Sekunde), Pickup mit Umbauten, Licht und Ladung, seine Polizeiautos (5 pro Sekunde, die anderen sehen sie samt Blaulicht).
+- **Für alle:** Schüsse, Hupe, Explosionen und Rülpser (`Net.fx`), Chat, Sprachchat.
+- Fremde Fahrzeuge sind "Puppet"-Fahrzeuge ohne eigene Physik (`Vehicle.puppet`, `puppet_to`), sonst rechnet Godot die Räder mit ungültigen Werten.
+- Verbindung verloren: Dialog und zurück ins Hauptmenü. "Hauptmenü" und "Beenden" schicken vorher das Profil an den Server.
+- Server-Konsole: Meldungen beim Anmelden, Ablehnen und Verlassen, Status jede Minute.
 - Mitfahren auf Beifahrersitz und Ladefläche, Navi nur für den Beifahrer (Rallye-Ansage), Chat übers Handy.
 - `voice.gd` (Autoload `Voice`): Sprachchat mit B (halten), J stumm; 16 kHz µ-law, in der Nähe räumlich (im Auto dumpf) oder als Funk über die Karte. Im Headless-Modus aus.
 - `remote_player.gd`: Mitspieler-Figur mit Namen und Stimme.
-- Die Polizei läuft pro Spieler lokal und wird nicht abgeglichen.
+- Die Polizei-KI läuft weiter beim jeweiligen Spieler (sie verfolgt nur ihn), ihre Autos sehen aber alle.
 
 ### Feuerwehrhaus Korpitsch (`scripts/world/fire_hall.gd`)
 Zweiter Treffpunkt neben dem Gasthaus Pirtscher, an der Stelle des echten Gebäudes (OSM-Weg 424764105, nördlich von Korpitsch 1; der WorldBuilder lässt das OSM-Gebäude über `SKIP_BUILDINGS` weg). Begehbare Halle mit offenem Tor, Schlauchturm mit Sirene, Schild "FF KORPITSCH", Lichterkette, Bar mit Kommandant Ferdl (Laden "fire": Bier, Schnaps, Wurstsemmel, kauft Schwarzgebrannten), Pokertisch, Roulette, Spielautomat, Darts und Festplakat, Biertischgarnitur zum Hinsetzen, altes Löschfahrzeug. Auf Minimap und Karte als "F".
@@ -133,8 +140,8 @@ Alles synthetisch: Schritte, Tür, Hupe, Klick, Umgebung (Wind, Vögel), Schuss,
 
 - **Selbsttest:** `<godot> --headless --path . -- --selftest` spielt durch: Einkaufen, Schießen und Nachladen, Reh erlegen und ausnehmen, Wildschwein auf den Pickup und verkaufen, Werkstatt, Haus, Aufstellen, Brennkessel mit Explosion, Polizeikontrolle und Verfolgung, Handy, Inventar, Aufträge, Fahren, Radio, Seilwinde, Trinken bis zur Ohnmacht, Fest, Feuerwehrhaus, Spielautomat (Rücklauf), Roulette, drei Pokerhände, Handwertung, Razzia, Speichern und Laden, Server starten. Muss mit `SELBSTTEST FERTIG` und ohne `ERROR` enden.
 - **Syntaxprüfung:** `<godot> --headless --path . --script tools/check_scripts.gd` (meldet fehlende Autoloads als Fehler; das ist in diesem Modus normal). Nach neuen `class_name` einmal `--import` laufen lassen.
-- **Mehrspieler-Test:** `-- --server` in einem Fenster, dann `-- --join=127.0.0.1 --name=Anna --wait=20` und ein zweiter Client.
-- **Debug-Parameter** (nach `--`, siehe `scripts/debug_tools.gd`): `player=x,z`, `drive`, `tp`, `cam=yaw,pitch`, `dist`, `time`, `weather`, `money`, `upgrades`, `animal=deer+boar` mit `freeze`, `shoot`, `use=beer`, `drunk=0.1`, `reloadtest`, `buyhouse=n`, `place=still+stand`, `police`, `menu=shop:gun|garage|inventory|phone|jobs|map|slots|roulette|poker|hall`, `showmenu[=saves|settings]`, `hold=aktion:sek`, `aim`, `keytest`, `radiotest`, `join`, `host`, `name`, `wait`, `shot=bild.png`, `rebuild`.
+- **Mehrspieler-Test** (`scripts/mp_test.gd`): Server `-- --server --mptest --quit_after=290`, dann gleichzeitig `-- --join=127.0.0.1 --name=Anna --mptest=a` und `-- --join=127.0.0.1 --name=Bert --mptest=b` (alle mit `--headless --path .`). Prüft 57 Dinge: sich sehen, Positionen, Uhrzeit, Pickups, Chat, aufgestellte Dinge und Kesseldaten, gleichzeitiger Hauskauf, Tier abschießen (stirbt bei allen, Kadaver, Ausnehmen verschwindet bei allen), Mitfahren mit Navi-Regel, fahrender Pickup beim Mitfahrer, Schüsse, Hupe, Sprachpakete, fremde Polizei, gemeinsames Roulette-Ergebnis, Pokertisch mit verdeckten Karten, Razzia, Profil nach Trennen und Neuverbinden (Geld, Inventar, Haus). Der Testserver nutzt den eigenen Spielstand `mptest_server`. Stand 2026-11-24: alle 57 bestanden.
+- **Debug-Parameter** (nach `--`, siehe `scripts/debug_tools.gd`): `player=x,z`, `drive`, `tp`, `cam=yaw,pitch`, `dist`, `time`, `weather`, `money`, `upgrades`, `animal=deer+boar` mit `freeze`, `shoot`, `use=beer`, `drunk=0.1`, `reloadtest`, `buyhouse=n`, `place=still+stand`, `police`, `menu=shop:gun|garage|inventory|phone|jobs|map|slots|roulette|poker|hall`, `showmenu[=saves|settings]`, `hold=aktion:sek`, `aim`, `keytest`, `radiotest`, `join`, `password`, `localserver`, `mptest=a|b`, `quit_after`, `name`, `wait`, `shot=bild.png`, `rebuild`.
 - **Export:** `export_presets.cfg` mit Windows, Linux-Server und Raspberry-Pi-Server (ARM64). Dafür in Godot die Export-Templates installieren. Die gebakte Welt wird mit exportiert, wenn das Spiel vorher einmal lief.
 
 ## 8. Verlauf
@@ -147,10 +154,11 @@ Alles synthetisch: Schritte, Tür, Hupe, Klick, Umgebung (Wind, Vögel), Schuss,
 6. Nachbesserungen nach Marcos erstem Test: Waffenwechsel mit Anzeige, tödliche Treffer und Blutspur, Animationen für Nachladen, Rauchen, Trinken, Rausch-Effekt, weniger Nebel, Straßenränder repariert, kein Hochschießen mit R, realistischer Motorschaden, schneller nüchtern, Online-Radio, Raster-Inventar, Hauptmenü mit Spielständen und Einstellungen.
 
 7. Update "New Ideas": Feuerwehrhaus Korpitsch, Spielautomaten, Roulette, illegales Poker mit Razzien, Comedy-Ton.
+8. Mehrspieler nur noch mit einem Server für alle: Passwort, Versionsprüfung, Server-Konsole, Startskripte, Server aus dem Menü starten, abgeglichene Effekte, Ladung und Polizeiautos, Hauskauf mit Bestätigung, automatischer Mehrspieler-Test (57 Prüfungen bestanden).
 
 ## 9. Offene Punkte und Ideen
 
-- Polizei im Mehrspieler abgleichen (derzeit pro Spieler lokal).
+- Polizei-KI im Mehrspieler beim Server laufen lassen (derzeit steuert jeder Spieler seine eigene, die Autos sehen alle).
 - Anhänger fehlt; Spanngurte sind nur ein Inventar-Gegenstand.
 - Häuser sind einfache Hüllen; Innenräume schöner machen, Gasthaus Pirtscher begehbar.
 - Spielgefühl, Balancing (Preise, Polizei, Schaden) und Sound mit den Freunden testen.

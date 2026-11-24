@@ -35,6 +35,8 @@ var placed_nodes := {}  # uid -> Node3D
 var house_nodes := {}  # Bauplatz -> Node3D
 var remote_players := {}  # peer id -> RemotePlayer
 var remote_trucks := {}  # peer id -> Truck
+var remote_police := {}  # peer id -> Array[PoliceCar]
+var net_stats := {}  # Zähler für Tests: empfangene Effekte, Stimme
 var _placing := ""
 var _ghost: Node3D
 var _ghost_rot := 0.0
@@ -85,12 +87,24 @@ func _ready() -> void:
 		GameState.reset_new_game()
 		if DebugTools.args.has("name"):
 			GameState.player_name = DebugTools.args.name
-		if DebugTools.args.has("join"):
-			Net.join(DebugTools.args.join)
+		if DebugTools.args.has("localserver"):
+			print("Lokaler Server: ", start_local_server())
+			var ok := false
+			for attempt in 10:
+				await get_tree().create_timer(2.0).timeout
+				Net.join("127.0.0.1")
+				if await _wait_connect() == "":
+					ok = true
+					break
+				Net.leave()
+			print("Verbindung zum lokalen Server: ", ok)
+		elif DebugTools.args.has("join"):
+			Net.join(DebugTools.args.join, DebugTools.args.get("password", ""))
 			var res = await _wait_connect()
 			print("Verbindung: ", "ok" if res == "" else res)
-		elif DebugTools.args.has("host"):
-			print(Net.host())
+			if res != "":
+				get_tree().quit(2)
+				return
 		_start_game()
 		return
 	# Nach "Hauptmenü" oder "Laden" wird die Szene neu geladen; ein gewählter Spielstand startet direkt
@@ -129,20 +143,29 @@ func _on_menu_start(mode: String, address: String, slot: String, new_game: bool,
 				GameState.reset_new_game()
 				GameState.slot_title = title if new_game else "Einzelspieler"
 				GameState.save_game()
-		"host":
-			GameState.slot = "server_" + GameState.player_name
-			if not GameState.load_game():
-				GameState.reset_new_game()
-			err = Net.host()
-		"client":
-			err = Net.join(address)
-			if err.is_empty():
-				menu.show_error("Verbinde mit %s ..." % address)
-				var res = await _wait_connect()
-				if res != "":
-					Net.leave()
-					menu.show_error(res)
+		"localserver", "client":
+			if mode == "localserver":
+				var started_err := start_local_server()
+				if not started_err.is_empty():
+					menu.show_error(started_err)
 					return
+				address = "127.0.0.1"
+			var res := ""
+			# ein frisch gestarteter Server braucht ein paar Sekunden
+			for attempt in (8 if mode == "localserver" else 1):
+				menu.show_error("Verbinde mit %s ..." % address)
+				if mode == "localserver":
+					await get_tree().create_timer(2.0).timeout
+				err = Net.join(address, Net.join_password)
+				if not err.is_empty():
+					break
+				res = await _wait_connect()
+				if res == "":
+					break
+				Net.leave()
+			if err.is_empty() and res != "":
+				menu.show_error(res)
+				return
 	if not err.is_empty():
 		menu.show_error(err)
 		return
@@ -156,6 +179,20 @@ func _on_menu_start(mode: String, address: String, slot: String, new_game: bool,
 	_start_game()
 
 
+## Startet einen Server auf diesem PC (eigener Prozess ohne Fenster)
+func start_local_server() -> String:
+	var args := PackedStringArray()
+	args.append("--headless")
+	if not OS.has_feature("template"):
+		args.append_array(["--path", ProjectSettings.globalize_path("res://")])
+	args.append_array(["--", "--server"])
+	var pid := OS.create_process(OS.get_executable_path(), args)
+	if pid <= 0:
+		return "Server konnte nicht gestartet werden"
+	GameState.set_meta("local_server_pid", pid)
+	return ""
+
+
 func _wait_connect() -> String:
 	var result := [""]
 	var done := [false]
@@ -164,7 +201,7 @@ func _wait_connect() -> String:
 	Net.connected.connect(ok_cb, CONNECT_ONE_SHOT)
 	Net.connection_failed.connect(fail_cb, CONNECT_ONE_SHOT)
 	var t := 0.0
-	while not done[0] and t < 10.0:
+	while not done[0] and t < 8.0:
 		await get_tree().process_frame
 		t += get_process_delta_time()
 	if not done[0]:
@@ -177,12 +214,16 @@ func _start_dedicated() -> void:
 	spawner.setup(world, landmarks)
 	_setup_hall()
 	GameState.slot = "dedicated"
+	if DebugTools.args.has("mptest"):
+		GameState.slot = "mptest_server"  # Testlauf: eigener, frischer Spielstand
+		DirAccess.remove_absolute("%s/mptest_server.json" % GameState.SAVE_DIR)
 	GameState.load_game()
 	var err := Net.start_dedicated()
 	if not err.is_empty():
 		push_error(err)
 		get_tree().quit(1)
 	missions.set_process(false)
+	spawner.died_hook = _on_animal_died
 	_sync_world()
 	started = true
 
@@ -275,15 +316,23 @@ func _start_game() -> void:
 	hud.resume_requested.connect(func(): set_paused(false))
 	hud.quit_requested.connect(func():
 		GameState.save_game()
+		await Net.leave_gracefully()
 		get_tree().quit())
 	hud.save_requested.connect(func():
 		GameState.save_game()
 		hud.toast("Gespeichert: %s" % GameState.slot_title, 2.0))
 	hud.menu_requested.connect(func():
 		GameState.save_game()
-		Net.leave()
+		await Net.leave_gracefully()
 		get_tree().paused = false
 		get_tree().reload_current_scene())
+	Net.disconnected.connect(func(reason):
+		if DebugTools.active:
+			print("Getrennt: ", reason)
+			return
+		get_tree().paused = false
+		hud.show_dialog("Verbindung getrennt", "%s.
+Dein Fortschritt ist bis zur letzten Sicherung auf dem Server gespeichert." % reason, [["Zum Hauptmenü", func(): get_tree().reload_current_scene()]]))
 	hud.set_minimap(GameState.minimap_on)
 	_sync_world()
 
@@ -398,6 +447,7 @@ func _vehicle_input(event: InputEvent) -> void:
 			hud.toast(why, 1.5)
 	elif event.is_action_pressed("horn"):
 		car.honk()
+		Net.fx("horn", car.global_position)
 	elif event.is_action_pressed("radio"):
 		hud.toast(car.next_station())
 	elif event.is_action_pressed("winch"):
@@ -511,6 +561,8 @@ func _cargo_action() -> void:
 			var n := player.carrying
 			player.carrying = null
 			car.load_cargo(n)
+			if n is Carcass:
+				Net.carcass_removed((n as Carcass).net_id)
 			hud.toast("Aufgeladen")
 		return
 	var c := _nearest_carcass(2.8)
@@ -737,6 +789,24 @@ func buy_house(type_idx: int) -> void:
 		return
 	GameState.house = plot
 	Net.request_house(plot, type_idx)
+	if Net.is_client():
+		hud.toast("Kaufvertrag geht an die Gemeinde ...", 2.0)
+		return
+	_house_bought(plot, type_idx)
+
+
+## Antwort des Servers auf einen Hauskauf
+func on_house_result(plot: int, type_idx: int, ok: bool) -> void:
+	if ok:
+		_house_bought(plot, type_idx)
+		return
+	GameState.house = -1
+	GameState.add_money(int(Items.HOUSES[type_idx].price))
+	hud.show_dialog("Bauplatz vergeben", "Jemand war schneller (oder du hast schon ein Haus). Das Geld bekommst du zurück.", [["OK", func(): pass]])
+
+
+func _house_bought(plot: int, type_idx: int) -> void:
+	var h: Dictionary = Items.HOUSES[type_idx]
 	missions.event("house")
 	var pl: Dictionary = landmarks.plots[plot]
 	set_waypoint(Vector2(pl.pos.x, pl.pos.z))
@@ -856,6 +926,7 @@ func use_item(id: String) -> void:
 			get_tree().create_timer(1.4).timeout.connect(func():
 				Sfx.play_3d(player, Sfx.burp(), 2.0, randf_range(0.85, 1.1))
 				GameState.make_noise(player.global_position, 35.0, "burp")
+				Net.fx("burp", player.global_position)
 				hud.toast("*Rülps*", 1.2))
 		# zu viel: Ohnmacht
 		if GameState.promille() >= 3.0 and player.passed_out <= 0.0:
@@ -1118,6 +1189,7 @@ func still_explode(entry: Dictionary) -> void:
 	var uid := int(entry.uid)
 	var n: Node3D = placed_nodes.get(uid)
 	var pos := Vector3(entry.pos[0], entry.pos[1], entry.pos[2])
+	Net.fx("boom", pos)
 	var boom := Node3D.new()
 	add_child(boom)
 	boom.global_position = pos
@@ -1170,6 +1242,7 @@ func still_explode(entry: Dictionary) -> void:
 # ------------------------------------------------------------------ Schießen
 
 func _on_shot(from: Vector3, dir: Vector3) -> void:
+	Net.fx("shot", from)
 	var space := get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(from, from + dir * 700.0, 1 | 4 | 8 | 16)
 	q.exclude = [player.get_rid()]
@@ -1373,7 +1446,79 @@ func send_net_state() -> void:
 				owner_id = id
 	var pos: Vector3 = seat_truck.global_transform * Truck.SEATS.get(seat, Vector3.ZERO) if seat != "" else player.global_position
 	Net.pstate.rpc(pos, rig.yaw if rig.first_person else atan2(player.facing.x, player.facing.z), rig.pitch, flags, owner_id, seat)
-	Net.vstate.rpc(car.global_transform, car.linear_velocity, {paint = GameState.truck.paint, up = GameState.truck.upgrades.keys(), lights = car.lights_on})
+	var cargo := []
+	for n in car.cargo:
+		cargo.append(n.species if n is Carcass else str(n.get_meta("kind", "crate")))
+	Net.vstate.rpc(car.global_transform, car.linear_velocity, {paint = GameState.truck.paint, up = GameState.truck.upgrades.keys(), lights = car.lights_on, cargo = cargo})
+
+
+## Eigene Polizeiautos an die anderen (sie sehen Streifen und Verfolgungen)
+func send_police_state() -> void:
+	if not police:
+		return
+	var cars := []
+	for c in police.patrols:
+		if is_instance_valid(c) and cars.size() < 4:
+			cars.append([c.global_transform, c.siren_on])
+	if police.checkpoint_car and is_instance_valid(police.checkpoint_car):
+		cars.append([police.checkpoint_car.global_transform, police.checkpoint_car.siren_on])
+	Net.police_state(cars)
+
+
+## Polizeiautos eines anderen Spielers anzeigen
+func on_remote_police(id: int, cars: Array) -> void:
+	var list: Array = remote_police.get(id, [])
+	while list.size() < cars.size():
+		var c := PoliceCar.new()
+		c.world = world
+		c.puppet = true
+		c.mode = PoliceCar.Mode.PARKED
+		add_child(c)
+		c.remove_from_group("police")
+		list.append(c)
+	while list.size() > cars.size():
+		list.pop_back().queue_free()
+	for i in cars.size():
+		var c: PoliceCar = list[i]
+		var xf: Transform3D = cars[i][0]
+		c.puppet_to(xf)
+		c.set_siren(bool(cars[i][1]))
+	remote_police[id] = list
+
+
+## Schuss, Hupe, Explosion, Rülpser eines anderen Spielers
+func on_fx(kind: String, pos: Vector3) -> void:
+	net_stats[kind] = net_stats.get(kind, 0) + 1
+	if not started:
+		return
+	var n := Node3D.new()
+	add_child(n)
+	n.global_position = pos
+	match kind:
+		"shot":
+			Sfx.play_3d(n, Sfx.gunshot(), 4.0, randf_range(0.95, 1.05))
+			var flash := OmniLight3D.new()
+			flash.light_color = Color(1.0, 0.8, 0.4)
+			flash.omni_range = 6.0
+			flash.light_energy = 4.0
+			n.add_child(flash)
+			create_tween().tween_property(flash, "light_energy", 0.0, 0.1)
+		"horn":
+			Sfx.play_3d(n, Sfx.horn(), 2.0)
+		"burp":
+			Sfx.play_3d(n, Sfx.burp(), 2.0)
+		"boom":
+			Sfx.play_3d(n, Sfx.explosion(), 10.0)
+			var light := OmniLight3D.new()
+			light.light_color = Color(1, 0.6, 0.2)
+			light.omni_range = 30.0
+			light.light_energy = 8.0
+			n.add_child(light)
+			create_tween().tween_property(light, "light_energy", 0.0, 1.5)
+			if player.global_position.distance_to(pos) < 8.0:
+				GameState.damage(30.0)
+				player.knockdown(2.0, "BUMM!")
+	get_tree().create_timer(4.0).timeout.connect(n.queue_free)
 
 
 func on_remote_player(id: int, pos: Vector3, yaw: float, pitch: float, flags: int, owner_id: int, s: String) -> void:
@@ -1389,8 +1534,12 @@ func on_remote_player(id: int, pos: Vector3, yaw: float, pitch: float, flags: in
 	var r: RemotePlayer = remote_players[id]
 	r.apply_state(pos, yaw, pitch, flags, owner_id, s)
 	# Sitzplätze im eigenen Pickup belegen
-	if car and owner_id == Net.my_id():
-		car.occupants[s] = r.player_name
+	if car:
+		for k in car.occupants.keys():
+			if car.occupants[k] == r.player_name:
+				car.occupants.erase(k)
+		if owner_id == Net.my_id() and not s.is_empty():
+			car.occupants[s] = r.player_name
 
 
 func on_remote_truck(id: int, xf: Transform3D, vel: Vector3, look: Dictionary) -> void:
@@ -1398,15 +1547,14 @@ func on_remote_truck(id: int, xf: Transform3D, vel: Vector3, look: Dictionary) -
 		var t := Truck.new()
 		t.world = world
 		t.owner_name = Net.peers.get(id, {name = "?"}).name
-		t.freeze = true
-		t.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+		t.puppet = true
 		t.add_to_group("vehicle")
 		add_child(t)
 		remote_trucks[id] = t
 		t.set_meta("look", "")
 	var tr: Truck = remote_trucks[id]
-	tr.global_transform = tr.global_transform.interpolate_with(xf, 0.5) if tr.global_position.distance_to(xf.origin) < 10.0 else xf
-	tr.linear_velocity = vel
+	tr.puppet_to(xf)
+	tr.set_meta("vel", vel)
 	var key := str(look)
 	if tr.get_meta("look", "") != key:
 		tr.set_meta("look", key)
@@ -1419,6 +1567,10 @@ func on_remote_truck(id: int, xf: Transform3D, vel: Vector3, look: Dictionary) -
 		tr.rebuild()
 		GameState.truck = mine
 	tr.set_lights(look.get("lights", false))
+	var cargo_key := str(look.get("cargo", []))
+	if tr.get_meta("cargo", "") != cargo_key:
+		tr.set_meta("cargo", cargo_key)
+		tr.show_remote_cargo(look.get("cargo", []))
 
 
 func _on_player_left(id: int) -> void:
@@ -1427,6 +1579,10 @@ func _on_player_left(id: int) -> void:
 		spawner.players.erase(remote_players[id])
 		remote_players[id].queue_free()
 		remote_players.erase(id)
+	if remote_police.has(id):
+		for c in remote_police[id]:
+			c.queue_free()
+		remote_police.erase(id)
 	if remote_trucks.has(id):
 		if seat_truck == remote_trucks[id]:
 			exit_vehicle()
@@ -1458,6 +1614,7 @@ func on_carcass_gone(id: int) -> void:
 
 
 func on_voice(id: int, samples: PackedFloat32Array, radio: bool) -> void:
+	net_stats["voice"] = net_stats.get("voice", 0) + 1
 	if not remote_players.has(id):
 		return
 	var rp: RemotePlayer = remote_players[id]

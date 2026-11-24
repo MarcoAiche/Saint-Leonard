@@ -20,7 +20,7 @@ Gebaut mit Godot 4 und GDScript. Die Landschaft entsteht aus echten Kartendaten,
 - **Schmäh:** Die Leute im Dorf reden mit dir. Betrunken bekommst du eine rote Nase und Schluckauf und stolperst über die eigenen Füße, nach dem Bier wird gerülpst, und wer beim Knall neben dem Kessel steht, hat danach ein Rußgesicht.
 - **Geschichte:** "Rettet das Gasthaus Pirtscher" in drei Kapiteln bis zum großen Fest, dazu Nebenaufträge.
 - **Welt:** Tag und Nacht, Morgennebel, Regen, Hochstand, Wildkamera und Feuerstelle.
-- **Mehrspieler:** Host oder dedizierter 24/7-Server, gemeinsame Welt mit gespeichertem Fortschritt, Mitfahren auf Beifahrersitz und Ladefläche, Sprachchat in der Nähe und per Funk.
+- **Mehrspieler:** ein gemeinsamer Server rund um die Uhr, mit dem sich alle verbinden, gemeinsame Welt mit gespeichertem Fortschritt, Mitfahren auf Beifahrersitz und Ladefläche, Sprachchat in der Nähe und per Funk.
 
 ---
 
@@ -71,14 +71,19 @@ Das Hauptmenü hat Spielstände (weiterspielen, laden, löschen), Mehrspieler, F
 
 ## Mehrspieler
 
-- **Hosten:** Hauptmenü, "Mehrspieler", "Server hosten". Freunde treten über deine IP bei, zum Beispiel über ZeroTier. Port **24680 (UDP)**.
-- **Dedizierter Server (rund um die Uhr):**
+Alle spielen auf **einem gemeinsamen Server**, mit dem sich jeder verbindet. Die Welt läuft dort weiter, auch wenn gerade niemand online ist, und der Server speichert die Welt (Uhrzeit, Wetter, Kessel, Hochstände, Häuser) und den Fortschritt jedes Spielers (Geld, Rucksack, Pickup, Haus, Geschichte) unter seinem Namen.
+
+- **Verbinden:** Hauptmenü, "Mehrspieler", Serveradresse (und Passwort, falls gesetzt) eingeben, "Verbinden". Port **24680 (UDP)**, eine andere Port-Nummer schreibt man als `adresse:port`.
+- **Server auf dem eigenen PC:** Im selben Menü startet "Server auf diesem PC starten und verbinden" einen Server ohne Fenster und verbindet dich gleich damit. Freunde verbinden sich mit deiner IP, zum Beispiel über ZeroTier.
+- **Server rund um die Uhr** (eigener PC, Raspberry Pi oder Mietserver):
   ```
-  Godot_v4.7.2-stable_win64_console.exe --headless --path . -- --server
+  tools\start_server.bat
   ```
-  Der Server speichert die Welt (Uhrzeit, Wetter, Kessel, Hochstände, Häuser) und den Fortschritt jedes Spielers unter seinem Namen.
-- **Sprachchat:** In der Nähe wird die Stimme mit dem Abstand leiser und klingt im Auto dumpf. Der Funk (im Handy unter Einstellungen) gilt für die ganze Karte.
+  oder unter Linux `tools/start_server.sh`. Optionen: `--port=24680`, `--password=geheim`, `--name="Mein Server"`, `--max=16`. Dieselben Werte stehen nach dem ersten Start auch in `server.cfg` im Godot-Benutzerordner. Der Server schreibt jede Minute einen Status (Spieler online, Tiere, Häuser) und speichert bei jedem Verlassen.
+- **Was alle gemeinsam erleben:** Spieler und ihre Pickups samt Ladung, Mitfahren auf Beifahrersitz und Ladefläche, Wild (der Server steuert es), Schüsse, Hupen und Explosionen, Brennkessel, Hochstände, Häuser, Uhrzeit und Wetter, Chat, Roulette-Runden, der Pokertisch und Razzien. Polizeiautos der anderen sieht man auch.
+- **Sprachchat:** B halten zum Sprechen. In der Nähe wird die Stimme mit dem Abstand leiser und klingt im Auto dumpf. Der Funk (im Handy unter Einstellungen) gilt für die ganze Karte.
 - **Rallye-Navi:** Sitzt ein Freund auf dem Beifahrersitz, sieht nur er das Navi und muss ansagen.
+- Server und Spiel müssen dieselbe Version haben, sonst lehnt der Server die Verbindung ab. Jeder Name kann nur einmal gleichzeitig online sein.
 
 ---
 
@@ -87,6 +92,7 @@ Das Hauptmenü hat Spielstände (weiterspielen, laden, löschen), Mehrspieler, F
 - Anleitung für Mitentwickler (Englisch): [docs/CO-DEV.md](docs/CO-DEV.md)
 - Ausführliche Projektzusammenfassung (Deutsch): [ZUSAMMENFASSUNG.md](ZUSAMMENFASSUNG.md)
 - **Selbsttest:** `Godot_v4.7.2-stable_win64_console.exe --headless --path . -- --selftest` muss mit `SELBSTTEST FERTIG` enden.
+- **Mehrspieler-Test:** ein Server und zwei Clients spielen alle Mehrspieler-Funktionen automatisch durch (Anleitung in [docs/CO-DEV.md](docs/CO-DEV.md)).
 - **Kartendaten neu erzeugen:** `node tools/build_world_data.mjs` (Node.js, keine Pakete). Die Spielgrenze steht in `tools/map_border.json`.
 - **Export:** Vorlagen für Windows, Linux-Server und Raspberry Pi stehen in `export_presets.cfg`. Vorher in Godot die Export-Templates installieren.
 

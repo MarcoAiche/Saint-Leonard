@@ -68,7 +68,7 @@ func _process(delta: float) -> void:
 		day += 1
 	# Wetter
 	_weather_timer -= delta
-	if _weather_timer <= 0.0:
+	if _weather_timer <= 0.0 and not Net.is_client():
 		_weather_timer = _rng.randf_range(300.0, 720.0)
 		var r := _rng.randf()
 		weather = "rain" if r < 0.25 else "cloudy" if r < 0.5 else "clear"
@@ -283,7 +283,7 @@ func apply_world(d: Dictionary) -> void:
 
 
 func save_game() -> void:
-	if DebugTools.active or Net.is_client():
+	if (DebugTools.active and not Net.is_dedicated()) or Net.is_client():
 		return
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 	var d := {version = 1, profile = profile_dict(), world = world_dict(),

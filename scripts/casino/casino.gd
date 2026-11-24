@@ -226,6 +226,12 @@ func place_roulette_bet(label: String, numbers: Array, pays: int, amount: int) -
 ## Kugel fällt auf result (im Mehrspieler vom Server bestimmt)
 func _spin_roulette(result: int) -> void:
 	roulette_phase = "spin"
+	if Net.is_dedicated():
+		# Server: nur den Takt weiterführen
+		get_tree().create_timer(ROULETTE_SPIN_TIME).timeout.connect(func():
+			roulette_phase = "bets"
+			roulette_t = ROULETTE_BET_TIME)
+		return
 	Sfx.play_2d(game, Sfx.roulette_ball(), -4.0)
 	get_tree().create_timer(ROULETTE_SPIN_TIME if Net.active() else 4.0).timeout.connect(func(): _roulette_result(result))
 	roulette_last = -2  # dreht
@@ -338,6 +344,9 @@ func _server_poker_cmd(pname: String, peer: int, cmd: String, amount: int) -> vo
 
 
 func _cash_out(pname: String, peer: int, chips: int) -> void:
+	if Net.is_server():
+		Net.poker_cashout(peer, chips)
+		return
 	if pname == GameState.player_name or peer == Net.my_id():
 		GameState.add_money(chips)
 		game.hud.toast("Du stehst mit %d € auf (Einsatz war %d €)" % [chips, poker_buyin], 3.0)
@@ -356,7 +365,7 @@ func _broadcast_poker() -> void:
 	poker_view = poker.view_for(GameState.player_name)
 	if Net.is_server():
 		for p in poker.players:
-			if not p.npc and p.peer != Net.my_id() and p.peer != 0:
+			if not p.npc and not p.sitting_out and p.peer != 0 and Net.peers.has(p.peer):
 				Net.poker_state(p.peer, poker.view_for(p.name))
 	if is_instance_valid(_ui):
 		_ui.queue_redraw()
@@ -457,8 +466,11 @@ func _my_bet() -> int:
 # ------------------------------------------------------------------ Razzia
 
 func start_raid() -> void:
-	if Net.is_server() and Net.active():
+	if Net.is_server():
+		print("[Server] Razzia im Feuerwehrhaus!")
+		raid_t = RAID_TIME + 60.0  # Pause bis zur nächsten möglichen Razzia
 		Net.raid()
+		return
 	on_raid()
 
 
@@ -476,6 +488,9 @@ func on_raid() -> void:
 
 func _process_raid(delta: float) -> void:
 	if raid_t <= 0.0:
+		return
+	if Net.is_dedicated():
+		raid_t -= delta
 		return
 	raid_t -= delta
 	game.hud.set_alert("RAZZIA! Polizei kommt (%d s): weg vom Feuerwehrhaus!" % ceili(raid_t))

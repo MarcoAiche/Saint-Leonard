@@ -30,10 +30,15 @@ var _engine: EngineSound
 var _headlights: Array[SpotLight3D] = []
 var _base_friction := 2.8
 var grip_mult := 1.0  # Umbauten (Geländereifen)
+## Fahrzeug eines anderen Spielers: Lage kommt übers Netz, keine eigene Physik
+var puppet := false
 var offroad_mult := 1.0
 
 
 func _ready() -> void:
+	if puppet:
+		custom_integrator = true  # Godot bewegt es nicht selbst
+		gravity_scale = 0.0
 	collision_layer = 4
 	collision_mask = 1 | 2 | 4 | 8 | 16
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
@@ -104,7 +109,25 @@ func set_lights(on: bool) -> void:
 		l.visible = on
 
 
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if puppet:
+		state.linear_velocity = Vector3.ZERO
+		state.angular_velocity = Vector3.ZERO
+
+
+## Netz-Fahrzeug weich auf die gemeldete Lage ziehen
+func puppet_to(xf: Transform3D) -> void:
+	var cur := global_transform
+	var target := cur.interpolate_with(xf, 0.5) if cur.origin.distance_to(xf.origin) < 12.0 else xf
+	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, target)
+	global_transform = target
+
+
 func _physics_process(delta: float) -> void:
+	if puppet:
+		engine_force = 0.0
+		brake = 0.0
+		return
 	_flip_cd = maxf(0.0, _flip_cd - delta)
 	var throttle := 0.0
 	var steer_in := 0.0

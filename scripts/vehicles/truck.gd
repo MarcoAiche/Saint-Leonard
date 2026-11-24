@@ -357,3 +357,23 @@ func _make_smoke() -> GPUParticles3D:
 	p.draw_pass_1 = q
 	p.emitting = false
 	return p
+
+
+## Ladung eines fremden Pickups andeuten (Mehrspieler): Wild, Kisten, Flaschen
+func show_remote_cargo(list: Array) -> void:
+	for c in get_children():
+		if c.has_meta("remote_cargo"):
+			c.queue_free()
+	for i in mini(list.size(), BED_SLOTS.size()):
+		var kind: String = str(list[i])
+		var n: Node3D
+		if Animal.SPECIES.has(kind):
+			n = Node3D.new()
+			var sz: float = Animal.SPECIES[kind].size
+			_box(n, Vector3(0.5, 0.45, 1.1) * clampf(sz, 0.4, 1.0), Vector3(0, 0.25, 0), Animal.SPECIES[kind].body)
+		else:
+			n = Placeables.model("moonshine" if kind == "moonshine" else "crate")
+		n.set_meta("remote_cargo", true)
+		n.position = BED_SLOTS[i] + Vector3(0, _body.position.y - 0.1, 0)
+		n.rotation.y = PI / 2
+		add_child(n)

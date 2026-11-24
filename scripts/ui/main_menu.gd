@@ -27,6 +27,9 @@ func _ready() -> void:
 	_root.theme = Hud.make_theme()
 	add_child(_root)
 	_name = _load_name()
+	var f := FileAccess.open("user://server_address.txt", FileAccess.READ)
+	if f:
+		_ip = f.get_as_text().strip_edges()
 	page_home()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -174,26 +177,58 @@ func _confirm(text: String, yes: Callable) -> void:
 
 
 func page_multi() -> void:
-	var vb := _page("Mehrspieler")
+	var vb := _page("Mehrspieler", 520)
 	_name_row(vb)
-	_button(vb, "Server hosten (Freunde treten bei, Port 24680)", func(): _go("host", "", "", false))
+	var info := Label.new()
+	info.text = "Alle spielen auf einem gemeinsamen Server. Die Welt läuft dort weiter, auch wenn niemand online ist, und der Server speichert den Fortschritt jedes Spielers unter seinem Namen."
+	info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info.custom_minimum_size.x = 480
+	info.add_theme_font_size_override("font_size", 14)
+	vb.add_child(info)
 	var h := HBoxContainer.new()
 	vb.add_child(h)
+	var l := Label.new()
+	l.text = "Server"
+	l.custom_minimum_size.x = 90
+	h.add_child(l)
 	var ip := LineEdit.new()
 	ip.text = _ip
-	ip.placeholder_text = "IP-Adresse (z. B. ZeroTier)"
+	ip.placeholder_text = "Adresse oder Adresse:Port"
 	ip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ip.text_changed.connect(func(t): _ip = t.strip_edges())
 	h.add_child(ip)
-	_button(h, "Beitreten", func(): _go("client", _ip, "", false))
+	var h2 := HBoxContainer.new()
+	vb.add_child(h2)
+	var l2 := Label.new()
+	l2.text = "Passwort"
+	l2.custom_minimum_size.x = 90
+	h2.add_child(l2)
+	var pw := LineEdit.new()
+	pw.secret = true
+	pw.placeholder_text = "falls der Server eines hat"
+	pw.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h2.add_child(pw)
+	_button(vb, "Verbinden", func():
+		Net.join_password = pw.text
+		_save_ip()
+		_go("client", _ip, "", false))
+	_button(vb, "Server auf diesem PC starten und verbinden", func():
+		Net.join_password = ""
+		_go("localserver", "127.0.0.1", "", false))
 	var hint := Label.new()
-	hint.text = "Beim Hosten wird dein eigener Server-Spielstand verwendet. Beim Beitreten speichert der Server deinen Fortschritt unter deinem Namen."
+	hint.text = "Ein Server auf diesem PC läuft im Hintergrund weiter, bis du ihn im Task-Manager beendest (Godot ohne Fenster). Freunde verbinden sich mit deiner IP, z. B. über ZeroTier, Port 24680 (UDP)."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.custom_minimum_size.x = 440
-	hint.add_theme_font_size_override("font_size", 14)
+	hint.custom_minimum_size.x = 480
+	hint.add_theme_font_size_override("font_size", 13)
 	vb.add_child(hint)
 	_button(vb, "Zurück", func(): page_home())
 	_finish_page()
+
+
+func _save_ip() -> void:
+	var f := FileAccess.open("user://server_address.txt", FileAccess.WRITE)
+	if f:
+		f.store_string(_ip)
 
 
 func page_figure() -> void:
