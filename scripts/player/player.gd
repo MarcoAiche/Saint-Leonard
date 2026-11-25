@@ -78,9 +78,10 @@ func is_busy() -> bool:
 func _physics_process(delta: float) -> void:
 	if passed_out > 0.0:
 		passed_out -= delta
-		velocity.x = 0.0
-		velocity.z = 0.0
-		if not is_on_floor():
+		if is_on_floor():
+			velocity.x = lerpf(velocity.x, 0.0, 1.0 - exp(-delta * 6.0))
+			velocity.z = lerpf(velocity.z, 0.0, 1.0 - exp(-delta * 6.0))
+		else:
 			velocity.y -= gravity * delta
 		move_and_slide()
 		model.animate(delta, 0.0)
@@ -215,11 +216,13 @@ func _hand_and_model(delta: float, dir: Vector3) -> void:
 		carrying.global_rotation = Vector3(0, atan2(facing.x, facing.z) + PI / 2, 0)
 
 
-## Hinfallen (Stolpern, Sturz, Wildschwein): kurz am Boden, dann wieder auf
-func knockdown(seconds: float, text := "") -> void:
+## Hinfallen (Stolpern, Sturz, Wildschwein, Rocking Chair): kurz am Boden, dann wieder auf
+func knockdown(seconds: float, text := "", impulse := Vector3.ZERO) -> void:
 	if passed_out > 0.0:
 		return
 	Sfx.play_3d(self, Sfx.thump(), 0.0)
+	if impulse != Vector3.ZERO:
+		velocity += impulse
 	pass_out(seconds)
 	model.set_expression("surprised")
 	if not text.is_empty():

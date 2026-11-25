@@ -39,10 +39,10 @@ var trophies: Array = []  # Trophäenwand im Gasthaus: [{sp, score, unit, day, h
 var minimap_on := true
 
 # ---------------------------------------------------------------- gemeinsame Welt
-var time := 7.0  # Uhrzeit in Stunden
+var time := 11.0  # Uhrzeit in Stunden (klarer sonniger Tag)
 var day := 1
-var weather := "fog"  # clear, cloudy, fog, rain
-var wetness := 0.2  # 0 trocken .. 1 alles Matsch
+var weather := "clear"  # clear, cloudy, fog, rain
+var wetness := 0.0  # 0 trocken .. 1 alles Matsch
 var placed: Array = []  # [{uid, type, pos:[x,y,z], rot, owner, data:{}}]
 var houses := {}  # Bauplatz (String) -> {owner, type}
 var police_heat := 0.0  # steigt bei Explosionen, Verfolgungen
@@ -368,9 +368,10 @@ func reset_new_game() -> void:
 	side_jobs = []
 	stats = {deer = 0, boar = 0, rabbit = 0, bear = 0, bottles = 0, fines = 0}
 	trophies = []
-	time = 7.0
+	time = 11.0
 	day = 1
-	weather = "fog"
+	weather = "clear"
+	wetness = 0.0
 	placed = []
 	houses = {}
 

@@ -269,3 +269,7 @@ Offene Issues auf GitHub, Stand 2026-11-25:
 - **Marco:** itch.io-Upload und Pi-Server in Betrieb nehmen (#12; Skripte fertig, es fehlen itch.io-Konto und die übrigen Export-Templates).
 - Noch frei: Polizei-KI auf dem Server (#6), aus jedem Autositz in die Luft schießen (#7), Gruppentest und Balancing (#11), bewusstlose Freunde in den Pickup laden (#13), Karte bis Villach (#17), Google-Anmeldung und Cloud-Spielstände (#18), Fehler-melden-Knopf (#19), wichtige NPCs Hubert und Bibi (#25), 10-l-Bottich, Plane und Schmuggel (#24), Geräusche auf Distanz (#26), Blender-Modelle statt Grundformen (#10).
 - Bekannte Grenzen: Die Frauenfigur hat ihre Frisur fest im Modell (nur die Haarfarbe ist änderbar, kein Bart). Trophäen gehören zum eigenen Spielstand, die Wand zeigt die eigenen Stücke.
+
+Ideen von Simon:
+- **Benutzer-System:** Spieler können mit ihrer Google-E-Mail-Adresse einen Benutzer-Account erstellen, auf dem ihr Spielstand und Fortschritt gespeichert werden.
+- **Private Spieler-Häuser (Zutrittskontrolle):** Nicht-öffentliche Häuser von Spielern können nur vom jeweiligen Besitzer betreten werden – oder in Begleitung des Besitzers (der Besitzer kann die Tür für Besuch öffnen).

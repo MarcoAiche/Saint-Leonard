@@ -4,42 +4,50 @@ extends RefCounted
 ## GameState.outfit speichert pro Kategorie die gewählte Variante und die Farben.
 ## Freigeschaltet ist eine Variante ohne "unlock" immer, sonst wenn man das Teil besitzt
 ## (Bauhaus: Arbeitskleidung, Supermarkt: Freizeit, Werkbank: aus Fell und Leder hergestellt).
+## Grundfigur sind Simons Redneck-Figuren (CharacterModel, Vorlagen in REDNECK_PRESETS) mit
+## Bauch- und Stirn-Regler. Die Teile passen auch auf die 3D-Modelle Mann/Frau (use_glb).
 
-## Kategorien für den Editor: id, Name, Varianten-Schlüssel (oder ""), Farb-Schlüssel
+## Kategorien für den Editor: id, Name, Varianten-Schlüssel, Farb-Schlüssel, Regler
 const CATEGORIES := [
-	{id = "body", name = "Körper", key = "gender", colors = ["skin"]},
+	{id = "body", name = "Körper", key = "preset", colors = ["skin"], sliders = [["gut_belly", "Bauch"], ["forehead", "Stirn"]]},
 	{id = "hair", name = "Haare", key = "hair", colors = ["hair_color"]},
 	{id = "face", name = "Gesicht", key = "beard", colors = ["hair_color"], extra = "glasses"},
 	{id = "hat", name = "Kopf", key = "hat", colors = ["hat_color"]},
 	{id = "top", name = "Oberteil", key = "top", colors = ["shirt"]},
-	{id = "legs", name = "Hose", key = "legs", colors = ["pants"]},
+	{id = "legs", name = "Hose", key = "legs", colors = ["pants", "shoes"]},
 	{id = "back", name = "Rücken", key = "back", colors = []},
 ]
 
 const STYLES := {
-	gender = [
-		{id = "male", name = "Mann"},
-		{id = "female", name = "Frau"},
+	preset = [
+		{id = "overalls", name = "Latzhosen-Typ"},
+		{id = "mullet", name = "Vokuhila"},
+		{id = "female", name = "Jägerin mit Kappe"},
+		{id = "blue_tank", name = "Tanktop-Typ"},
 	],
 	hair = [
 		{id = "short", name = "Kurz"},
 		{id = "side", name = "Seitenscheitel"},
+		{id = "mullet", name = "Vokuhila"},
 		{id = "long", name = "Lang"},
+		{id = "ponytail", name = "Pferdeschwanz"},
 		{id = "bald", name = "Glatze"},
 	],
 	beard = [
 		{id = "none", name = "Glatt rasiert"},
 		{id = "moustache", name = "Schnauzer"},
+		{id = "handlebar", name = "Zwirbelbart"},
 		{id = "full", name = "Vollbart"},
 		{id = "goatee", name = "Kinnbart"},
 	],
 	glasses = [
 		{id = "none", name = "Keine Brille"},
 		{id = "glasses", name = "Brille"},
-		{id = "sunglasses", name = "Sonnenbrille", unlock = "sunglasses"},
+		{id = "sunglasses", name = "Sonnenbrille"},
 	],
 	hat = [
 		{id = "none", name = "Ohne"},
+		{id = "floppy", name = "Schlapphut"},
 		{id = "cap", name = "Kappe"},
 		{id = "hunter", name = "Jägerhut"},
 		{id = "hunter_gams", name = "Jägerhut mit Gamsbart", unlock = "hunter_hat"},
@@ -48,7 +56,7 @@ const STYLES := {
 		{id = "fur_cap", name = "Fellmütze", unlock = "fur_cap"},
 	],
 	top = [
-		{id = "shirt", name = "Hemd"},
+		{id = "shirt", name = "Hemd oder Leiberl"},
 		{id = "hoodie", name = "Kapuzenpulli", unlock = "hoodie"},
 		{id = "trachten", name = "Trachtenjanker", unlock = "trachten"},
 		{id = "hi_vis", name = "Warnweste", unlock = "hi_vis"},
@@ -59,6 +67,7 @@ const STYLES := {
 	],
 	legs = [
 		{id = "pants", name = "Hose"},
+		{id = "overalls", name = "Latzhose"},
 		{id = "work_pants", name = "Arbeitshose mit Werkzeuggurt", unlock = "work_pants"},
 		{id = "lederhose", name = "Lederhose", unlock = "lederhose"},
 	],
@@ -70,36 +79,79 @@ const STYLES := {
 }
 
 const PALETTES := {
-	skin = [Color(0.98, 0.84, 0.72), Color(0.98, 0.80, 0.66), Color(0.90, 0.68, 0.52), Color(0.78, 0.56, 0.40), Color(0.60, 0.40, 0.27), Color(0.42, 0.28, 0.19)],
-	hair_color = [Color(0.12, 0.10, 0.09), Color(0.30, 0.20, 0.12), Color(0.52, 0.34, 0.18), Color(0.85, 0.68, 0.40), Color(0.72, 0.30, 0.14), Color(0.62, 0.62, 0.62), Color(0.92, 0.92, 0.90)],
-	shirt = [Color(0.35, 0.42, 0.25), Color(0.22, 0.30, 0.18), Color(0.78, 0.18, 0.14), Color(0.20, 0.32, 0.58), Color(0.92, 0.90, 0.85), Color(0.18, 0.18, 0.20), Color(0.95, 0.62, 0.15), Color(0.48, 0.30, 0.55), Color(0.55, 0.70, 0.82), Color(0.62, 0.48, 0.32)],
-	pants = [Color(0.30, 0.26, 0.20), Color(0.20, 0.26, 0.42), Color(0.16, 0.16, 0.18), Color(0.36, 0.40, 0.26), Color(0.55, 0.48, 0.36), Color(0.45, 0.30, 0.18)],
-	shoes = [Color(0.22, 0.16, 0.12), Color(0.12, 0.12, 0.13), Color(0.45, 0.32, 0.20), Color(0.30, 0.34, 0.24)],
-	hat_color = [Color(0.22, 0.30, 0.18), Color(0.20, 0.22, 0.30), Color(0.55, 0.15, 0.12), Color(0.18, 0.18, 0.20), Color(0.85, 0.80, 0.70), Color(0.95, 0.55, 0.12)],
+	skin = [Color(0.98, 0.84, 0.72), Color(0.96, 0.79, 0.66), Color(0.91, 0.71, 0.60), Color(0.78, 0.56, 0.40), Color(0.60, 0.40, 0.27), Color(0.42, 0.28, 0.19)],
+	hair_color = [Color(0.12, 0.10, 0.09), Color(0.13, 0.11, 0.09), Color(0.36, 0.22, 0.13), Color(0.52, 0.34, 0.18), Color(0.85, 0.68, 0.40), Color(0.72, 0.30, 0.14), Color(0.55, 0.53, 0.51), Color(0.92, 0.92, 0.90)],
+	shirt = [Color(0.91, 0.71, 0.60), Color(0.94, 0.94, 0.93), Color(0.47, 0.72, 0.85), Color(0.43, 0.56, 0.66), Color(0.35, 0.42, 0.25), Color(0.78, 0.18, 0.14), Color(0.20, 0.32, 0.58), Color(0.18, 0.18, 0.20), Color(0.95, 0.62, 0.15), Color(0.62, 0.48, 0.32)],
+	pants = [Color(0.29, 0.44, 0.72), Color(0.17, 0.24, 0.35), Color(0.31, 0.37, 0.22), Color(0.29, 0.35, 0.20), Color(0.30, 0.26, 0.20), Color(0.16, 0.16, 0.18), Color(0.55, 0.48, 0.36), Color(0.45, 0.30, 0.18)],
+	shoes = [Color(0.22, 0.16, 0.12), Color(0.12, 0.12, 0.13), Color(0.29, 0.35, 0.20), Color(0.45, 0.32, 0.20), Color(0.85, 0.85, 0.82)],
+	hat_color = [Color(0.42, 0.31, 0.21), Color(0.78, 0.16, 0.16), Color(0.22, 0.30, 0.18), Color(0.20, 0.22, 0.30), Color(0.18, 0.18, 0.20), Color(0.85, 0.80, 0.70), Color(0.95, 0.55, 0.12)],
 }
 
 const COLOR_NAMES := {skin = "Hautton", hair_color = "Haarfarbe", shirt = "Farbe", pants = "Hosenfarbe", shoes = "Schuhe", hat_color = "Farbe"}
 
-## Standard-Figur (neue Spieler)
+## Was eine Vorlage außer Simons Farben (CharacterModel.REDNECK_PRESETS) noch setzt
+const PRESET_EXTRAS := {
+	overalls = {hair = "short", hair_color = Color(0.36, 0.22, 0.13), beard = "full", glasses = "sunglasses", top = "shirt", legs = "overalls", shoes = Color(0.91, 0.71, 0.60)},
+	mullet = {hair = "mullet", hair_color = Color(0.13, 0.11, 0.09), beard = "handlebar", glasses = "none", top = "shirt", legs = "pants", shoes = Color(0.29, 0.35, 0.20)},
+	female = {hair = "ponytail", hair_color = Color(0.36, 0.22, 0.13), beard = "none", glasses = "none", top = "shirt", legs = "pants", shoes = Color(0.22, 0.16, 0.12)},
+	blue_tank = {hair = "short", hair_color = Color(0.36, 0.22, 0.13), beard = "full", glasses = "none", top = "shirt", legs = "pants", shoes = Color(0.85, 0.85, 0.82)},
+}
+
+## Standard-Figur (neue Spieler): Simons Latzhosen-Typ
 const DEFAULT := {
-	gender = "male", hair = "short", beard = "moustache", glasses = "none", hat = "hunter", top = "shirt", legs = "pants", back = "none",
-	skin = Color(0.98, 0.80, 0.66), hair_color = Color(0.30, 0.20, 0.12), shirt = Color(0.35, 0.42, 0.25),
-	pants = Color(0.30, 0.26, 0.20), shoes = Color(0.22, 0.16, 0.12), hat_color = Color(0.22, 0.30, 0.18),
+	preset = "overalls", gut_belly = 0.55, forehead = 0.45,
+	hair = "short", beard = "full", glasses = "sunglasses", hat = "floppy", top = "shirt", legs = "overalls", back = "none",
+	skin = Color(0.91, 0.71, 0.60), hair_color = Color(0.36, 0.22, 0.13), shirt = Color(0.91, 0.71, 0.60),
+	pants = Color(0.29, 0.44, 0.72), shoes = Color(0.91, 0.71, 0.60), hat_color = Color(0.42, 0.31, 0.21),
 }
 
 
-## Fehlende Einträge auffüllen und alte Spielstände übernehmen (jacket = true -> Lederjacke)
+## Aussehen einer Vorlage (Farben, Hut, Bauch, Stirn, Frisur, Bart ...)
+static func preset_look(id: String) -> Dictionary:
+	var look: Dictionary = CharacterModel.REDNECK_PRESETS.get(id, {}).duplicate()
+	look.merge(PRESET_EXTRAS.get(id, {}), true)
+	look.preset = id
+	return look
+
+
+## Fehlende Einträge auffüllen und alte Spielstände übernehmen (jacket = true -> Lederjacke,
+## glasses = true -> Sonnenbrille, Simons Vorlage ohne Kleidung -> deren Aussehen)
 static func normalize(o: Dictionary) -> Dictionary:
 	var out := DEFAULT.duplicate()
+	if o.has("preset") and not o.has("top"):
+		out.merge(preset_look(str(o.preset)), true)
 	for k in o:
 		out[k] = o[k]
 	if o.get("jacket", false) and not o.has("top"):
 		out.top = "jacket"
 	out.erase("jacket")
+	if out.glasses is bool:
+		out.glasses = "sunglasses" if out.glasses else "none"
 	for k in ["skin", "hair_color", "shirt", "pants", "shoes", "hat_color"]:
 		if out[k] is String:
 			out[k] = Color.html(out[k])
+	out.gut_belly = clampf(float(out.gut_belly), 0.0, 1.0)
+	out.forehead = clampf(float(out.forehead), 0.0, 1.0)
 	return out
+
+
+## Ärmelfarbe bei Jacken (Simons Figur hat eigene Arme), sonst null
+static func sleeve_color(o: Dictionary) -> Variant:
+	match str(o.get("top", "")):
+		"hoodie": return o.shirt
+		"trachten": return Color(0.42, 0.46, 0.38)
+		"work_jacket": return Color(0.16, 0.22, 0.36)
+		"jacket": return Color(0.45, 0.28, 0.16)
+		"fur_coat": return Color(0.46, 0.34, 0.22)
+	return null
+
+
+## Hosenfarbe je nach Hose (Lederhose und Arbeitshose haben eigene Farben)
+static func pants_color(o: Dictionary) -> Color:
+	match str(o.get("legs", "")):
+		"lederhose": return Color(0.42, 0.28, 0.16)
+		"work_pants": return Color(0.3, 0.3, 0.28)
+	return o.pants
 
 
 static func style(key: String, id: String) -> Dictionary:
@@ -139,8 +191,6 @@ static func unlock_hint(key: String, id: String) -> String:
 static func sanitize(o: Dictionary) -> Dictionary:
 	var out := normalize(o)
 	for key in STYLES:
-		if key == "gender":
-			continue
 		if not unlocked(key, str(out.get(key, ""))):
 			out[key] = DEFAULT[key] if unlocked(key, DEFAULT[key]) else STYLES[key][0].id
 	return out
@@ -150,6 +200,11 @@ static func sanitize(o: Dictionary) -> Dictionary:
 static func wear(item: String) -> String:
 	if not item in GameState.wardrobe:
 		GameState.wardrobe.append(item)
+	if item == "sunglasses":
+		var g := normalize(GameState.outfit)
+		g.glasses = "none" if g.glasses == "sunglasses" else "sunglasses"
+		GameState.outfit = g
+		return "Sonnenbrille " + ("aufgesetzt" if g.glasses == "sunglasses" else "abgenommen")
 	for key in STYLES:
 		for s in STYLES[key]:
 			if s.get("unlock", "") == item:
@@ -169,14 +224,27 @@ static func wear(item: String) -> String:
 # (x ±0,27, y 0,01 bis 0,54, z -0,24 bis 0,28), der Rumpf ca. 0,34 x 0,30 x 0,34 m über dem
 # Rumpfknochen (x ±0,17, y 0 bis 0,30, z -0,15 bis 0,19). +Z zeigt nach vorne.
 
-## Kopfschmuck, Haare, Bart, Brille (Ursprung: Kopfknochen)
-static func build_head(parent: Node3D, o: Dictionary, female: bool, layer: int) -> void:
+## Gesicht: wo Augen, Mund und Kinn sitzen. GLB_FIT für den Würfelkopf der 3D-Modelle,
+## SPHERE_FIT für den runden Kopf von Simons Figuren (dort weicht das Kinn nach hinten zurück).
+const GLB_FIT := {eye_y = 0.29, eye_z = 0.29, mouth_z = 0.295, beard_z = 0.29, chin_z = 0.27}
+const SPHERE_FIT := {eye_y = 0.335, eye_z = 0.31, mouth_z = 0.275, beard_z = 0.245, chin_z = 0.17}
+
+## Kopfschmuck, Haare, Bart, Brille (Ursprung: unten am Kopf, Kopf ca. 0,54 m groß)
+static func build_head(parent: Node3D, o: Dictionary, female: bool, layer: int, fit := GLB_FIT) -> void:
 	var hair_c: Color = o.hair_color
 	var hat_c: Color = o.hat_color
 	var hat := str(o.hat)
-	# Haare (die Frau hat eigene Haare im Modell)
-	if not female and hat in ["none", "cap", "hunter", "hunter_gams"]:
+	# Haare (die 3D-Frau hat eigene Haare im Modell)
+	if not female and hat in ["none", "cap", "hunter", "hunter_gams", "floppy"]:
 		match str(o.hair):
+			"mullet":
+				_b(parent, Vector3(0.56, 0.06, 0.5), Vector3(0, 0.56, 0.04), hair_c, layer)
+				_b(parent, Vector3(0.5, 0.62, 0.08), Vector3(0, 0.26, -0.27), hair_c, layer)
+				_b(parent, Vector3(0.3, 0.28, 0.07), Vector3(0, -0.1, -0.29), hair_c, layer)
+			"ponytail":
+				_b(parent, Vector3(0.57, 0.07, 0.55), Vector3(0, 0.56, 0.02), hair_c, layer)
+				_b(parent, Vector3(0.57, 0.36, 0.06), Vector3(0, 0.4, -0.26), hair_c, layer)
+				_b(parent, Vector3(0.12, 0.42, 0.12), Vector3(0, 0.18, -0.34), hair_c, layer, Vector3(0.25, 0, 0))
 			"short":
 				_b(parent, Vector3(0.56, 0.05, 0.54), Vector3(0, 0.555, 0.02), hair_c, layer)
 				_b(parent, Vector3(0.56, 0.22, 0.05), Vector3(0, 0.43, -0.255), hair_c, layer)
@@ -193,27 +261,36 @@ static func build_head(parent: Node3D, o: Dictionary, female: bool, layer: int) 
 	if not female:
 		match str(o.beard):
 			"moustache":
-				_b(parent, Vector3(0.2, 0.04, 0.04), Vector3(0, 0.15, 0.295), hair_c, layer)
+				_b(parent, Vector3(0.2, 0.04, 0.04), Vector3(0, 0.15, fit.mouth_z), hair_c, layer)
+			"handlebar":
+				_b(parent, Vector3(0.24, 0.045, 0.04), Vector3(0, 0.15, fit.mouth_z), hair_c, layer)
+				for s in [-1, 1]:
+					_b(parent, Vector3(0.04, 0.12, 0.04), Vector3(0.13 * s, 0.1, fit.mouth_z - 0.01), hair_c, layer)
 			"full":
-				_b(parent, Vector3(0.5, 0.15, 0.05), Vector3(0, 0.1, 0.29), hair_c, layer)
-				_b(parent, Vector3(0.26, 0.08, 0.06), Vector3(0, 0.01, 0.27), hair_c, layer)
+				_b(parent, Vector3(0.5, 0.15, 0.05), Vector3(0, 0.1, fit.beard_z), hair_c, layer)
+				_b(parent, Vector3(0.26, 0.08, 0.06), Vector3(0, 0.01, fit.chin_z), hair_c, layer)
 				for s in [-1, 1]:
 					_b(parent, Vector3(0.04, 0.2, 0.22), Vector3(0.275 * s, 0.16, 0.15), hair_c, layer)
 			"goatee":
-				_b(parent, Vector3(0.16, 0.03, 0.03), Vector3(0, 0.15, 0.295), hair_c, layer)
-				_b(parent, Vector3(0.09, 0.1, 0.04), Vector3(0, 0.06, 0.29), hair_c, layer)
+				_b(parent, Vector3(0.16, 0.03, 0.03), Vector3(0, 0.15, fit.mouth_z), hair_c, layer)
+				_b(parent, Vector3(0.09, 0.1, 0.04), Vector3(0, 0.06, fit.beard_z), hair_c, layer)
 	# Brille
 	match str(o.glasses):
 		"glasses", "sunglasses":
 			var frame_c := Color(0.12, 0.12, 0.13)
 			var lens_c := Color(0.08, 0.08, 0.1) if o.glasses == "sunglasses" else Color(0.75, 0.88, 0.95)
+			var ey: float = fit.eye_y
+			var ez: float = fit.eye_z
 			for s in [-1, 1]:
-				_b(parent, Vector3(0.15, 0.1, 0.02), Vector3(0.12 * s, 0.29, 0.29), frame_c, layer)
-				_b(parent, Vector3(0.11, 0.065, 0.02), Vector3(0.12 * s, 0.29, 0.297), lens_c, layer)
-				_b(parent, Vector3(0.02, 0.02, 0.28), Vector3(0.28 * s, 0.31, 0.14), frame_c, layer)
-			_b(parent, Vector3(0.08, 0.02, 0.02), Vector3(0, 0.31, 0.29), frame_c, layer)
+				_b(parent, Vector3(0.15, 0.1, 0.02), Vector3(0.12 * s, ey, ez), frame_c, layer)
+				_b(parent, Vector3(0.11, 0.065, 0.02), Vector3(0.12 * s, ey, ez + 0.007), lens_c, layer)
+				_b(parent, Vector3(0.02, 0.02, ez - 0.01), Vector3(0.28 * s, ey + 0.02, ez * 0.5), frame_c, layer)
+			_b(parent, Vector3(0.08, 0.02, 0.02), Vector3(0, ey + 0.02, ez), frame_c, layer)
 	# Kopfbedeckung
 	match hat:
+		"floppy":
+			_cyl(parent, 0.45, 0.48, 0.04, Vector3(0, 0.485, 0.0), hat_c, layer)
+			_cyl(parent, 0.19, 0.26, 0.22, Vector3(0, 0.605, 0.0), hat_c.darkened(0.08), layer)
 		"cap":
 			_b(parent, Vector3(0.58, 0.11, 0.56), Vector3(0, 0.59, 0.02), hat_c, layer)
 			_b(parent, Vector3(0.42, 0.03, 0.2), Vector3(0, 0.55, 0.37), hat_c.darkened(0.2), layer)
@@ -289,6 +366,13 @@ static func build_body(parent: Node3D, o: Dictionary, female: bool, layer: int) 
 			for k in 3:
 				_b(parent, Vector3(0.05, 0.03, 0.02), Vector3(0, 0.22 - k * 0.07, 0.24), Color(0.25, 0.18, 0.1), layer)
 	match str(o.legs):
+		"overalls":
+			var den: Color = o.pants
+			_b(parent, Vector3(0.24 * w, 0.15, 0.04), Vector3(0, 0.12, 0.205), den, layer)  # Latz
+			_b(parent, Vector3(0.39 * w, 0.06, 0.39), Vector3(0, 0.03, 0.02), den, layer)  # Bund
+			_b(parent, Vector3(0.04, 0.22, 0.03), Vector3(-0.08, 0.2, 0.2), den, layer, Vector3(0, 0, 0.12))  # ein Träger
+			_b(parent, Vector3(0.04, 0.22, 0.03), Vector3(-0.08, 0.2, -0.17), den, layer)
+			_b(parent, Vector3(0.05, 0.04, 0.02), Vector3(0, 0.15, 0.226), Color(0.48, 0.32, 0.19), layer)  # Flicken
 		"work_pants":
 			_b(parent, Vector3(0.39 * w, 0.04, 0.39), Vector3(0, 0.08, 0.02), Color(0.2, 0.18, 0.16), layer)  # Gurt
 			_b(parent, Vector3(0.07, 0.08, 0.05), Vector3(0.16 * w, 0.04, 0.15), Color(0.55, 0.4, 0.2), layer)  # Tasche

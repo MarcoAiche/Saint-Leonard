@@ -62,9 +62,7 @@ func _build() -> void:
 	var reset := Button.new()
 	reset.text = "Standard"
 	reset.pressed.connect(func():
-		var g: String = outfit.gender
-		outfit = Outfit.DEFAULT.duplicate()
-		outfit.gender = g
+		outfit = Outfit.normalize(Outfit.preset_look(str(outfit.get("preset", "overalls"))))
 		_emit())
 	_tabs.add_child(reset)
 	# Details der Kategorie
@@ -125,14 +123,11 @@ func _fill_detail() -> void:
 		if c.id == _category:
 			cat = c
 	_detail.add_child(MenuStyle.label(cat.name, 30, MenuStyle.GOLD))
-	var female := str(outfit.gender) == "female"
-	if cat.id in ["hair", "face"] and female:
-		if cat.id == "hair":
-			_detail.add_child(MenuStyle.label("Frisur gehört zur Figur, die Farbe kannst du ändern.", 15, MenuStyle.MUTED))
-		else:
-			_detail.add_child(MenuStyle.label("Bart nur bei der Männerfigur.", 15, MenuStyle.MUTED))
-	if not (female and cat.id in ["hair", "face"]):
-		_style_list(cat.key, Outfit.STYLES[cat.key])
+	if cat.key == "preset":
+		_detail.add_child(MenuStyle.label("Vorlage (setzt Farben, Hut, Frisur und Figur)", 15, MenuStyle.MUTED))
+	_style_list(cat.key, Outfit.STYLES[cat.key])
+	for sl in cat.get("sliders", []):
+		_slider(sl[0], sl[1])
 	if cat.has("extra"):
 		_detail.add_child(MenuStyle.label("Brille", 20))
 		_style_list(cat.extra, Outfit.STYLES[cat.extra])
@@ -160,7 +155,10 @@ func _style_list(key: String, styles: Array) -> void:
 			b.tooltip_text = Outfit.unlock_hint(key, s.id)
 		var id: String = s.id
 		b.pressed.connect(func():
-			outfit[key] = id
+			if key == "preset":
+				outfit.merge(Outfit.preset_look(id), true)
+			else:
+				outfit[key] = id
 			Sfx.play_2d(self, Sfx.click(), -8.0)
 			_emit())
 		box.add_child(b)
@@ -196,11 +194,34 @@ func _swatches(key: String) -> void:
 		grid.add_child(b)
 
 
+## Regler (Bauch, Stirn) von 0 bis 1
+func _slider(key: String, label: String) -> void:
+	var h := HBoxContainer.new()
+	_detail.add_child(h)
+	var l := MenuStyle.label(label, 20)
+	l.custom_minimum_size.x = 90
+	h.add_child(l)
+	var sl := HSlider.new()
+	sl.min_value = 0.0
+	sl.max_value = 1.0
+	sl.step = 0.05
+	sl.value = float(outfit.get(key, 0.5))
+	sl.custom_minimum_size = Vector2(240, 30)
+	sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# nur Vorschau beim Ziehen, Liste erst beim Loslassen neu aufbauen
+	sl.value_changed.connect(func(v):
+		outfit[key] = v
+		changed.emit(outfit))
+	h.add_child(sl)
+
+
 func _randomize() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
+	outfit.gut_belly = snappedf(rng.randf(), 0.05)
+	outfit.forehead = snappedf(rng.randf(), 0.05)
 	for key in Outfit.STYLES:
-		if key == "gender":
+		if key == "preset":
 			continue
 		var opts: Array = Outfit.STYLES[key].filter(func(s): return Outfit.unlocked(key, s.id))
 		outfit[key] = opts[rng.randi() % opts.size()].id

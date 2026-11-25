@@ -7,8 +7,9 @@ var sun: DirectionalLight3D
 var env: Environment
 var sky_mat: ProceduralSkyMaterial
 var _rain: GPUParticles3D
+var _clouds: MultiMeshInstance3D
 var _rain_sound: AudioStreamPlayer
-var _fog := 0.0004
+var _fog := 0.0
 var _cloud := 0.0
 
 
@@ -16,15 +17,18 @@ func setup(s: DirectionalLight3D, e: Environment) -> void:
 	sun = s
 	env = e
 	sky_mat = env.sky.sky_material as ProceduralSkyMaterial
-	# Mischung aus Cartoon und semi-realistisch
+	# Sauberes Stylized Low-Poly Licht ohne Standard-Dauernebel
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 1.05
 	env.ssao_enabled = false  # machte fleckige Schatten auf großen Flächen
 	env.glow_enabled = true
-	env.glow_intensity = 0.4
-	env.glow_bloom = 0.05
+	env.glow_intensity = 0.35
+	env.glow_bloom = 0.04
+	env.fog_enabled = false
 	env.fog_height_density = 0.0
-	env.adjustment_saturation = 1.05
+	env.adjustment_saturation = 1.12
+	_clouds = _make_clouds()
+	add_child(_clouds)
 	_rain = _make_rain()
 	add_child(_rain)
 	_rain_sound = AudioStreamPlayer.new()
@@ -60,8 +64,8 @@ func _process(delta: float) -> void:
 	sun.light_color = sun_col.lerp(Color(0.55, 0.65, 0.9), night)
 	sun.light_energy = lerpf(0.12, 1.25, daylight) * (1.0 - _cloud * 0.55)
 	sun.shadow_enabled = daylight > 0.05
-	var top_day := Color(0.30, 0.52, 0.85).lerp(Color(0.55, 0.58, 0.62), _cloud)
-	var hor_day := Color(0.72, 0.82, 0.92).lerp(Color(0.70, 0.72, 0.74), _cloud).lerp(Color(1.0, 0.70, 0.45), low_sun * 0.7)
+	var top_day := Color(0.231373, 0.556863, 0.952941).lerp(Color(0.55, 0.58, 0.62), _cloud)
+	var hor_day := Color(0.545098, 0.784314, 1.0).lerp(Color(0.70, 0.72, 0.74), _cloud).lerp(Color(1.0, 0.70, 0.45), low_sun * 0.7)
 	var top_night := Color(0.02, 0.03, 0.08)
 	var hor_night := Color(0.06, 0.08, 0.14)
 	sky_mat.sky_top_color = top_night.lerp(top_day, daylight)
@@ -70,24 +74,39 @@ func _process(delta: float) -> void:
 	sky_mat.ground_bottom_color = Color(0.2, 0.25, 0.18) * lerpf(0.15, 1.0, daylight)
 	env.ambient_light_energy = lerpf(0.12, 0.55, daylight) * (1.0 - _cloud * 0.3)
 	env.ambient_light_color = Color(0.75, 0.82, 0.95).lerp(Color(0.35, 0.4, 0.6), night)
-	# Nebel: dicht bei Nebelwetter (Wild sieht schlechter), etwas bei Regen
-	var fog_target := 0.00025
+
+	var cam := get_viewport().get_camera_3d()
+	var in_swamp := false
+	var world := get_parent().get_node_or_null("World")
+	if cam and world and world.has_method("is_swamp"):
+		in_swamp = world.is_swamp(Vector2(cam.global_position.x, cam.global_position.z))
+
+	# Nebel: an klaren Tagen AUS; nur bei Wetter, Nacht oder Swamp-Biom aktiv
+	var fog_target := 0.0
+	var fog_col := sky_mat.sky_horizon_color
 	match weather:
-		"fog": fog_target = 0.0035
-		"rain": fog_target = 0.0014
-		"cloudy": fog_target = 0.0004
-	if night > 0.5:
-		fog_target = maxf(fog_target, 0.0008)
-	_fog = lerpf(_fog, fog_target, 1.0 - exp(-delta * 0.3))
+		"fog":
+			fog_target = 0.0035
+			fog_col = fog_col.lerp(Color(0.8, 0.82, 0.84), 0.4)
+		"rain":
+			fog_target = 0.0014
+	if in_swamp:
+		fog_target = maxf(fog_target, 0.011)
+		fog_col = Color(0.353, 0.427, 0.290)  # #5A6D4A olive-green swamp mist
+	elif night > 0.5:
+		fog_target = maxf(fog_target, 0.0006)
+	_fog = lerpf(_fog, fog_target, 1.0 - exp(-delta * 1.2))
+	env.fog_enabled = _fog > 0.00008
 	env.fog_density = _fog
-	env.fog_light_color = sky_mat.sky_horizon_color.lerp(Color(0.8, 0.82, 0.84), 0.4 if weather == "fog" else 0.0)
+	env.fog_light_color = fog_col
 	env.fog_light_energy = lerpf(0.15, 1.0, daylight)
-	# Regen folgt der Kamera
+
+	# Regen & Wolken folgen der Kamera
 	var raining := weather == "rain"
 	_rain.emitting = raining
-	var cam := get_viewport().get_camera_3d()
 	if cam:
 		_rain.global_position = cam.global_position + Vector3.UP * 12.0
+		_clouds.global_position = Vector3(cam.global_position.x, 0.0, cam.global_position.z)
 	_rain_sound.volume_db = lerpf(_rain_sound.volume_db, -8.0 if raining else -80.0, 1.0 - exp(-delta * 0.8))
 
 
@@ -116,3 +135,40 @@ func _make_rain() -> GPUParticles3D:
 	p.draw_pass_1 = q
 	p.emitting = false
 	return p
+
+
+func _make_clouds() -> MultiMeshInstance3D:
+	var mmi := MultiMeshInstance3D.new()
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	var box := BoxMesh.new()
+	box.size = Vector3(1.0, 1.0, 1.0)
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT_WRAP
+	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	mat.roughness = 0.95
+	box.material = mat
+	mm.mesh = box
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2026
+	var clusters := 18
+	var puffs_per := 3
+	mm.instance_count = clusters * puffs_per
+	var idx := 0
+	for c in clusters:
+		var ang := rng.randf() * TAU
+		var dist := rng.randf_range(160.0, 950.0)
+		var base := Vector3(cos(ang) * dist, rng.randf_range(145.0, 220.0), sin(ang) * dist)
+		var yaw := rng.randf() * TAU
+		for k in puffs_per:
+			var off := Vector3((k - 1) * rng.randf_range(14.0, 22.0), rng.randf_range(-2.0, 4.0), rng.randf_range(-8.0, 8.0))
+			var sc := Vector3(rng.randf_range(26.0, 44.0), rng.randf_range(8.0, 14.0), rng.randf_range(18.0, 30.0))
+			var xf := Transform3D(Basis(Vector3.UP, yaw).scaled(sc), base + off)
+			mm.set_instance_transform(idx, xf)
+			mm.set_instance_color(idx, Color(1.0, 1.0, 1.0) if k == 1 else Color(0.784, 0.867, 0.949))  # #FFFFFF / #C8DDF2
+			idx += 1
+	mmi.multimesh = mm
+	return mmi

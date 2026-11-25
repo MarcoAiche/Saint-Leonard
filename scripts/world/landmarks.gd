@@ -332,6 +332,8 @@ func _build_props() -> void:
 	for sp in spots:
 		_slot_machine(Vector3(sp.x, world.height_at(sp.x, sp.z), sp.z))
 
+	_build_hub_landmarks(I)
+
 	# Stadtläden
 	for id in shops:
 		var s: Dictionary = shops[id]
@@ -431,10 +433,15 @@ func _slot_machine(p: Vector3) -> void:
 	var n := Node3D.new()
 	add_child(n)
 	n.global_position = p
-	Placeables.box(n, Vector3(0.8, 1.7, 0.6), Vector3(0, 0.85, 0), Color(0.75, 0.1, 0.15), Vector3.ZERO, true)
-	Placeables.box(n, Vector3(0.6, 0.35, 0.62), Vector3(0, 1.25, 0), Color(0.95, 0.95, 0.9))
-	Placeables.box(n, Vector3(0.7, 0.2, 0.62), Vector3(0, 1.6, 0), Color(1.0, 0.85, 0.2))
-	game.interactions.add(Vector3(0, 1, 0), 2.0, "Spielautomat", func(): game.casino.open_slots(), null, n)
+	var visual := AssetLoader.load_model("res://assets/models/landmarks/lucky_buck_slot.glb", 1.8, func() -> Node3D:
+		var fb := Node3D.new()
+		Placeables.box(fb, Vector3(0.8, 1.7, 0.6), Vector3(0, 0.85, 0), Color(0.659, 0.125, 0.125), Vector3.ZERO, true)
+		Placeables.box(fb, Vector3(0.6, 0.35, 0.62), Vector3(0, 1.25, 0), Color(0.95, 0.95, 0.9))
+		Placeables.box(fb, Vector3(0.7, 0.2, 0.62), Vector3(0, 1.6, 0), Color(1.0, 0.85, 0.2))
+		return fb
+	)
+	n.add_child(visual)
+	game.interactions.add(Vector3(0, 1, 0), 2.0, "Spielautomat (LUCKY BUCK)", func(): game.casino.open_slots(), null, n)
 
 
 func _hall(s: Dictionary) -> void:
@@ -450,3 +457,195 @@ func plot_sign(pl: Dictionary) -> void:
 	var front: Vector2 = Vector2(p.x, p.z) + dir * 7.0
 	_box(n, Vector3(0.15, 1.6, 0.15), v3(front, 0.8), WorldBuilder.WOOD)
 	_sign(n, "BAUPLATZ %d" % (pl.idx + 1), Color(0.85, 0.10, 0.10), v3(front, 1.9), pl.yaw, 3.6)
+
+
+func _find_hub_spot(center: Vector2, r_min: float, r_max: float, half: float, avoid: Array) -> Dictionary:
+	for max_slope in [0.22, 0.45]:
+		for t in 500:
+			var a := _rng.randf() * TAU
+			var d := _rng.randf_range(r_min, r_max)
+			var p := center + Vector2(cos(a), sin(a)) * d
+			if world.border_distance(p) < 60.0:
+				continue
+			var kind := world.kind_at(p.x, p.y)
+			if kind in ["water", "industrial", "cemetery", "parking"]:
+				continue
+			if world.slope_at(p.x, p.y) > max_slope:
+				continue
+			var road := world.road_info(p, 45.0)
+			if road.tier == 0 or road.dist < half + 4.0 or road.dist > half + 32.0:
+				continue
+			if not buildings_near(p, half + 6.5).is_empty():
+				continue
+			var ok := true
+			for c in [Vector2(half, half), Vector2(-half, half), Vector2(half, -half), Vector2(-half, -half)]:
+				if world.road_info(p + c, 2.5).tier != 0:
+					ok = false
+					break
+			if not ok:
+				continue
+			for q in avoid:
+				if (q as Vector2).distance_to(p) < half * 2.0 + 9.0:
+					ok = false
+					break
+			if not ok:
+				continue
+			var to_road: Vector2 = (road.pos - p).normalized()
+			return {pos = p, yaw = atan2(to_road.x, to_road.y)}
+	return {}
+
+
+func _foundation_skirt(parent: Node3D, w: float, d: float, col: Color) -> void:
+	_box(parent, Vector3(w, 1.4, d), Vector3(0, -0.65, 0), col, true)
+
+
+func _build_hub_landmarks(I: Interactions) -> void:
+	var pub_2d := Vector2(pub.pos.x, pub.pos.z)
+	var avoid: Array = [Vector2(pub.door.x, pub.door.z), Vector2(spawn.pos.x, spawn.pos.z)]
+
+	# 1. Hunting Lodge Akzente direkt am Gasthaus Pirtscher
+	var lodge := Node3D.new()
+	lodge.name = "HuntingLodgeProps"
+	add_child(lodge)
+	var ld: Vector3 = pub.door
+	var lyaw := atan2(spawn.pos.x - ld.x, spawn.pos.z - ld.z)
+	var lpos := Vector3(ld.x, world.height_at(ld.x, ld.z), ld.z)
+	var lfwd := Vector3(sin(lyaw), 0, cos(lyaw))
+	var lrgt := Vector3(lfwd.z, 0, -lfwd.x)
+	_sign(lodge, "HUNTING LODGE", Color(0.290, 0.188, 0.102), lpos + Vector3(0, 3.6, 0) + lfwd * 0.4, lyaw, 5.2)
+	for s: float in [-1.8, 1.8]:
+		var pbase: Vector3 = lpos + lrgt * s + lfwd * 0.6
+		pbase.y = world.height_at(pbase.x, pbase.z)
+		_box(lodge, Vector3(0.45, 0.9, 0.45), pbase + Vector3(0, 0.45, 0), Color(0.478, 0.510, 0.549), true)
+		_box(lodge, Vector3(0.24, 2.3, 0.24), pbase + Vector3(0, 2.0, 0), Color(0.549, 0.369, 0.204), true)
+		var lant := _box(lodge, Vector3(0.26, 0.34, 0.26), pbase + Vector3(0, 2.9, 0) + lfwd * 0.25, Color(1.0, 0.80, 0.333))
+		var light := OmniLight3D.new()
+		light.light_color = Color(1.0, 0.667, 0.267)  # #FFAA44
+		light.light_energy = 1.6
+		light.omni_range = 9.0
+		lant.add_child(light)
+
+	# 2. Butcher "GASTON" Food Truck
+	var gspot := _find_hub_spot(pub_2d, 14.0, 55.0, 4.2, avoid)
+	if not gspot.is_empty():
+		avoid.append(gspot.pos)
+		var gp2: Vector2 = gspot.pos
+		var gy := world.height_at(gp2.x, gp2.y)
+		var tn := Node3D.new()
+		tn.name = "ButcherFoodTruck"
+		tn.position = Vector3(gp2.x, gy, gp2.y)
+		tn.rotation.y = gspot.yaw
+		add_child(tn)
+		_foundation_skirt(tn, 6.2, 3.2, Color(0.48, 0.46, 0.42))
+		var truck_vis := AssetLoader.load_model("res://assets/models/landmarks/gaston_food_truck.glb", 3.6, func() -> Node3D:
+			var fb := Node3D.new()
+			_box(fb, Vector3(5.6, 2.4, 2.5), Vector3(0, 1.55, 0), Color(0.937, 0.910, 0.847), true)   # #EFE8D8 Cream van
+			_box(fb, Vector3(5.7, 0.55, 2.56), Vector3(0, 0.65, 0), Color(0.722, 0.157, 0.157), true) # #B82828 Crimson skirt
+			_box(fb, Vector3(1.6, 1.7, 2.4), Vector3(3.4, 1.2, 0), Color(0.937, 0.910, 0.847), true)  # Cab
+			_box(fb, Vector3(3.2, 0.18, 1.1), Vector3(0.2, 2.35, 1.75), Color(0.722, 0.157, 0.157))   # Awning
+			_box(fb, Vector3(2.0, 0.9, 0.28), Vector3(0.0, 3.2, 0), Color(0.784, 0.220, 0.220))       # #C83838 Steak sign
+			_box(fb, Vector3(0.45, 0.45, 0.34), Vector3(1.1, 3.2, 0), Color(0.941, 0.929, 0.902))     # #F0EDE6 Bone
+			for wx in [-1.8, 2.6]:
+				for wz in [-1.2, 1.2]:
+					_box(fb, Vector3(0.75, 0.75, 0.32), Vector3(wx, 0.38, wz), Color(0.165, 0.173, 0.188))
+			return fb
+		)
+		tn.add_child(truck_vis)
+		_sign(tn, "GASTON BUTCHER", Color(0.722, 0.157, 0.157), Vector3(0, 3.9, 1.3), 0.0, 4.4)
+		var g_npc_pos := tn.to_global(Vector3(0.4, 0.0, 2.1))
+		g_npc_pos.y = world.height_at(g_npc_pos.x, g_npc_pos.z)
+		_npc(self, "GASTON", g_npc_pos, gspot.yaw, {shirt = Color(0.941, 0.941, 0.925), pants = Color(0.18, 0.18, 0.20), hat = "none"})
+		I.add(g_npc_pos, 3.5, "Butcher Gaston: Wild verkaufen", func(): game.open_shop("butcher"))
+		print("Hub [GASTON Food Truck]: (%.1f, %.1f) | %.1fm von Gasthaus Pirtscher" % [gp2.x, gp2.y, gp2.distance_to(pub_2d)])
+
+	# 3. Outdoor Weapon Shack
+	var wspot := _find_hub_spot(pub_2d, 16.0, 65.0, 4.0, avoid)
+	if not wspot.is_empty():
+		avoid.append(wspot.pos)
+		var wp2: Vector2 = wspot.pos
+		var wy := world.height_at(wp2.x, wp2.y)
+		var wn := Node3D.new()
+		wn.name = "WeaponShack"
+		wn.position = Vector3(wp2.x, wy, wp2.y)
+		wn.rotation.y = wspot.yaw
+		add_child(wn)
+		_foundation_skirt(wn, 5.4, 4.2, Color(0.38, 0.32, 0.26))
+		var shack_vis := AssetLoader.load_model("res://assets/models/landmarks/weapon_shack.glb", 3.4, func() -> Node3D:
+			var fb := Node3D.new()
+			_box(fb, Vector3(5.0, 3.0, 0.3), Vector3(0, 1.5, -1.7), Color(0.431, 0.294, 0.184), true)  # #6E4B2F Back wall
+			for sx in [-2.35, 2.35]:
+				_box(fb, Vector3(0.3, 3.0, 3.4), Vector3(sx, 1.5, 0), Color(0.431, 0.294, 0.184), true)
+			_box(fb, Vector3(5.6, 0.28, 4.2), Vector3(0, 3.2, 0), Color(0.361, 0.239, 0.133), true)    # Roof
+			_box(fb, Vector3(4.2, 1.0, 0.9), Vector3(0, 0.5, 1.35), Color(0.549, 0.384, 0.220), true)   # Counter
+			_box(fb, Vector3(0.9, 0.55, 0.6), Vector3(-1.1, 1.28, 1.35), Color(0.306, 0.408, 0.220))  # #4E6838 Olive ammo crate
+			_box(fb, Vector3(0.8, 0.50, 0.55), Vector3(0.9, 1.25, 1.35), Color(0.659, 0.157, 0.157))  # #A82828 Red crate
+			_box(fb, Vector3(0.75, 1.0, 0.75), Vector3(2.9, 0.5, 1.1), Color(0.549, 0.384, 0.220), true)  # #8C6238 Barrel
+			return fb
+		)
+		wn.add_child(shack_vis)
+		_sign(wn, "WEAPON SHACK", Color(0.306, 0.408, 0.220), Vector3(0, 3.9, 1.9), 0.0, 4.4)
+		var gs_pos := wn.to_global(Vector3(0, 0, 2.3))
+		gs_pos.y = world.height_at(gs_pos.x, gs_pos.z)
+		_npc(self, "Gunsmith", gs_pos, wspot.yaw, {shirt = Color(0.306, 0.353, 0.220), pants = Color(0.165, 0.173, 0.188), hat = "none"})
+		I.add(gs_pos, 3.5, "Weapon Shack: Waffen & Munition", func(): game.open_shop("gun"))
+		print("Hub [Weapon Shack]: (%.1f, %.1f) | %.1fm von Gasthaus Pirtscher" % [wp2.x, wp2.y, wp2.distance_to(pub_2d)])
+
+	# 4. Camper RV
+	var rvspot := _find_hub_spot(pub_2d, 18.0, 75.0, 4.2, avoid)
+	if not rvspot.is_empty():
+		avoid.append(rvspot.pos)
+		var rp2: Vector2 = rvspot.pos
+		var ry := world.height_at(rp2.x, rp2.y)
+		var rn := Node3D.new()
+		rn.name = "CamperRV"
+		rn.position = Vector3(rp2.x, ry, rp2.y)
+		rn.rotation.y = rvspot.yaw
+		add_child(rn)
+		_foundation_skirt(rn, 6.2, 2.8, Color(0.45, 0.45, 0.44))
+		var rv_vis := AssetLoader.load_model("res://assets/models/landmarks/camper_rv.glb", 2.9, func() -> Node3D:
+			var fb := Node3D.new()
+			_box(fb, Vector3(5.8, 2.3, 2.4), Vector3(0, 1.55, 0), Color(0.918, 0.925, 0.910), true)   # #EAECE8 White RV
+			_box(fb, Vector3(5.85, 0.55, 2.44), Vector3(0, 0.95, 0), Color(0.298, 0.651, 0.659))      # #4CA6A8 Turquoise stripe
+			for wx in [-1.6, 1.6]:
+				for wz in [-1.15, 1.15]:
+					_box(fb, Vector3(0.7, 0.7, 0.28), Vector3(wx, 0.35, wz), Color(0.14, 0.14, 0.16))
+			return fb
+		)
+		rn.add_child(rv_vis)
+		print("Hub [Camper RV]: (%.1f, %.1f) | %.1fm von Gasthaus Pirtscher" % [rp2.x, rp2.y, rp2.distance_to(pub_2d)])
+
+	# 5. Campfire & Wooden Rocking Chair
+	var cfspot := _find_hub_spot(pub_2d, 10.0, 45.0, 2.8, avoid)
+	if not cfspot.is_empty():
+		var cp2: Vector2 = cfspot.pos
+		var cy := world.height_at(cp2.x, cp2.y)
+		var cn := Node3D.new()
+		cn.name = "CampfireSpot"
+		cn.position = Vector3(cp2.x, cy, cp2.y)
+		cn.rotation.y = cfspot.yaw
+		add_child(cn)
+		var cf_vis := AssetLoader.load_model("res://assets/models/props/campfire.glb", 0.6, func() -> Node3D:
+			var fb := Node3D.new()
+			_box(fb, Vector3(1.2, 0.25, 1.2), Vector3(0, 0.1, 0), Color(0.478, 0.510, 0.549), true)
+			_box(fb, Vector3(0.45, 0.65, 0.45), Vector3(0, 0.45, 0), Color(1.0, 0.467, 0.067))  # #FF7711
+			return fb
+		)
+		cn.add_child(cf_vis)
+		var fl := OmniLight3D.new()
+		fl.position = Vector3(0, 0.6, 0)
+		fl.light_color = Color(0.910, 0.416, 0.125)  # #E86A20
+		fl.light_energy = 1.8
+		fl.omni_range = 10.0
+		cn.add_child(fl)
+		# Rocking Chair neben dem Lagerfeuer
+		var chair := AssetLoader.load_model("res://assets/models/props/rocking_chair.glb", 1.1, func() -> Node3D:
+			var fb := Node3D.new()
+			_box(fb, Vector3(0.7, 0.12, 0.7), Vector3(0, 0.48, 0), Color(0.549, 0.369, 0.204), true)
+			_box(fb, Vector3(0.7, 0.75, 0.12), Vector3(0, 0.9, -0.3), Color(0.549, 0.369, 0.204), true)
+			_box(fb, Vector3(0.1, 0.12, 1.0), Vector3(-0.3, 0.08, 0), Color(0.361, 0.239, 0.133))
+			_box(fb, Vector3(0.1, 0.12, 1.0), Vector3(0.3, 0.08, 0), Color(0.361, 0.239, 0.133))
+			return fb
+		)
+		chair.position = Vector3(1.6, 0, 0)
+		cn.add_child(chair)
+		print("Hub [Campfire & Rocking Chair]: (%.1f, %.1f) | %.1fm von Gasthaus Pirtscher" % [cp2.x, cp2.y, cp2.distance_to(pub_2d)])

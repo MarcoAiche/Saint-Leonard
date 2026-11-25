@@ -173,12 +173,12 @@ func _build_mirror() -> void:
 	_mirror_node = m
 	m.global_transform = _mirror
 	var wood := Color(0.86, 0.84, 0.8)
-	var t := 0.12
-	Placeables.box(m, Vector3(t, 2.5, t), Vector3(-0.85, 1.25, -0.3), wood)
-	Placeables.box(m, Vector3(t, 2.5, t), Vector3(0.85, 1.25, -0.3), wood)
-	Placeables.box(m, Vector3(1.82, t, t), Vector3(0, 2.5, -0.3), wood)
-	Placeables.box(m, Vector3(1.82, t, t), Vector3(0, 0.02, -0.3), wood)
-	Placeables.box(m, Vector3(1.6, 2.36, 0.03), Vector3(0, 1.26, -0.38), Color(0.62, 0.68, 0.72))
+	var t := 0.14
+	Placeables.box(m, Vector3(t, 3.0, t), Vector3(-1.05, 1.5, -0.3), wood)
+	Placeables.box(m, Vector3(t, 3.0, t), Vector3(1.05, 1.5, -0.3), wood)
+	Placeables.box(m, Vector3(2.24, t, t), Vector3(0, 3.0, -0.3), wood)
+	Placeables.box(m, Vector3(2.24, t, t), Vector3(0, 0.02, -0.3), wood)
+	Placeables.box(m, Vector3(2.0, 2.86, 0.03), Vector3(0, 1.5, -0.38), Color(0.62, 0.68, 0.72))
 	for s in [-1, 1]:
 		Placeables.box(m, Vector3(0.1, 0.1, 0.9), Vector3(0.85 * s, 0.05, -0.55), wood)
 	# Wiese unter dem Spiegel (liegt über Straße oder Platz) mit ein paar Blumen
@@ -287,16 +287,16 @@ func _shot_xf(name: String) -> Transform3D:
 		"figure":
 			# Figur in der Bildmitte, leicht von oben, etwas Platz links für die Menüs
 			var b := _mirror.basis
-			var p := _mirror.origin + b.z * 4.2 + Vector3.UP * 1.25 + b.x * -0.9
-			return Transform3D(Basis.looking_at(_mirror.origin + Vector3.UP * 0.75 + b.x * -0.9 - p, Vector3.UP), p)
+			var p := _mirror.origin + b.z * 5.6 + Vector3.UP * 1.7 + b.x * -0.9
+			return Transform3D(Basis.looking_at(_mirror.origin + Vector3.UP * 1.15 + b.x * -0.9 - p, Vector3.UP), p)
 		"lobby":
 			var b := _stage.basis
-			var p := _stage.origin + b.z * 6.4 + Vector3.UP * 1.5
-			return Transform3D(Basis.looking_at(_stage.origin + Vector3.UP * 0.75 - p, Vector3.UP), p)
+			var p := _stage.origin + b.z * 8.5 + Vector3.UP * 2.1
+			return Transform3D(Basis.looking_at(_stage.origin + Vector3.UP * 1.2 - p, Vector3.UP), p)
 		_:
 			# hinter und rechts neben der Figur, Blick über das Tal; Figur im linken Bilddrittel
 			var b := _hero_spot.basis
-			var p := _hero_spot.origin + b.z * 5.8 + b.x * 1.5 + Vector3.UP * 1.25
+			var p := _hero_spot.origin + b.z * 7.5 + b.x * 1.9 + Vector3.UP * 1.9
 			var look := _hero_spot.origin + b.z * -45.0 + b.x * 7.0 + Vector3.UP * -4.0
 			return Transform3D(Basis.looking_at(look - p, Vector3.UP), p)
 
@@ -337,7 +337,7 @@ func set_lineup(players: Array) -> void:
 			_set_lineup_model(id, p.outfit)
 		# Formation: 0, -1, +1, -2, +2 ... leicht nach hinten versetzt
 		var slot := 0 if k == 0 else (((k + 1) / 2) * (-1 if k % 2 == 1 else 1))
-		var pos := _stage.origin + _stage.basis.x * (slot * 1.35) - _stage.basis.z * (absf(slot) * 0.45)
+		var pos := _stage.origin + _stage.basis.x * (slot * 1.6) - _stage.basis.z * (absf(slot) * 0.45)
 		pos.y = world.height_at(pos.x, pos.z)
 		var holder: Node3D = e.holder
 		holder.global_transform = Transform3D(_stage.basis.rotated(Vector3.UP, -slot * 0.12), pos)
@@ -345,7 +345,7 @@ func set_lineup(players: Array) -> void:
 		var status := "im Spiel" if p.state == "game" else ("BEREIT" if p.ready else "wartet")
 		lbl.text = "%s\n%s" % [p.name, status]
 		lbl.modulate = Color(0.55, 0.95, 0.45) if p.ready and p.state != "game" else (Color(0.75, 0.8, 1.0) if p.state == "game" else Color(1, 0.95, 0.8))
-		lbl.global_position = pos + Vector3.UP * 1.75
+		lbl.global_position = pos + Vector3.UP * 2.75
 		holder.visible = shot == "lobby"
 		lbl.visible = shot == "lobby"
 	for id in _lineup.keys():

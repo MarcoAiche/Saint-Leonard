@@ -11,8 +11,8 @@ var follow_behind := false
 var first_person := true
 var yaw := 0.0
 var pitch := -0.1
-var fov_target := 72.0
-var base_fov := 72.0
+var fov_target := 78.0
+var base_fov := 78.0
 
 var arm: SpringArm3D
 var camera: Camera3D
@@ -136,7 +136,8 @@ func _process(delta: float) -> void:
 	else:
 		rotation = Vector3(pitch + sway_pitch + sh.y, yaw + sway_yaw + sh.x, roll)
 	arm.spring_length = 0.0 if first_person else lerpf(arm.spring_length, distance, 1.0 - exp(-delta * 6.0))
-	base_fov = float(Settings.get_v("fov"))
+	var cfg_fov := float(Settings.get_v("fov"))
+	base_fov = cfg_fov if cfg_fov >= 75.0 else 78.0
 	camera.fov = lerpf(camera.fov, fov_target, 1.0 - exp(-delta * 14.0))
 
 

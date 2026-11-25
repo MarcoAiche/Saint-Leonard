@@ -236,8 +236,8 @@ func open_wardrobe() -> void:
 	var side := fwd.cross(Vector3.UP)
 	_wardrobe_cam = Camera3D.new()
 	add_child(_wardrobe_cam)
-	var eye := player.global_position + fwd * 3.6 + side * 0.9 + Vector3.UP * 1.0
-	_wardrobe_cam.look_at_from_position(eye, player.global_position + side * 0.9 + Vector3.UP * 0.55)
+	var eye := player.global_position + fwd * 5.0 + side * 0.9 + Vector3.UP * 1.6
+	_wardrobe_cam.look_at_from_position(eye, player.global_position + side * 0.9 + Vector3.UP * 1.1)
 	_wardrobe_cam.make_current()
 	player.model.rotation.y = atan2(fwd.x, fwd.z)
 	var layer := CanvasLayer.new()

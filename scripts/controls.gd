@@ -24,6 +24,9 @@ const KEYS := {
 	"slot_4": [KEY_4],
 	"slot_5": [KEY_5],
 	"slot_6": [KEY_6],
+	"slot_7": [KEY_7],
+	"slot_8": [KEY_8],
+	"slot_9": [KEY_9],
 	"smoke": [KEY_Z, KEY_Y],
 	"drink": [KEY_X],
 	"inventory": [KEY_I],
@@ -39,6 +42,8 @@ const KEYS := {
 const MOUSE := {
 	"fire": MOUSE_BUTTON_LEFT,
 	"aim": MOUSE_BUTTON_RIGHT,
+	"weapon_next": MOUSE_BUTTON_WHEEL_UP,
+	"weapon_prev": MOUSE_BUTTON_WHEEL_DOWN,
 }
 
 

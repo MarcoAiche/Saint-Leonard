@@ -3,13 +3,13 @@ extends Node3D
 ## godot --path . --resolution 1800x700 res://tools/outfit_sheet.tscn -- --out=pfad.png
 var looks := [
 	{},
-	{gender = "female", top = "hoodie", shirt = Color(0.78, 0.18, 0.14), hat = "beanie", glasses = "sunglasses", back = "backpack"},
-	{hair = "side", beard = "full", top = "hi_vis", hat = "work_helmet", legs = "work_pants", shirt = Color(0.92, 0.9, 0.85)},
-	{gender = "female", top = "trachten", hat = "hunter_gams", legs = "lederhose", hair_color = Color(0.85, 0.68, 0.4)},
-	{hair = "long", beard = "goatee", top = "jacket", hat = "none", glasses = "glasses", pants = Color(0.2, 0.26, 0.42)},
+	{preset = "mullet"},
+	{preset = "female", top = "hoodie", shirt = Color(0.78, 0.18, 0.14), hat = "beanie", back = "backpack"},
+	{preset = "blue_tank", top = "hi_vis", hat = "work_helmet", legs = "work_pants"},
+	{preset = "female", top = "trachten", hat = "hunter_gams", legs = "lederhose", gut_belly = 0.1},
+	{top = "jacket", hat = "none", hair = "long", glasses = "glasses", pants = Color(0.2, 0.26, 0.42), gut_belly = 0.9},
 	{top = "fur_coat", hat = "fur_cap", back = "fur_pack", beard = "full", hair_color = Color(0.62, 0.62, 0.62)},
-	{top = "leather_vest", legs = "lederhose", hat = "cap", hat_color = Color(0.55, 0.15, 0.12), skin = Color(0.6, 0.4, 0.27)},
-	{gender = "female", top = "work_jacket", hat = "cap", skin = Color(0.42, 0.28, 0.19), hair_color = Color(0.12, 0.1, 0.09)},
+	{preset = "blue_tank", top = "leather_vest", legs = "lederhose", hat = "cap", hat_color = Color(0.55, 0.15, 0.12), skin = Color(0.6, 0.4, 0.27), forehead = 1.0},
 ]
 func _ready():
 	var out := OS.get_environment("TEMP") + "/outfits.png"
@@ -31,17 +31,18 @@ func _ready():
 	root.add_child(l)
 	var models := []
 	for k in looks.size():
-		var o: Dictionary = Outfit.DEFAULT.duplicate()
-		o.merge(looks[k], true)
+		var base: Dictionary = Outfit.preset_look(looks[k].get("preset", "overalls"))
+		base.merge(looks[k], true)
+		var o: Dictionary = Outfit.normalize(base)
 		var m := CharacterModel.new(o)
 		root.add_child(m)
-		m.position = Vector3((k - looks.size() * 0.5 + 0.5) * 0.85, 0, 0)
+		m.position = Vector3((k - looks.size() * 0.5 + 0.5) * 1.25, 0, 0)
 		m.rotation.y = 0.35 if k % 2 == 0 else -0.35
 		models.append(m)
 	var cam := Camera3D.new()
 	root.add_child(cam)
 	cam.fov = 30
-	cam.look_at_from_position(Vector3(0, 1.3, 8.0), Vector3(0, 0.8, 0))
+	cam.look_at_from_position(Vector3(0, 2.2, 13.0), Vector3(0, 1.2, 0))
 	for i in 30:
 		for m in models:
 			m.animate(0.016, 0.0)

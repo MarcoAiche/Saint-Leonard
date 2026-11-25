@@ -52,7 +52,7 @@ func _ready() -> void:
 			"lobby":
 				# Lobby ohne Server: zwei erfundene Mitspieler
 				Net.peers = {
-					5: {name = "Anna", outfit = GameState._colors_out(Outfit.normalize({gender = "female", top = "hoodie", hat = "beanie", shirt = Color(0.78, 0.18, 0.14)})), state = "lobby", ready = true},
+					5: {name = "Anna", outfit = GameState._colors_out(Outfit.normalize({preset = "female", top = "hoodie", hat = "beanie", shirt = Color(0.78, 0.18, 0.14)})), state = "lobby", ready = true},
 					6: {name = "Bert", outfit = GameState._colors_out(Outfit.normalize({top = "hi_vis", hat = "work_helmet", beard = "full"})), state = "lobby", ready = false},
 					7: {name = "Sepp", outfit = GameState._colors_out(Outfit.normalize({top = "trachten", legs = "lederhose"})), state = "game", ready = false},
 				}
