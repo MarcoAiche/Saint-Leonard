@@ -94,6 +94,7 @@ Alle spielen auf **einem gemeinsamen Server**, mit dem sich jeder verbindet. Die
 - **Selbsttest:** `Godot_v4.7.2-stable_win64_console.exe --headless --path . -- --selftest` muss mit `SELBSTTEST FERTIG` enden.
 - **Mehrspieler-Test:** ein Server und zwei Clients spielen alle Mehrspieler-Funktionen automatisch durch (Anleitung in [docs/CO-DEV.md](docs/CO-DEV.md)).
 - **Kartendaten neu erzeugen:** `node tools/build_world_data.mjs` (Node.js, keine Pakete). Die Spielgrenze steht in `tools/map_border.json`.
+- **Release und Server rund um die Uhr:** [docs/RELEASE.md](docs/RELEASE.md) (`tools/build_release.ps1` baut alle Plattformen und lädt sie auf Wunsch zu itch.io hoch, `tools/install_pi_server.sh` richtet den Raspberry-Pi-Server als Dienst ein).
 - **Export:** Vorlagen für Windows, Linux-Server und Raspberry Pi stehen in `export_presets.cfg`. Vorher in Godot die Export-Templates installieren.
 
 ---
