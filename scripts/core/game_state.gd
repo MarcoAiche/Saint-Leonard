@@ -282,8 +282,14 @@ func apply_world(d: Dictionary) -> void:
 	world_changed.emit()
 
 
+## DebugTools kann beim Beenden schon freigegeben sein (Autoloads werden rückwärts entfernt)
+func _debug_active() -> bool:
+	var d := get_node_or_null("/root/DebugTools")
+	return d != null and d.get("active") == true
+
+
 func save_game() -> void:
-	if (DebugTools.active and not Net.is_dedicated()) or Net.is_client():
+	if (_debug_active() and not Net.is_dedicated()) or Net.is_client():
 		return
 	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 	var d := {version = 1, profile = profile_dict(), world = world_dict(),
