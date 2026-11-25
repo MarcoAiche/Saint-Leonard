@@ -277,6 +277,7 @@ Ideen von Simon:
 ### Phase 2: Fahrzeuge, Tiere & Physik
 - **Roadkill-System (Tiere anfahren):** Fahrzeuge (Pickup/ATV) richten bei Kollision mit Tieren geschwindigkeitsabhängigen Aufprallschaden an → ab entsprechender Geschwindigkeit sofortiger Tod, Kadaver-Spawn & Wegschleuder-Impuls (inkl. Co-op-Sync).
 - **Ragdoll-Physik für getötete/angefahrene Tiere & Menschen:** Physikbasiertes Ragdoll-Verhalten (`PhysicalBoneSimulator3D` bzw. Physik-Impuls) für erlegte oder angefahrene Tiere und Charaktere — erst einbauen, sobald die finalen 3D-Modelle/Skelette stehen.
+- **Fahrzeug-Parkbremse (Wegrollen im Stand verhindern):** Geparkte Fahrzeuge (Pickup/ATV, ohne Fahrer bzw. im Stand) aktivieren automatisch eine feste Hand-/Parkbremse (`freeze`/maximale Bremskraft), damit sie an Hängen nicht von selbst wegrollen.
 
 ### Phase 2: Welt, Terrain & Straßen
 - **Straßen glätten & Kanten entfernen (Road Smoothing + Terrain Carving):**
