@@ -946,20 +946,8 @@ func _build_far_terrain() -> void:
 
 
 func _build_water() -> void:
-	var buf := MeshBuffer.new()
-	for poly_arr in data.water_areas:
-		var poly := to_v2_array(poly_arr)
-		if poly.size() < 3:
-			continue
-		var idx := Geometry2D.triangulate_polygon(poly)
-		for t in range(0, idx.size(), 3):
-			var p := [poly[idx[t]], poly[idx[t + 1]], poly[idx[t + 2]]]
-			var v: Array[Vector3] = []
-			for q: Vector2 in p:
-				v.append(Vector3(q.x, height_at(q.x, q.y) + 0.25, q.y))
-			buf.add_tri(v[0], v[1], v[2], Color(0.251, 0.722, 0.878), Vector3.UP)  # #40B8E0
-	if not buf.is_empty():
-		_mesh_node(_content, buf.to_mesh(Toon.water()), "Gewaesser")
+	# Nur kartierte Flüsse & Bäche (water_lines in _build_lines); keine stehenden Wasser-Polygone
+	return
 
 
 # ------------------------------------------------------------------ Straßen, Bahn, Bäche

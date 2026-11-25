@@ -569,9 +569,11 @@ world.buildings = world.buildings.filter((b) => {
   world.roads = keptRoads;
 }
 
-// Gleise, Wasser, Flächen & Einzelbäume filtern
+// Gleise, Wasser (nur Flüsse & Bäche, keine Gräben/Lacken), Flächen & Einzelbäume filtern
 world.rails = world.rails.flatMap((r) => clipPolyline(r.pts, inKeepZone).map((pts) => ({ ...r, pts })));
-world.water_lines = world.water_lines.flatMap((w) => clipPolyline(w.pts, inKeepZone).map((pts) => ({ ...w, pts })));
+world.water_lines = world.water_lines
+  .filter((w) => w.kind === "river" || w.kind === "stream")
+  .flatMap((w) => clipPolyline(w.pts, inKeepZone).map((pts) => ({ ...w, pts })));
 world.areas = world.areas.filter((a) =>
   a.outer.some((ring) => ring.some(([x, z]) => inKeepZone(x, z) && !inBox(x, z, townBox)))
 );
@@ -873,9 +875,7 @@ if (LOCAL) {
 }
 
 const b64 = (typed) => Buffer.from(typed.buffer, typed.byteOffset, typed.byteLength).toString("base64");
-const waterAreas = LOCAL
-  ? localSrc.water_areas.filter((poly) => poly.some(([x, z]) => inKeepZone(x, z)))
-  : world.areas.filter((a) => a.kind === "water").map((a) => a.outer).flat();
+const waterAreas = [];
 const out = {
   info: {
     name: "Riegersdorf", origin_lat: LAT0, origin_lon: LON0, base_height: BASE,
