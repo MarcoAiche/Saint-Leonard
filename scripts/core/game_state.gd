@@ -33,6 +33,7 @@ var photos: Array = []  # Pfade unter user://photos
 var story := {chapter = 1, step = 0, done = false}
 var side_jobs: Array = []
 var stats := {deer = 0, boar = 0, rabbit = 0, bear = 0, bottles = 0, fines = 0}
+var trophies: Array = []  # Trophäenwand im Gasthaus: [{sp, score, unit, day, hung}]
 var minimap_on := true
 
 # ---------------------------------------------------------------- gemeinsame Welt
@@ -248,7 +249,7 @@ func profile_dict() -> Dictionary:
 	return {
 		player_name = player_name, money = money, inv = inv, inv_layout = inv_layout, loaded = loaded, health = health, bac = bac,
 		outfit = _colors_out(outfit), truck = truck, house = house, furniture = furniture, photos = photos,
-		story = story, side_jobs = side_jobs, stats = stats, minimap_on = minimap_on,
+		story = story, side_jobs = side_jobs, stats = stats, trophies = trophies, minimap_on = minimap_on,
 	}
 
 
@@ -357,6 +358,7 @@ func reset_new_game() -> void:
 	story = {chapter = 1, step = 0, done = false}
 	side_jobs = []
 	stats = {deer = 0, boar = 0, rabbit = 0, bear = 0, bottles = 0, fines = 0}
+	trophies = []
 	time = 7.0
 	day = 1
 	weather = "fog"

@@ -635,6 +635,9 @@ func _harvest(c: Carcass) -> void:
 	if c.species == "legend":
 		missions.event("legend_killed")
 	hud.toast("Ausgenommen: " + ", ".join(parts), 3.5)
+	var trophy := TrophyBoard.record(c.species, c.male, c.net_id)
+	if trophy != "":
+		GameState.notify("Wirt Sepp", trophy)
 	Net.carcass_removed(c.net_id)
 	c.queue_free()
 
@@ -894,6 +897,8 @@ func decorate_pub_trophy() -> void:
 	t.scale = Vector3.ONE * 2.5
 	t.look_at(t.global_position + out, Vector3.UP)
 	t.rotate_object_local(Vector3.UP, PI)
+	if gasthaus and gasthaus.board:
+		gasthaus.board.refresh.call_deferred()  # Ehrenplatz für den Riesenhirsch
 
 
 func start_festival() -> void:

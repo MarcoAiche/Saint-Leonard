@@ -15,6 +15,7 @@ var world: WorldBuilder
 var size := Vector2(16, 12)
 var door := Vector3.ZERO  # Weltposition vor der Tür
 var trophy_wall := Transform3D.IDENTITY  # lokale Lage der Trophäenwand (Mitte, Blick in den Raum)
+var board: TrophyBoard
 
 
 ## Lage und Größe aus dem Gebäude in den Kartendaten (Tür auf der Straßenseite)
@@ -227,8 +228,11 @@ func _furnish(hx: float, hz: float) -> void:
 	stove.position = Vector3(hx - 1.5, 0.15, -hz + 0.9)
 	add_child(stove)
 	# Trophäenwand: linke Wand, frei für Geweihe (Issue #9)
-	trophy_wall = Transform3D(Basis(Vector3.UP, PI / 2), Vector3(-hx + 0.22, 2.2, 1.0))
-	_box(Vector3(0.04, 1.6, 4.4), Vector3(-hx + 0.2, 2.25, 1.0), dark)
+	trophy_wall = Transform3D(Basis(Vector3.UP, PI / 2), Vector3(-hx + 0.25, 2.2, 1.0))
+	_box(Vector3(0.04, 1.9, 4.6), Vector3(-hx + 0.2, 2.25, 1.0), dark)
+	board = TrophyBoard.new()
+	board.name = "Trophaeenwand"
+	board.setup(game, self, trophy_wall)
 
 
 func _table_with_benches(p: Vector3) -> void:
