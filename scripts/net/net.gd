@@ -572,7 +572,7 @@ func send_chat(text: String) -> void:
 func _chat(from: String, text: String) -> void:
 	if is_server():
 		print("[Server] Chat %s: %s" % [from, text])
-		if text == "!razzia" and DebugTools.args.has("mptest") and game and game.casino:
+		if text == "!razzia" and get_node_or_null("/root/DebugTools") != null and DebugTools.args.has("mptest") and game and game.casino:
 			game.casino.start_raid()
 		return
 	GameState.notify(from, text)
