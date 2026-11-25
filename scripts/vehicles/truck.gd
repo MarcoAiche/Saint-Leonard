@@ -35,7 +35,7 @@ func _ready() -> void:
 	mass = 1900.0
 	center_of_mass = Vector3(0, -0.35, 0.2)
 	max_engine_force = 7500.0
-	top_speed_kmh = 150.0
+	top_speed_kmh = 135.0
 	_body = Node3D.new()
 	_body.name = "Karosserie"
 	add_child(_body)

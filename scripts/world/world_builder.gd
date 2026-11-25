@@ -684,6 +684,30 @@ func border_distance(p: Vector2) -> float:
 	return best if inside_border(p) else -best
 
 
+## Border-sicherer, bodengenauer Spawn-Transform (Terrain + Physics-Raycast nach unten, mit Fallback auf Heimat-Spawn)
+func find_safe_spawn_transform(pos: Vector3, yaw: float, fallback_pos: Vector3, fallback_yaw: float, clearance := 1.0, exclude: Array = []) -> Transform3D:
+	var use_pos := pos
+	var use_yaw := yaw if is_finite(yaw) else fallback_yaw
+	var valid := use_pos.is_finite() and inside_border(Vector2(use_pos.x, use_pos.z))
+	if not valid:
+		use_pos = fallback_pos
+		use_yaw = fallback_yaw
+	var ground_y := height_at(use_pos.x, use_pos.z)
+	if is_inside_tree() and get_world_3d() != null:
+		var space := get_world_3d().direct_space_state
+		if space != null:
+			var from_p := Vector3(use_pos.x, ground_y + 30.0, use_pos.z)
+			var to_p := Vector3(use_pos.x, ground_y - 20.0, use_pos.z)
+			var query := PhysicsRayQueryParameters3D.create(from_p, to_p, 1, exclude)
+			var hit := space.intersect_ray(query)
+			if not hit.is_empty():
+				var hy: float = hit.position.y
+				if absf(hy - ground_y) < 15.0:
+					ground_y = maxf(ground_y, hy)
+	var b := Basis(Vector3.UP, use_yaw)
+	return Transform3D(b, Vector3(use_pos.x, ground_y + clearance, use_pos.z))
+
+
 ## Nächster Punkt auf einer Straße: {pos, dir, name, kind, dist}
 func nearest_road(p: Vector2, kinds_filter: Array = [], max_dist := 200.0) -> Dictionary:
 	var best := {dist = INF, name = ""}

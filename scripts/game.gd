@@ -367,12 +367,16 @@ func _start_game() -> void:
 		Net.send_lobby_state("game", false)
 	hud.visible = true
 	var sp: Dictionary = landmarks.spawn
+	var look: Vector2 = sp.look
+	var fb_player_yaw := atan2(-look.x, -look.y)
 	player = Player.new()
 	player.name = "Spieler"
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
 	player.add_to_group("player_body")
 	add_child(player)
-	player.global_position = sp.pos
+	var p_xf := world.find_safe_spawn_transform(GameState.player_pos, GameState.player_rot_y, sp.pos, fb_player_yaw, 0.25)
+	player.global_position = p_xf.origin
+	player.rotation.y = p_xf.basis.get_euler().y
 	player.reset_physics_interpolation()
 	player.shot.connect(_on_shot)
 
@@ -387,27 +391,41 @@ func _start_game() -> void:
 		atv.name = "ATV"
 		atv.world = world
 		add_child(atv)
-		atv.global_position = landmarks.atv_spawn.pos
-		atv.rotation.y = landmarks.atv_spawn.yaw
+		var atv_saved: Dictionary = GameState.vehicles_state.get("atv", {})
+		var atv_pos := GameState._v3_from_arr(atv_saved.get("pos", null))
+		var atv_yaw := float(atv_saved.get("rot", landmarks.atv_spawn.yaw))
+		atv.global_transform = world.find_safe_spawn_transform(atv_pos, atv_yaw, landmarks.atv_spawn.pos, landmarks.atv_spawn.yaw, 1.0, [atv.get_rid()])
 		atv.reset_physics_interpolation()
 		Animal.threats.append(atv)
 	car.process_mode = Node.PROCESS_MODE_PAUSABLE
 	car.add_to_group("vehicle")
 	add_child(car)
-	car.place_at(sp.car_pos, sp.car_dir)
+	var fb_car_yaw := atan2(sp.car_dir.x, sp.car_dir.z)
+	var tr_saved: Dictionary = GameState.vehicles_state.get("truck", {})
+	var tr_pos := GameState._v3_from_arr(tr_saved.get("pos", null))
+	var tr_yaw := float(tr_saved.get("rot", fb_car_yaw))
+	car.global_transform = world.find_safe_spawn_transform(tr_pos, tr_yaw, sp.car_pos, fb_car_yaw, 1.2, [car.get_rid()])
+	car.reset_physics_interpolation()
 	car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
 	interactions.add(Truck.BED_SLOTS[0] + Vector3(0.45, 0.6, -0.4), 2.6, func(): return "Ladung lösen" if car.strapped else "Ladung festzurren", func(): _toggle_straps(car), func(): GameState.has("straps") and seat == "", car)
+	interactions.add(Vector3(0, 0.5, 0), 3.2, "Fahrzeug aufstellen [E]", func(): car.respawn_safe(sp.car_pos, fb_car_yaw), func(): seat == "" and car.global_basis.y.y < 0.65, car)
 	if GameState.truck.get("trailer", false):
 		_spawn_trailer()
+		var tl_saved: Dictionary = GameState.vehicles_state.get("trailer", {})
+		var tl_pos := GameState._v3_from_arr(tl_saved.get("pos", null))
+		if tl_pos.is_finite() and trailer:
+			trailer.global_transform = world.find_safe_spawn_transform(tl_pos, float(tl_saved.get("rot", fb_car_yaw)), car.global_position - car.global_basis.z * 7.0, car.rotation.y, 0.8, [trailer.get_rid()])
+			trailer.reset_physics_interpolation()
 
 	rig = CameraRig.new()
 	rig.name = "Kamera"
 	rig.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(rig)
 	player.attach_camera(rig)
-	var look: Vector2 = sp.look
-	rig.yaw = atan2(-look.x, -look.y)
+	rig.yaw = fb_player_yaw
 	rig.set_target(player, 1.65, 5.0, false, _foot_fp)
+	if not GameState.about_to_save.is_connected(_sync_state_for_save):
+		GameState.about_to_save.connect(_sync_state_for_save)
 
 	Animal.threats.assign([player, car])
 	spawner.players.assign([player])
@@ -575,20 +593,51 @@ func _select_slot(s: String, label: String) -> void:
 	hud.toast(err if not err.is_empty() else label, 1.2)
 
 
+func _sync_state_for_save() -> void:
+	if player and is_instance_valid(player):
+		GameState.player_pos = seat_truck.global_position if seat_truck and is_instance_valid(seat_truck) else player.global_position
+		GameState.player_rot_y = player.rotation.y
+	var vs := {}
+	if car and is_instance_valid(car):
+		vs["truck"] = {
+			pos = [car.global_position.x, car.global_position.y, car.global_position.z],
+			rot = car.rotation.y,
+			fuel = GameState.truck.get("fuel", Truck.TANK),
+			damage = GameState.truck.get("damage", 0.0),
+			cargo = GameState.truck.get("cargo", []),
+		}
+	if atv and is_instance_valid(atv):
+		vs["atv"] = {
+			pos = [atv.global_position.x, atv.global_position.y, atv.global_position.z],
+			rot = atv.rotation.y,
+		}
+	if trailer and is_instance_valid(trailer):
+		vs["trailer"] = {
+			pos = [trailer.global_position.x, trailer.global_position.y, trailer.global_position.z],
+			rot = trailer.rotation.y,
+			hitched = trailer.towed_by != null,
+		}
+	GameState.vehicles_state = vs
+
+
 func _vehicle_input(event: InputEvent) -> void:
+	var veh: Vehicle = seat_truck if seat_truck else car
+	if veh == null:
+		return
 	if event.is_action_pressed("reset_vehicle"):
-		var why := car.can_flip()
+		var why := veh.can_flip()
 		if why.is_empty():
-			car.flip_upright()
+			var sp: Dictionary = landmarks.spawn
+			veh.respawn_safe(sp.car_pos, atan2(sp.car_dir.x, sp.car_dir.z))
 		else:
 			hud.toast(why, 1.5)
 	elif event.is_action_pressed("horn"):
-		car.honk()
-		Net.fx("horn", car.global_position)
+		veh.honk()
+		Net.fx("horn", veh.global_position)
 	elif event.is_action_pressed("radio"):
-		hud.toast(car.next_station())
+		hud.toast(veh.next_station())
 	elif event.is_action_pressed("winch"):
-		hud.toast(car.toggle_winch(), 3.0)
+		hud.toast(veh.toggle_winch(), 3.0)
 
 
 func set_paused(on: bool) -> void:

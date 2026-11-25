@@ -9,13 +9,17 @@ signal noise_made(pos: Vector3, radius: float, kind: String)
 signal message(from: String, text: String)
 signal world_changed  # aufgestellte Dinge oder Häuser haben sich geändert
 signal stats_changed
+signal about_to_save
 
 const SAVE_DIR := "user://saves"
+const SAVE_SCHEMA := 2
 const DAY_MINUTES := 24.0  # ein Spieltag dauert 24 echte Minuten
 const MAG_SIZE := 5
 
 # ---------------------------------------------------------------- Spielerprofil
 var player_name := "Jäger"
+var player_pos := Vector3.INF
+var player_rot_y := 0.0
 var money := 600
 var inv := {}  # id -> Anzahl
 var inv_layout := {}  # id -> [x, y] im Rucksack-Raster
@@ -46,6 +50,7 @@ var wetness := 0.0  # 0 trocken .. 1 alles Matsch
 var placed: Array = []  # [{uid, type, pos:[x,y,z], rot, owner, data:{}}]
 var houses := {}  # Bauplatz (String) -> {owner, type}
 var police_heat := 0.0  # steigt bei Explosionen, Verfolgungen
+var vehicles_state := {}  # {truck:{pos,rot,...}, atv:{pos,rot}, trailer:{pos,rot,hitched}}
 
 var slot := "einzelspieler"
 var slot_title := "Einzelspieler"
@@ -293,31 +298,109 @@ func _debug_active() -> bool:
 	return d != null and d.get("active") == true
 
 
+func _slot_dir(s := slot) -> String:
+	return SAVE_DIR.path_join(s)
+
+
+static func _write_json_atomic(path: String, data: Dictionary) -> bool:
+	var dir := path.get_base_dir()
+	DirAccess.make_dir_recursive_absolute(dir)
+	var tmp := path + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(data))
+	f.flush()
+	f.close()
+	var err := DirAccess.rename_absolute(tmp, path)
+	if err != OK:
+		DirAccess.remove_absolute(tmp)
+		return false
+	return true
+
+
+static func _read_json_safe(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var txt := FileAccess.get_file_as_string(path)
+	if txt.is_empty():
+		return {}
+	var parsed = JSON.parse_string(txt)
+	return parsed if typeof(parsed) == TYPE_DICTIONARY else {}
+
+
+static func _v3_from_arr(v) -> Vector3:
+	if v is Array and v.size() >= 3:
+		var x := float(v[0])
+		var y := float(v[1])
+		var z := float(v[2])
+		if is_finite(x) and is_finite(y) and is_finite(z):
+			return Vector3(x, y, z)
+	return Vector3.INF
+
+
 func save_game() -> void:
 	if (_debug_active() and not Net.is_dedicated()) or Net.is_client():
 		return
-	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
-	var d := {version = 1, profile = profile_dict(), world = world_dict(),
-		meta = {title = slot_title, player = player_name, day = day, money = money, chapter = story.get("chapter", 1), saved = Time.get_datetime_string_from_system(false, true), playtime = playtime}}
+	about_to_save.emit()
+	DirAccess.make_dir_recursive_absolute(_slot_dir())
+	var meta := {
+		title = slot_title, player = player_name, day = day, money = money,
+		chapter = story.get("chapter", 1), saved = Time.get_datetime_string_from_system(false, true), playtime = playtime,
+	}
+	var p_data := {
+		schema = SAVE_SCHEMA,
+		player_pos = [player_pos.x, player_pos.y, player_pos.z] if player_pos.is_finite() else null,
+		player_rot_y = player_rot_y,
+		profile = profile_dict(),
+		meta = meta,
+	}
+	var w_data := {
+		schema = SAVE_SCHEMA,
+		world = world_dict(),
+		vehicles = vehicles_state,
+		police_heat = police_heat,
+		meta = meta,
+	}
 	if Net.is_server():
-		d.profiles = Net.profiles
-	var f := FileAccess.open("%s/%s.json" % [SAVE_DIR, slot], FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(d))
+		w_data.profiles = Net.profiles
+	_write_json_atomic(_slot_dir().path_join("player_save.json"), p_data)
+	_write_json_atomic(_slot_dir().path_join("world_save.json"), w_data)
+	# Meta-Index für bestehende Spielstand-Liste
+	_write_json_atomic("%s/%s.json" % [SAVE_DIR, slot], {schema = SAVE_SCHEMA, meta = meta})
 
 
 func load_game() -> bool:
+	var p_save := _read_json_safe(_slot_dir().path_join("player_save.json"))
+	var w_save := _read_json_safe(_slot_dir().path_join("world_save.json"))
+	if not p_save.is_empty() or not w_save.is_empty():
+		if not p_save.is_empty():
+			apply_profile(p_save.get("profile", {}))
+			player_pos = _v3_from_arr(p_save.get("player_pos", null))
+			player_rot_y = float(p_save.get("player_rot_y", 0.0))
+		if not w_save.is_empty():
+			apply_world(w_save.get("world", {}))
+			var v = w_save.get("vehicles", {})
+			vehicles_state = v if typeof(v) == TYPE_DICTIONARY else {}
+			police_heat = float(w_save.get("police_heat", 0.0))
+			if w_save.has("profiles"):
+				Net.profiles = w_save.profiles
+		var m: Dictionary = p_save.get("meta", w_save.get("meta", {}))
+		slot_title = str(m.get("title", slot))
+		playtime = float(m.get("playtime", 0.0))
+		return true
+	# Fallback auf älteres Einzel-Save
 	var p := "%s/%s.json" % [SAVE_DIR, slot]
-	if not FileAccess.file_exists(p):
+	var d := _read_json_safe(p)
+	if d.is_empty():
 		return false
-	var d = JSON.parse_string(FileAccess.get_file_as_string(p))
-	if typeof(d) != TYPE_DICTIONARY:
-		return false
-	apply_profile(d.get("profile", {}))
-	apply_world(d.get("world", {}))
-	var m: Dictionary = d.get("meta", {})
-	slot_title = m.get("title", slot)
-	playtime = float(m.get("playtime", 0.0))
+	if d.has("profile"):
+		apply_profile(d.get("profile", {}))
+	if d.has("world"):
+		apply_world(d.get("world", {}))
+	var m_leg: Dictionary = d.get("meta", {})
+	slot_title = str(m_leg.get("title", slot))
+	playtime = float(m_leg.get("playtime", 0.0))
 	if d.has("profiles"):
 		Net.profiles = d.profiles
 	return true
@@ -345,6 +428,12 @@ static func list_saves() -> Array:
 
 static func delete_save(s: String) -> void:
 	DirAccess.remove_absolute("%s/%s.json" % [SAVE_DIR, s])
+	var sdir := SAVE_DIR.path_join(s)
+	var d := DirAccess.open(sdir)
+	if d:
+		for f in d.get_files():
+			DirAccess.remove_absolute(sdir.path_join(f))
+		DirAccess.remove_absolute(sdir)
 
 
 static func new_slot_name(title: String) -> String:
@@ -356,6 +445,9 @@ static func new_slot_name(title: String) -> String:
 
 func reset_new_game() -> void:
 	playtime = 0.0
+	player_pos = Vector3.INF
+	player_rot_y = 0.0
+	vehicles_state = {}
 	money = 600
 	inv = {"pistol": 1, "assault_rifle": 1, "sniper": 1, "ammo": 80, "knife": 1, "flashlight": 1, "beer": 3, "cigarettes": 10, "snack": 2}
 	loaded = MAG_SIZE

@@ -7,7 +7,7 @@ extends VehicleBody3D
 @export var max_engine_force := 6500.0
 @export var max_brake := 50.0
 @export var max_steer := 0.55
-@export var top_speed_kmh := 150.0
+@export var top_speed_kmh := 140.0
 @export var reverse_speed_kmh := 25.0
 
 var world: WorldBuilder
@@ -308,24 +308,45 @@ func can_flip() -> String:
 	return ""
 
 
-func flip_upright() -> void:
+func flip_upright(fallback_pos := Vector3.INF, fallback_yaw := 0.0) -> void:
+	respawn_safe(fallback_pos, fallback_yaw)
+
+
+## Richtet das Fahrzeug sicher auf, nullt Geschwindigkeiten und setzt es bodengenau (bei Out-of-Bounds auf den Heimat-Parkplatz)
+func respawn_safe(fallback_pos := Vector3.INF, fallback_yaw := 0.0) -> void:
+	if puppet or Net.is_client():
+		return
 	_flip_cd = 5.0
 	var f := global_basis.z
-	f.y = 0
-	if f.length() < 0.1:
-		f = Vector3.BACK
-	var p := global_position
+	f.y = 0.0
+	var yaw := atan2(f.x, f.z) if f.length() >= 0.1 else fallback_yaw
+	var target_pos := global_position
+	var fb_pos := fallback_pos if fallback_pos.is_finite() else Vector3(1170.0, 0.0, 10.0)
 	if world:
-		p.y = world.height_at(p.x, p.z) + 1.3
-	global_transform = Transform3D(Basis.looking_at(-f.normalized(), Vector3.UP), p)
+		var p2 := Vector2(target_pos.x, target_pos.z)
+		if not world.inside_border(p2):
+			target_pos = fb_pos
+			yaw = fallback_yaw
+		else:
+			var ri := world.road_info(p2, 45.0)
+			if ri.tier != 0:
+				target_pos = Vector3(ri.pos.x, target_pos.y, ri.pos.y)
+		global_transform = world.find_safe_spawn_transform(target_pos, yaw, fb_pos, fallback_yaw, 1.25, [get_rid()])
+	else:
+		global_transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(target_pos.x, target_pos.y + 1.25, target_pos.z))
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
+	_last_vel = Vector3.ZERO
 	reset_physics_interpolation()
 
 
 func place_at(pos: Vector3, forward: Vector3) -> void:
-	var y := world.height_at(pos.x, pos.z) + 1.2 if world else pos.y
-	global_transform = Transform3D(Basis.looking_at(-forward.normalized(), Vector3.UP), Vector3(pos.x, y, pos.z))
+	var f := Vector3(forward.x, 0.0, forward.z)
+	var yaw := atan2(f.x, f.z) if f.length() > 0.05 else 0.0
+	if world:
+		global_transform = world.find_safe_spawn_transform(pos, yaw, pos, yaw, 1.2, [get_rid()])
+	else:
+		global_transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	_last_vel = Vector3.ZERO
