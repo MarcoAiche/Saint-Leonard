@@ -202,6 +202,8 @@ func _ready() -> void:
 			Input.parse_input_event(up)
 			await get_tree().process_frame
 			print("Taste %s -> Hand: %s, Zigaretten: %d, Rauchzeit %.0f, Menüs offen: %s" % [OS.get_keycode_string(k), game.player.hand.slot, GameState.count("cigarettes"), GameState.smoke_time, game.hud.menus_open()])
+	if args.has("trailertest"):
+		await _trailer_test(game)
 	if args.has("selftest"):
 		await _selftest(game)
 	if args.has("aim"):
@@ -426,6 +428,64 @@ func _selftest(game: Game) -> void:
 	print("  Server-Port frei: ", test_peer.create_server(24699) == OK)
 	test_peer.close()
 	print("SELBSTTEST FERTIG")
+
+
+## Anhänger: kaufen, ankuppeln, ziehen, Ladung mit und ohne Gurte (-- --trailertest)
+func _trailer_test(game: Game) -> void:
+	GameState.money = 10000
+	GameState.give("trailer")
+	game.on_bought("trailer", "bauhaus")
+	await get_tree().create_timer(1.0).timeout
+	var t: Trailer = game.trailer
+	print("TRAILER gekauft: %s, ankuppelbar: %s" % [t != null, t.can_couple(game.car) if t else false])
+	# auf eine gerade Straße stellen und ankuppeln
+	var sp: Dictionary = game.landmarks.spawn
+	game.car.place_at(sp.car_pos + sp.car_dir * 10.0, sp.car_dir)
+	await get_tree().create_timer(0.5).timeout
+	t.couple(game.car)
+	await get_tree().create_timer(1.0).timeout
+	var d0: float = t.hitch_point().distance_to(game.car.global_transform * Truck.HITCH)
+	print("TRAILER angekuppelt: %s, Abstand Kupplung %.2f m" % [t.towed_by != null, d0])
+	# Wild aufladen (ohne Gurte)
+	for k in 2:
+		var deer := game.spawner.spawn("deer", game.player.global_position + Vector3(3 + k, 0, 0), 8800 + k, k)
+		await get_tree().physics_frame
+		var c: Carcass = deer.die(Vector3.RIGHT)
+		await get_tree().physics_frame
+		t.load_cargo(c)
+	print("TRAILER Ladung: %d" % t.cargo.size())
+	var start := t.global_position
+	game.player.global_position = game.car.global_position + Vector3(2, 0.5, 0)
+	game.enter_vehicle(game.car, "driver")
+	Input.action_press("move_forward")
+	await get_tree().create_timer(4.0).timeout
+	Input.action_release("move_forward")
+	var moved := t.global_position.distance_to(start)
+	var gap := t.hitch_point().distance_to(game.car.global_transform * Truck.HITCH)
+	print("TRAILER gezogen: %.0f m, Pickup %.0f km/h, Kupplungsabstand %.2f m, aufrecht %.2f, Ladung %d" % [moved, game.car.speed_kmh(), gap, t.global_basis.y.y, t.cargo.size()])
+	# Holperstrecke simulieren: ohne Gurte fällt etwas runter, mit Gurten nicht
+	t.set_strapped(false)
+	var lost := 0
+	t.cargo_lost.connect(func(_n): lost += 1)
+	t.world = null
+	t.strapped = false
+	print("TRAILER Gurte: Pickup %s, Anhänger %s" % [game.car.strapped, t.strapped])
+	t.set_strapped(true)
+	t._check_cargo(1.0)
+	print("TRAILER festgezurrt, Ladung bleibt: %d" % t.cargo.size())
+	game.car.linear_velocity = Vector3.ZERO
+	game.exit_vehicle()
+	t.uncouple()
+	print("TRAILER abgekuppelt: %s" % (t.towed_by == null))
+	if args.has("shot"):
+		# Blick auf Pickup und Anhänger
+		if game.rig.first_person:
+			game.rig.toggle_view()
+		var dv: Vector3 = t.global_position - game.player.global_position
+		game.rig.yaw = atan2(-dv.x, -dv.z) + 0.5
+		game.rig.pitch = -0.35
+		game.rig.distance = 10.0
+		await get_tree().create_timer(1.0).timeout
 
 
 static func _floats(s: String) -> Array:

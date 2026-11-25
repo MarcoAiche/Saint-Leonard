@@ -9,6 +9,7 @@ extends Vehicle
 signal cargo_lost(node: Node3D)
 
 const TANK := 70.0
+const HITCH := Vector3(0, 0.1, -2.95)  # Anhängerkupplung (lokal, hinten)
 const BED_SLOTS := [Vector3(-0.45, 0.55, -1.25), Vector3(0.45, 0.55, -1.25), Vector3(-0.45, 0.55, -2.0), Vector3(0.45, 0.55, -2.0)]
 const SEATS := {driver = Vector3(0.42, 0.75, 0.25), passenger = Vector3(-0.42, 0.75, 0.25), bed_l = Vector3(-0.5, 0.9, -1.6), bed_r = Vector3(0.5, 0.9, -1.6)}
 
@@ -154,6 +155,10 @@ func rebuild() -> void:
 				var lug := _box(w, Vector3(0.38, 0.06, 0.1), Vector3(0, cos(a) * r, sin(a) * r), Color(0.08, 0.08, 0.08), false)
 				lug.rotation.x = -a
 	_add_headlights(2.3, 0.45 + lift, 0.68)
+	# Anhängerkupplung
+	_box(_body, Vector3(0.12, 0.12, 0.35), Vector3(0, -0.05, -2.95), Color(0.15, 0.15, 0.16))
+	var ball := _box(_body, Vector3(0.12, 0.12, 0.12), Vector3(0, 0.08, -3.05), Color(0.6, 0.6, 0.62))
+	ball.name = "Kupplungskugel"
 	set_lights(lights_on)
 	grip_mult = 1.0
 	offroad_mult = 1.45 if mud else 1.0
@@ -204,7 +209,7 @@ func _on_bump(speed: float) -> void:
 	if speed > 60.0:
 		GameState.truck.damage = minf(100.0, GameState.truck.damage + (speed - 60.0) * 0.0015 * protect)
 	# Ladung kann herunterfallen
-	if speed > 35.0 and not GameState.has("straps") and not cargo.is_empty() and randf() < (speed - 35.0) * 0.006:
+	if speed > 35.0 and not strapped and not cargo.is_empty() and randf() < (speed - 35.0) * 0.006:
 		_drop_cargo(cargo.back(), true)
 
 
@@ -228,6 +233,22 @@ func next_station() -> String:
 
 func has_space() -> bool:
 	return cargo.size() < BED_SLOTS.size()
+
+
+## Ladung mit Spanngurten sichern (gelbe Gurte über der Ladefläche)
+var strapped := false
+var _strap_node: Node3D
+
+
+func set_strapped(on: bool) -> void:
+	strapped = on
+	if _strap_node == null:
+		_strap_node = Node3D.new()
+		add_child(_strap_node)
+		for z in [-1.25, -2.0]:
+			_box(_strap_node, Vector3(1.84, 0.03, 0.08), Vector3(0, 1.05, z), Color(0.98, 0.78, 0.1), false)
+	_strap_node.position.y = _body.position.y
+	_strap_node.visible = on
 
 
 func load_cargo(n: Node3D) -> bool:
@@ -270,7 +291,7 @@ func _drop_cargo(n: Node3D, thrown: bool) -> void:
 
 func _check_cargo() -> void:
 	# Ladung ohne Gurte rutscht bei starkem Kippen herunter
-	if not cargo.is_empty() and global_basis.y.y < 0.5 and not GameState.has("straps"):
+	if not cargo.is_empty() and global_basis.y.y < 0.5 and not strapped:
 		_drop_cargo(cargo.back(), true)
 
 
