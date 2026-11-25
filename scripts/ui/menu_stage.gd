@@ -324,7 +324,7 @@ func set_lineup(players: Array) -> void:
 			var lbl := Label3D.new()
 			lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 			lbl.font_size = 44
-			lbl.pixel_size = 0.005
+			lbl.pixel_size = 0.0038
 			lbl.outline_size = 12
 			add_child(lbl)
 			var holder := Node3D.new()
@@ -337,15 +337,16 @@ func set_lineup(players: Array) -> void:
 			_set_lineup_model(id, p.outfit)
 		# Formation: 0, -1, +1, -2, +2 ... leicht nach hinten versetzt
 		var slot := 0 if k == 0 else (((k + 1) / 2) * (-1 if k % 2 == 1 else 1))
-		var pos := _stage.origin + _stage.basis.x * (slot * 1.6) - _stage.basis.z * (absf(slot) * 0.45)
+		var pos := _stage.origin + _stage.basis.x * (slot * 1.9) - _stage.basis.z * (absf(slot) * 0.45)
 		pos.y = world.height_at(pos.x, pos.z)
 		var holder: Node3D = e.holder
 		holder.global_transform = Transform3D(_stage.basis.rotated(Vector3.UP, -slot * 0.12), pos)
 		var lbl: Label3D = e.label
 		var status := "im Spiel" if p.state == "game" else ("BEREIT" if p.ready else "wartet")
-		lbl.text = "%s\n%s" % [p.name, status]
+		lbl.text = "%s
+%s" % [p.name, status]
 		lbl.modulate = Color(0.55, 0.95, 0.45) if p.ready and p.state != "game" else (Color(0.75, 0.8, 1.0) if p.state == "game" else Color(1, 0.95, 0.8))
-		lbl.global_position = pos + Vector3.UP * 2.75
+		lbl.global_position = pos + _stage.basis.z * 0.7 + Vector3.UP * 0.5  # Namensschild vor den Füßen
 		holder.visible = shot == "lobby"
 		lbl.visible = shot == "lobby"
 	for id in _lineup.keys():

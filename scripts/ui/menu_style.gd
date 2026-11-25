@@ -110,3 +110,23 @@ static func panel(min_w := 0.0) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.custom_minimum_size.x = min_w
 	return p
+
+
+## Helle Kästchen für CheckBoxen auf dunklem Glas (die Standard-Symbole sind dunkel)
+static func check_icon(checked: bool) -> ImageTexture:
+	var n := 20
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for x in n:
+		for y in n:
+			var edge := x < 2 or y < 2 or x >= n - 2 or y >= n - 2
+			if edge:
+				img.set_pixel(x, y, TEXT)
+			elif checked:
+				img.set_pixel(x, y, Color(0.42, 0.78, 0.3))
+	if checked:
+		for k in 8:
+			for t in 2:
+				img.set_pixel(5 + k / 2, 9 + k / 2 + t, Color(1, 1, 1))
+				img.set_pixel(9 + k, 13 - k + t, Color(1, 1, 1))
+	return ImageTexture.create_from_image(img)

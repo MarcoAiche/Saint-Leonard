@@ -132,8 +132,9 @@ func page_home() -> void:
 	var who := HBoxContainer.new()
 	who.anchor_top = 1.0
 	who.anchor_bottom = 1.0
-	who.offset_left = 28
-	who.offset_top = -58
+	who.offset_left = 32
+	who.offset_bottom = -32
+	who.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_title.add_child(who)
 	who.add_child(MenuStyle.label("Spieler: " + (_name if not _name.is_empty() else "(noch kein Name)"), 18))
 	var change := Button.new()
@@ -147,9 +148,9 @@ func page_home() -> void:
 	ver.anchor_top = 1.0
 	ver.anchor_bottom = 1.0
 	ver.offset_left = -420
-	ver.offset_right = -28
-	ver.offset_top = -56
-	ver.offset_bottom = -14
+	ver.offset_right = -32
+	ver.offset_top = -74
+	ver.offset_bottom = -32
 	_title.add_child(ver)
 	if first:
 		first.call_deferred("grab_focus")
@@ -339,31 +340,19 @@ func page_multi() -> void:
 
 
 func page_settings() -> void:
-	_clear()
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", Hud._style(Hud.PAPER))
-	panel.theme = Hud.make_theme()
-	panel.custom_minimum_size.x = 560
-	panel.anchor_left = 1.0
-	panel.anchor_right = 1.0
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	panel.offset_right = -48
-	_root.add_child(panel)
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
-	panel.add_child(vb)
-	var t := Label.new()
-	t.text = "Einstellungen"
-	t.add_theme_font_size_override("font_size", 30)
-	vb.add_child(t)
+	var vb := _page("Einstellungen", 620)
 	Menus.settings_ui(vb)
-	var back := Button.new()
-	back.text = "Zurück"
-	back.pressed.connect(func(): page_home())
-	vb.add_child(back)
+	# settings_ui ist für das helle Pausemenü gebaut: auf dem dunklen Glas helle Schrift
+	for c in vb.find_children("*", "CheckBox", true, false):
+		for st in ["font_color", "font_pressed_color", "font_hover_color", "font_focus_color", "font_hover_pressed_color"]:
+			(c as CheckBox).add_theme_color_override(st, MenuStyle.TEXT)
+		(c as CheckBox).add_theme_icon_override("unchecked", MenuStyle.check_icon(false))
+		(c as CheckBox).add_theme_icon_override("checked", MenuStyle.check_icon(true))
+	for l in vb.find_children("*", "Label", true, false):
+		if not (l as Label).has_theme_color_override("font_color") or (l as Label).get_theme_color("font_color") == Hud.INK:
+			(l as Label).add_theme_color_override("font_color", MenuStyle.TEXT)
+	_button(vb, "Zurück", func(): page_home())
+	_finish(vb)
 
 
 # ------------------------------------------------------------------ Figur (Duckov-artig: Spiegel)
@@ -435,7 +424,8 @@ func show_lobby() -> void:
 	left.anchor_top = 1.0
 	left.anchor_bottom = 1.0
 	left.offset_left = 32
-	left.offset_top = -86
+	left.offset_bottom = -32
+	left.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_lobby_ui.add_child(left)
 	var fig := MenuStyle.big_button("Figur ändern", MenuStyle.TEAL, 20)
 	fig.pressed.connect(func(): page_figure("lobby"))

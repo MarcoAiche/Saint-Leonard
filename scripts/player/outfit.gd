@@ -183,7 +183,7 @@ static func unlock_hint(key: String, id: String) -> String:
 		return "An der Werkbank herstellen: " + ", ".join(parts)
 	var shops: Array = Items.info(item).get("shops", [])
 	if not shops.is_empty():
-		return "Zu kaufen: %s, %d €" % [Items.SHOP_NAMES.get(shops[0], shops[0]), int(Items.info(item).price)]
+		return "Zu kaufen: %s, $%d" % [Items.SHOP_NAMES.get(shops[0], shops[0]), int(Items.info(item).price)]
 	return "Noch nicht freigeschaltet"
 
 
