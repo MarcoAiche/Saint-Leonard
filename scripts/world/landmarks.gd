@@ -3,15 +3,25 @@ extends Node3D
 ## Spielorte aus dem Konzept, gesetzt auf die echte Karte:
 ##  - Saint Leonard (Heimatdorf: Riegersdorf + St. Leonhard) mit Gasthaus Pirtscher, Werkstatt und 10 Bauplätzen
 ##  - Tankstelle auf halbem Weg (echte Tankstelle bei Hart, an der Gail)
-##  - die Stadt im Nordosten (Fürnitz) mit Supermarkt, Bauhaus, Waffengeschäft, Fleischerei und Polizei
+##  - die Stadt Villach im Nordosten: Bauhaus, Supermarkt, Waffengeschäft, Fleischerei und Polizei in
+##    den echten Gebäuden (OSM-Namen in CITY_SHOPS, Issue #17)
 ##  - Polizeikontrolle an der Hauptstraße vor der Stadt
 ## Alles wird beim Start aus den Weltdaten berechnet (gleiches Ergebnis bei jedem Start).
 
-const CITY_PLACE := "Fürnitz"
+const CITY_PLACE := "Villach"
 const HOME_PLACE := "Sankt Leonhard bei Siebenbrünn"
 const PUB_NAME := "Gasthaus Pirtscher"
 const GAS_POI := "Eni Austria GmbH"
 const SHOP_ORDER := ["bauhaus", "super", "gun", "butcher", "police"]
+## Echte Läden in Villach: OSM-Name und ungefähre Lage in Kartenmetern (vor MAP_SCALE), damit bei
+## gleichnamigen Orten (z. B. zwei Interspar) der richtige gewählt wird
+const CITY_SHOPS := {
+	"bauhaus": ["Bauhaus", Vector2(4284, -4603)],
+	"super": ["Interspar", Vector2(4183, -5168)],
+	"gun": ["Alpen Adria Jagd & Sportwaffen", Vector2(5005, -6972)],
+	"butcher": ["Ilgenfritz", Vector2(4525, -4927)],
+	"police": ["Polizeiinspektion Auen", Vector2(4359, -5220)],
+}
 const SHOP_SIGNS := {
 	"bauhaus": ["BAUHAUS", Color(0.85, 0.10, 0.10)],
 	"super": ["SUPERMARKT", Color(0.95, 0.75, 0.10)],
@@ -44,7 +54,7 @@ func setup(w: WorldBuilder, g: Node) -> void:
 	game = g
 	_rng.seed = 4711
 	_index_buildings()
-	city_center = _place_pos(CITY_PLACE, Vector2(2700, -1490))
+	city_center = _place_pos(CITY_PLACE, Vector2(5311, -7475) * WorldBuilder.MAP_SCALE)
 	home_center = _place_pos(HOME_PLACE, Vector2(1170, 10))
 	_find_pub()
 	_find_city_shops()
@@ -159,7 +169,50 @@ func _door_point(b: Dictionary, toward: Vector2) -> Vector2:
 	return best
 
 
+## Läden in ihre echten Gebäude in Villach setzen; fehlt eines, sucht _find_city_shops_generic
+## wie früher große Gebäude rund um die Stadt
 func _find_city_shops() -> void:
+	var used: Array[Vector2] = []
+	var sum := Vector2.ZERO
+	for id in SHOP_ORDER:
+		var info: Array = CITY_SHOPS[id]
+		var hint: Vector2 = info[1] * WorldBuilder.MAP_SCALE
+		var p := Vector2.INF
+		for poi in world.data.pois:
+			if poi.name != info[0]:
+				continue
+			var q := Vector2(poi.pos[0], poi.pos[1])
+			if p == Vector2.INF or q.distance_to(hint) < p.distance_to(hint):
+				p = q
+		if p == Vector2.INF or p.distance_to(hint) > 400.0:
+			continue
+		# Gebäude, in dem der Ort liegt (oder das nächste)
+		var best: Array = []
+		var best_d := INF
+		for e in buildings_near(p, 60.0):
+			var poly := WorldBuilder.to_v2_array(e[2].pts)
+			var d: float = 0.0 if Geometry2D.is_point_in_polygon(p, poly) else e[0].distance_to(p)
+			if d < best_d:
+				best_d = d
+				best = e
+		if best.is_empty() or best_d > 40.0:
+			continue
+		var c: Vector2 = best[0]
+		var road := world.road_info(c, 80.0)
+		if road.tier == 0:
+			continue
+		var door := _door_point(best[2], road.pos)
+		var out: Vector2 = (road.pos - door).normalized()
+		shops[id] = {pos = v3(c), door = v3(door + out * 1.5), yaw = atan2(out.x, out.y), wall = door, height = float(best[2].wall)}
+		used.append(c)
+		sum += c
+	if not used.is_empty():
+		city_center = sum / used.size()
+	if shops.size() < SHOP_ORDER.size():
+		_find_city_shops_generic(used)
+
+
+func _find_city_shops_generic(used: Array[Vector2]) -> void:
 	var cands := []
 	for e in buildings_near(city_center, 700.0):
 		if e[0].distance_to(city_center) > 700.0:
@@ -173,8 +226,9 @@ func _find_city_shops() -> void:
 			continue
 		cands.append([area, e, road])
 	cands.sort_custom(func(a, b): return a[0] > b[0])
-	var used: Array[Vector2] = []
 	for id in SHOP_ORDER:
+		if shops.has(id):
+			continue
 		for c in cands:
 			var p: Vector2 = c[1][0]
 			var ok := true
