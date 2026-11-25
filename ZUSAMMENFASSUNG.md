@@ -285,3 +285,8 @@ Ideen von Simon:
   - Feinere Straßen-Segmente an Steigungen/Kurven + dezente seitliche Ränder (Skirts) gegen schwebende Kanten und Z-Fighting.
   - *Hinweis:* Erfordert Änderung an `world_builder.gd` und einmaliges Neu-Backen von `data/world_baked.scn` — erst nach Marcos Push in Phase 2 umsetzen.
 - **Felder & Äcker hinzufügen:** Offene landwirtschaftliche Felder/Äcker (z. B. Mais-/Getreidefelder mit typischen Furchen, Textur/Farbvariation und passenden Props) in die Welt einbauen.
+
+### Phase 2: Save/Load, Accounts & Multiplayer
+- **Exakte Speicher- & Spawn-Position pro Spieler (DB-ready):**
+  - Beim „Speichern & Verlassen“ werden exakte Spieler-Position `(x, z)`, Blickrichtung (`yaw`) sowie optional der aktive Fahrzeug-Zustand (`seat`) gespeichert.
+  - Beim erneuten Einloggen spawnt der Spieler genau dort weiter (mit `world.height_at()`-Boden-Check, damit niemand durchs Terrain fällt) — im Solo/Host inkl. geparkter Fahrzeuge, im Multiplayer sauber getrennt in **User-Save** (Spieler-Position pro Account in der Datenbank) und **World-Save** (Fahrzeug-Positionen auf dem Server, Fallback zu Fuß falls Fahrzeug weggefahren wurde).
