@@ -473,8 +473,39 @@ func _ready() -> void:
 	root.add_child(_fade)
 
 	_build_pause(root)
+	_build_perf_overlay(root)
 	set_driving(false)
 	GameState.message.connect(func(from, text): notify(from, text))
+
+
+var _perf_panel: PanelContainer
+var _perf_lbl: Label
+var _perf_t := 0.0
+
+
+func _build_perf_overlay(root: Control) -> void:
+	_perf_panel = PanelContainer.new()
+	_perf_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_perf_panel.visible = false
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.06, 0.08, 0.78)
+	sb.set_corner_radius_all(6)
+	sb.set_content_margin_all(8)
+	_perf_panel.add_theme_stylebox_override("panel", sb)
+	_perf_lbl = Label.new()
+	_perf_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_perf_lbl.add_theme_font_size_override("font_size", 13)
+	_perf_lbl.add_theme_color_override("font_color", Color(0.85, 0.98, 0.85))
+	_perf_panel.add_child(_perf_lbl)
+	root.add_child(_perf_panel)
+	_perf_panel.position = Vector2(14, 14)
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
+		if is_instance_valid(_perf_panel):
+			_perf_panel.visible = not _perf_panel.visible
+			_perf_t = 1.0
 
 
 func _bar(parent: Control, title: String, color: Color) -> ProgressBar:
@@ -854,3 +885,29 @@ func _process(delta: float) -> void:
 		_toast.modulate.a = clampf(_toast_time, 0.0, 1.0)
 	if _alert.text != "":
 		_alert.modulate.a = 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.008)
+	if is_instance_valid(_perf_panel) and _perf_panel.visible:
+		_perf_t += delta
+		if _perf_t >= 0.25:
+			_perf_t = 0.0
+			var fps := Performance.get_monitor(Performance.TIME_FPS)
+			var pt := Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+			var pht := Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+			var objs := int(Performance.get_monitor(Performance.OBJECT_COUNT))
+			var nodes := int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT))
+			var orphans := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
+			var calls := int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+			var prims := int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+			var phys := int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS))
+			var ppos := minimap.player_pos if is_instance_valid(minimap) else Vector2.ZERO
+			var an_nodes := get_tree().get_nodes_in_group("animal")
+			var an_count := 0
+			var near_d := INF
+			for an in an_nodes:
+				if is_instance_valid(an) and an is Node3D:
+					an_count += 1
+					var ap := (an as Node3D).global_position
+					near_d = minf(near_d, Vector2(ap.x, ap.z).distance_to(ppos))
+			var near_txt := ("%.0fm" % near_d) if near_d < INF else "-"
+			_perf_lbl.text = "FPS: %.0f  (Proc: %.1f ms | Phys: %.1f ms)\nObj: %d | Nodes: %d | Orphans: %d\nDraw Calls: %d | Prims: %d\nPhys3D Active: %d | Pos: (%.1f, %.1f)\nAnimals: %d (nearest: %s)" % [
+				fps, pt, pht, objs, nodes, orphans, calls, prims, phys, ppos.x, ppos.y, an_count, near_txt
+			]

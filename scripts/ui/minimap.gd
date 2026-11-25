@@ -70,6 +70,8 @@ func setup(w: WorldBuilder, full_map := false) -> void:
 			_marks.append([Vector2(fh.global_position.x, fh.global_position.z), Color(0.85, 0.1, 0.1), "F", "Feuerwehrhaus Korpitsch"])
 		for pl in lm.plots:
 			_marks.append([Vector2(pl.pos.x, pl.pos.z), Color(0.6, 0.45, 0.3), str(pl.idx + 1), ""])
+		if lm.caravan_pos != Vector3.ZERO:
+			_marks.append([Vector2(lm.caravan_pos.x, lm.caravan_pos.z), Color(0.95, 0.45, 0.85), "C", "Wohnwagen"])
 	_border = w.border.duplicate()
 	_border.append(w.border[0])
 	# Fläche außerhalb der Grenze abdunkeln: Ring aus Streifen von der Grenze nach außen
@@ -137,10 +139,16 @@ func zoom_percent() -> int:
 	return roundi((_max_mpp / maxf(meters_per_px, MIN_MPP)) * 100.0)
 
 
-func _process(_delta: float) -> void:
-	if is_visible_in_tree():
-		if full and not _fitted and size.x > 10.0:
-			fit_border()
+var _redraw_t := 0.0
+
+func _process(delta: float) -> void:
+	if not is_visible_in_tree():
+		return
+	if full and not _fitted and size.x > 10.0:
+		fit_border()
+	_redraw_t += delta
+	if _redraw_t >= 0.08:
+		_redraw_t = 0.0
 		queue_redraw()
 
 

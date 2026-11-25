@@ -4,9 +4,9 @@ extends Node3D
 ## Hasen auf Wiesen, Bären nur in den Südbergen. Morgens und abends ist mehr Wild unterwegs.
 ## Tiere weit weg von allen Spielern verschwinden wieder. Im Mehrspieler-Modus macht das nur der Server.
 
-const SPAWN_MIN := 140.0
-const SPAWN_MAX := 450.0
-const DESPAWN := 540.0
+const SPAWN_MIN := 55.0
+const SPAWN_MAX := 210.0
+const DESPAWN := 280.0
 
 var world: WorldBuilder
 var landmarks: Landmarks
@@ -51,7 +51,7 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(a):
 			animals.erase(id)
 			continue
-		if _min_dist(a.global_position) > DESPAWN and a.species != "legend":
+		if _min_dist(a.global_position) > DESPAWN and a.species not in ["legend", "bigfoot"]:
 			animals.erase(id)
 			Net.animal_despawned(id)
 			a.queue_free()
@@ -106,7 +106,7 @@ func _ok(sp: String, p: Vector2) -> bool:
 	var kind := world.kind_at(p.x, p.y)
 	if kind in ["water", "residential", "industrial", "parking", "cemetery"]:
 		return false
-	if world.slope_at(p.x, p.y) > 0.6:
+	if world.slope_at(p.x, p.y) > 0.85:
 		return false
 	match sp:
 		"boar":

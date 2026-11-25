@@ -32,6 +32,7 @@ var plots: Array = []  # [{pos: Vector3, yaw, size: Vector2, idx}]
 var checkpoint := {}  # {pos: Vector3, dir: Vector2}
 var spawn := {}  # {pos: Vector3, yaw, car_pos: Vector3, car_dir: Vector3}
 var atv_spawn := {}  # {pos: Vector3, yaw: float}
+var caravan_pos := Vector3.ZERO
 var butcher_zones: Array = []  # [{pos: Vector3, ring: MeshInstance3D, fill: MeshInstance3D}]
 
 var _bld_grid := {}  # Gebäude-Mittelpunkte zum schnellen Prüfen freier Flächen
@@ -728,6 +729,7 @@ func _build_hub_landmarks(I: Interactions) -> void:
 		_log_hub_pos("Weapon Shack", Vector2(wspot.pos.x, wspot.pos.y))
 		_log_hub_pos("Camper RV", Vector2(rvspot.pos.x, rvspot.pos.y))
 		_log_hub_pos("Campfire & Rocking Chair", cp2)
+		_add_caravan_spot()
 
 	# 6. Dept. of Wildlife Field Office 07 Trailer + Kegel
 	var wfo_center := Vector2(gas.pos.x, gas.pos.z) if not gas.is_empty() else pub_2d
@@ -846,3 +848,48 @@ func flash_butcher_zone(zone: Dictionary) -> void:
 				(ring_mi.material_override as StandardMaterial3D).albedo_color = Color(0.851, 0.169, 0.169, 1.0)
 				(fill_mi.material_override as StandardMaterial3D).albedo_color = Color(0.851, 0.169, 0.169, 0.36)
 		)
+
+
+func _add_caravan_spot() -> void:
+	var m4 := Vector2(pub.pos.x, pub.pos.z) if pub.has("pos") else Vector2.ZERO
+	var m3 := Vector2(plots[2].pos.x, plots[2].pos.z) if plots.size() >= 3 else m4 + Vector2(360.0, 170.0)
+	var fh_info := FireHall.find(world)
+	var ffk: Vector2 = fh_info.pos if not fh_info.is_empty() else m4 + Vector2(1550.0, 720.0)
+	var cx: float = m4.x + 0.4225 * (m3.x - m4.x)
+	var cz: float = m4.y + 1.5874 * (ffk.y - m4.y)
+	var y_center := world.height_at(cx, cz)
+	var y_min := y_center
+	for sx in [-5.0, 5.0]:
+		for sz in [-10.0, 10.0]:
+			y_min = minf(y_min, world.height_at(cx + sx, cz + sz))
+	var base_y := y_center
+	caravan_pos = Vector3(cx, base_y, cz)
+
+	var holder := Node3D.new()
+	holder.name = "CaravanSpot"
+	holder.position = caravan_pos
+	add_child(holder)
+
+	# Dezentes graues Hang-Fundament (verhindert schwebende Ecken am Hang)
+	var fund_h := maxf(4.0, (base_y - y_min) + 3.5)
+	_box(holder, Vector3(10.4, fund_h, 20.4), Vector3(0, -fund_h * 0.5 + 0.15, 0), Color(0.42, 0.43, 0.45), true)
+
+	var vis := AssetLoader.load_model("res://assets/models/landmarks/caravan_big.glb", 10.0, func() -> Node3D:
+		var fb := Node3D.new()
+		_box(fb, Vector3(10.0, 10.0, 20.0), Vector3(0, 5.0, 0), Color(0.95, 0.93, 0.88), true)
+		_box(fb, Vector3(10.16, 1.3, 20.16), Vector3(0, 5.2, 0), Color(0.72, 0.22, 0.16), false)
+		_box(fb, Vector3(10.2, 0.45, 20.2), Vector3(0, 10.05, 0), Color(0.78, 0.78, 0.76), false)
+		return fb
+	)
+	holder.add_child(vis)
+
+	var lbl := Label3D.new()
+	lbl.text = "WOHNWAGEN (PLATZHALTER)"
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.font_size = 72
+	lbl.outline_size = 14
+	lbl.modulate = Color(1.0, 0.95, 0.85)
+	lbl.position = Vector3(0, 11.4, 0)
+	holder.add_child(lbl)
+
+	_log_hub_pos("CaravanSpot (Wohnwagen-Platzhalter)", Vector2(cx, cz))

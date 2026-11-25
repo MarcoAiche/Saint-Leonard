@@ -15,7 +15,7 @@ static var values := {
 	radio_volume = 0.8,
 	fullscreen = false,
 	vsync = true,
-	render_scale = 1.0,
+	render_scale = 0.85,
 	shadows = 2,  # 0 aus, 1 niedrig, 2 hoch
 	view_distance = 1.0,
 }
@@ -57,6 +57,7 @@ static func apply(tree: SceneTree = null) -> void:
 		return
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if values.fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if values.vsync else DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = 60
 	_ensure_audio_buses()
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(float(values.volume), 0.001)))
 	for pair in [["SFX", "sfx_volume"], ["Ambience", "ambience_volume"], ["Voice", "voice_volume"], ["VoiceMuffled", "voice_volume"]]:
@@ -74,8 +75,8 @@ static func apply(tree: SceneTree = null) -> void:
 			var sun: DirectionalLight3D = main.get_node("Sun")
 			var sh := int(values.shadows)
 			sun.shadow_enabled = sh > 0
-			sun.directional_shadow_max_distance = 120.0 if sh == 1 else 250.0
-		RenderingServer.directional_shadow_atlas_set_size(2048 if int(values.shadows) == 1 else 4096, true)
+			sun.directional_shadow_max_distance = 100.0 if sh == 1 else 155.0
+		RenderingServer.directional_shadow_atlas_set_size(1024 if int(values.shadows) == 1 else 2048, true)
 		if main and main.has_node("World"):
 			_apply_view_distance(main.get_node("World"), float(values.view_distance))
 
@@ -99,5 +100,11 @@ static func _ensure_audio_buses() -> void:
 
 
 static func _apply_view_distance(node: Node, f: float) -> void:
-	for c in node.find_children("B_*", "MultiMeshInstance3D", true, false):
-		(c as GeometryInstance3D).visibility_range_end = 1300.0 * f
+	for c in node.find_children("*", "MultiMeshInstance3D", true, false):
+		var gi := c as GeometryInstance3D
+		var nm := c.name
+		if nm.begins_with("B_") or nm.begins_with("TP") or nm.begins_with("TD") or nm.begins_with("TS") or nm.begins_with("RK"):
+			gi.visibility_range_end = 1050.0 * f
+		else:
+			gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			gi.visibility_range_end = 90.0 * f

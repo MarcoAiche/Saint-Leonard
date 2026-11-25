@@ -796,6 +796,10 @@ func enter_vehicle(t: Vehicle, s: String) -> void:
 		_foot_fp = rig.first_person
 	seat = s
 	seat_truck = t
+	if spawner:
+		var idx := spawner.players.find(player)
+		if idx >= 0:
+			spawner.players[idx] = t
 	driving = s == "driver" and (t == car or t == atv)
 	player.visible = false
 	player.input_enabled = false
@@ -841,6 +845,10 @@ func exit_vehicle() -> void:
 	player.input_enabled = true
 	player.visible = true
 	seat = ""
+	if spawner and seat_truck:
+		var idx := spawner.players.find(seat_truck)
+		if idx >= 0:
+			spawner.players[idx] = player
 	seat_truck = null
 	driving = false
 	rig.set_target(player, 1.65, 5.0, false, _foot_fp)
@@ -1766,13 +1774,14 @@ func _process(delta: float) -> void:
 		_process_butcher_dropzones(_dropzone_t)
 		_dropzone_t = 0.0
 	# Sicherheitsnetz: niemand fällt durch die Welt
-	for body: Node3D in [player, car]:
-		var g := world.height_at(body.global_position.x, body.global_position.z)
-		if body.global_position.y < g - 4.0 and not (body == player and seat != ""):
-			if body == car:
-				car.place_at(car.global_position, car.global_basis.z)
-			else:
-				body.global_position.y = g + 1.0
+	if seat == "":
+		var pg := world.height_at(player.global_position.x, player.global_position.z)
+		if player.global_position.y < pg - 4.0:
+			player.global_position.y = pg + 1.0
+	if is_instance_valid(car):
+		var cg := world.height_at(car.global_position.x, car.global_position.z)
+		if car.global_position.y < cg - 4.0:
+			car.place_at(car.global_position, car.global_basis.z)
 	# Gesundheit
 	if GameState.health <= 0.0 and player.passed_out <= 0.0:
 		GameState.health = 35.0
@@ -1792,9 +1801,16 @@ func _process(delta: float) -> void:
 	for m in [hud.minimap, hud.big_map]:
 		m.player_pos = pos2
 		m.heading = Vector2(head.x, head.z)
-		m.others = _other_markers()
-		m.show_route = _gps_allowed()
 	hud.minimap.center = pos2
+	_place_timer -= delta
+	if _place_timer <= 0.0:
+		var other_m := _other_markers()
+		var gps_ok := _gps_allowed()
+		for m in [hud.minimap, hud.big_map]:
+			m.others = other_m
+			m.show_route = gps_ok
+		_place_timer = 0.4
+		_update_place(pos2)
 	hud.update_status()
 	hud.set_view(rig.first_person, player.hand.aiming, player.hand.slot, seat != "")
 	if seat == "driver":
@@ -1806,10 +1822,6 @@ func _process(delta: float) -> void:
 	if waypoint != Vector2.INF and pos2.distance_to(waypoint) < 15.0:
 		set_waypoint(Vector2.INF)
 		hud.toast("Ziel erreicht")
-	_place_timer -= delta
-	if _place_timer <= 0.0:
-		_place_timer = 0.4
-		_update_place(pos2)
 
 
 ## Im Auto mit Beifahrer sieht nur der Beifahrer das Navi (Rallye-Ansage)
@@ -1963,7 +1975,9 @@ func on_fx(kind: String, pos: Vector3) -> void:
 			if player.global_position.distance_to(pos) < 8.0:
 				GameState.damage(30.0)
 				player.knockdown(2.0, "BUMM!")
-	get_tree().create_timer(4.0).timeout.connect(n.queue_free)
+	get_tree().create_timer(4.0).timeout.connect(func():
+		if is_instance_valid(n):
+			n.queue_free())
 
 
 ## Mitspieler hat sich umgezogen

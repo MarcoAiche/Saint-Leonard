@@ -47,6 +47,8 @@ var _threat: Node3D = null
 var _timer := 0.0
 var _think := 0.0
 var _attack_cd := 0.0
+var _far_t := 0.0
+var _far_sleeping := false
 var _model: Node3D
 var _legs: Array[Node3D] = []
 var _head: Node3D
@@ -395,6 +397,18 @@ func _physics_process(delta: float) -> void:
 		if _levitate_t <= 0.0:
 			_model.rotation.z = 0.0
 		return
+	# Distanz-Throttling: weit entfernte ruhige Tiere (> 180m) pausieren KI & Physik
+	if state != State.CHARGE and state != State.FLEE and _bleed <= 0.0:
+		_far_t -= delta
+		if _far_t <= 0.0:
+			_far_t = 0.6
+			var min_d := INF
+			for t_node in threats:
+				if is_instance_valid(t_node):
+					min_d = minf(min_d, global_position.distance_to(t_node.global_position))
+			_far_sleeping = min_d > 180.0 and not threats.is_empty()
+		if _far_sleeping:
+			return
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
 	# angeschossen: blutet und hinterlässt eine Spur
@@ -709,7 +723,14 @@ func _drop_blood() -> void:
 	q.global_position = Vector3(p.x, world.height_at(p.x, p.z) + 0.06, p.z)
 	q.rotation.y = _rng.randf() * TAU
 	q.add_to_group("blood")
-	get_tree().create_timer(240.0).timeout.connect(q.queue_free)
+	var drops := get_tree().get_nodes_in_group("blood")
+	if drops.size() > 40:
+		var oldest := drops[0]
+		if is_instance_valid(oldest) and oldest != q:
+			oldest.queue_free()
+	get_tree().create_timer(45.0).timeout.connect(func():
+		if is_instance_valid(q):
+			q.queue_free())
 
 
 func is_dead() -> bool:
