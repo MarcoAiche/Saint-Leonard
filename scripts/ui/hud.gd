@@ -767,7 +767,7 @@ func set_view(first_person: bool, aiming: bool, slot: String, driving: bool) -> 
 
 func update_status() -> void:
 	_clock.text = "%s  Tag %d  %s" % [GameState.clock_text(), GameState.day, {clear = "sonnig", cloudy = "bewölkt", fog = "Nebel", rain = "Regen"}.get(GameState.weather, "")]
-	_money.text = "%d €" % GameState.money
+	_money.text = "$%d" % GameState.money
 	_hp_bar.value = GameState.health
 	_ammo.text = "Patronen %d/%d" % [GameState.loaded, GameState.count("ammo")] if (GameState.has("pistol") or GameState.has("assault_rifle") or GameState.has("sniper") or GameState.has("shotgun") or GameState.has("bolt_action") or GameState.has("lmg") or GameState.has("bazooka") or GameState.has("plasma_blaster")) else ""
 	if _drunk_fx:

@@ -86,7 +86,7 @@ func _name_row(parent: Control) -> void:
 # ------------------------------------------------------------------ Seiten
 
 func page_home() -> void:
-	var vb := _page("Saint Leonard")
+	var vb := _page("REDNECK REDEMPTION")
 	var sub := Label.new()
 	sub.text = "Jagen, Brennen, Offroad. Ein Dorf in Kärnten."
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -96,7 +96,7 @@ func page_home() -> void:
 	var saves := GameState.list_saves()
 	if not saves.is_empty():
 		var last: Dictionary = saves[0]
-		_button(vb, "Weiterspielen: %s (Tag %d, %d €)" % [last.title, last.day, last.money], func(): _go("single", "", last.slot, false))
+		_button(vb, "Weiterspielen: %s (Tag %d, $%d)" % [last.title, last.day, last.money], func(): _go("single", "", last.slot, false))
 	_button(vb, "Neues Spiel", func(): page_new())
 	_button(vb, "Spielstände (%d)" % saves.size(), func(): page_saves(), not saves.is_empty())
 	_button(vb, "Mehrspieler", func(): page_multi())
@@ -146,7 +146,7 @@ func page_saves() -> void:
 		var row := HBoxContainer.new()
 		list.add_child(row)
 		var info := Label.new()
-		info.text = "%s\n%s, Tag %d, %d €, Kapitel %d   (%s)" % [sv.title, sv.player, sv.day, sv.money, min(sv.chapter, 3), sv.saved.replace("T", " ").left(16)]
+		info.text = "%s\n%s, Tag %d, $%d, Kapitel %d   (%s)" % [sv.title, sv.player, sv.day, sv.money, min(sv.chapter, 3), sv.saved.replace("T", " ").left(16)]
 		info.add_theme_font_size_override("font_size", 15)
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(info)
@@ -227,30 +227,160 @@ func _save_ip() -> void:
 
 
 func page_figure() -> void:
-	var vb := _page("Figur anpassen", 440)
+	var vb := _page("CHARACTER", 760)
+	var draft: Dictionary = GameState.outfit.duplicate(true)
+	var dirty := false
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 20)
+	vb.add_child(hbox)
+
+	# Isolierte 3D-Charaktervorschau im eigenen SubViewport
+	var preview_wrap := VBoxContainer.new()
+	hbox.add_child(preview_wrap)
+	var svc := SubViewportContainer.new()
+	svc.custom_minimum_size = Vector2(280, 340)
+	svc.stretch = true
+	svc.mouse_filter = Control.MOUSE_FILTER_STOP
+	preview_wrap.add_child(svc)
+	var sv := SubViewport.new()
+	sv.own_world_3d = true
+	sv.world_3d = World3D.new()
+	sv.transparent_bg = true
+	sv.size = Vector2i(280, 340)
+	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	svc.add_child(sv)
+	var env := WorldEnvironment.new()
+	var e := Environment.new()
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	e.ambient_light_color = Color(0.95, 0.92, 0.86)
+	e.ambient_light_energy = 0.9
+	env.environment = e
+	sv.add_child(env)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-35, 30, 0)
+	sun.light_energy = 1.3
+	sv.add_child(sun)
+	var cam := Camera3D.new()
+	cam.position = Vector3(0.0, 1.12, 2.35)
+	cam.rotation_degrees = Vector3(-6.0, 0.0, 0.0)
+	cam.fov = 40.0
+	sv.add_child(cam)
+	var char_holder := Node3D.new()
+	sv.add_child(char_holder)
+	var drag_lbl := Label.new()
+	drag_lbl.text = "DRAG TO TURN"
+	drag_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	drag_lbl.add_theme_font_size_override("font_size", 12)
+	preview_wrap.add_child(drag_lbl)
+
+	var dragging := [false]
+	svc.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT:
+			dragging[0] = ev.pressed
+		elif ev is InputEventMouseMotion and dragging[0]:
+			char_holder.rotate_y(ev.relative.x * 0.012))
+
+	var ctrl := VBoxContainer.new()
+	ctrl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ctrl.add_theme_constant_override("separation", 10)
+	hbox.add_child(ctrl)
+
+	var unsaved_lbl := Label.new()
+	unsaved_lbl.text = "UNSAVED CHANGES"
+	unsaved_lbl.add_theme_color_override("font_color", Color(0.82, 0.22, 0.12))
+	unsaved_lbl.add_theme_font_size_override("font_size", 13)
+	unsaved_lbl.visible = false
+	ctrl.add_child(unsaved_lbl)
+
+	var rebuild_preview := func():
+		for c in char_holder.get_children():
+			c.queue_free()
+		var m := CharacterModel.new(draft, 2)
+		char_holder.add_child(m)
+		unsaved_lbl.visible = dirty
+	rebuild_preview.call()
+
 	var gr := HBoxContainer.new()
-	vb.add_child(gr)
+	ctrl.add_child(gr)
 	var g_lbl := Label.new()
-	g_lbl.text = "Geschlecht: %s" % ("Mann" if GameState.outfit.get("gender", "male") == "male" else "Frau")
+	g_lbl.text = "Geschlecht: %s" % ("Mann" if draft.get("gender", "male") == "male" else "Frau")
 	_button(gr, "Mann", func():
-		GameState.outfit.gender = "male"
-		g_lbl.text = "Geschlecht: Mann")
+		draft.gender = "male"
+		dirty = true
+		g_lbl.text = "Geschlecht: Mann"
+		rebuild_preview.call())
 	_button(gr, "Frau", func():
-		GameState.outfit.gender = "female"
-		g_lbl.text = "Geschlecht: Frau")
+		draft.gender = "female"
+		dirty = true
+		g_lbl.text = "Geschlecht: Frau"
+		rebuild_preview.call())
 	gr.add_child(g_lbl)
+
 	var jh := HBoxContainer.new()
-	vb.add_child(jh)
+	ctrl.add_child(jh)
 	var current := Label.new()
-	current.text = "Hut: %s" % ("Jagdhut" if GameState.outfit.get("hat", "hunter") in ["hunter", "hunter_gams", "cap"] else "Kein Hut")
+	current.text = "Hut: %s" % ("Jagdhut" if draft.get("hat", "hunter") in ["hunter", "hunter_gams", "cap", "floppy"] else "Kein Hut")
 	_button(jh, "Mit Jagdhut", func():
-		GameState.outfit.hat = "hunter"
-		current.text = "Hut: Jagdhut")
+		draft.hat = "hunter"
+		dirty = true
+		current.text = "Hut: Jagdhut"
+		rebuild_preview.call())
 	_button(jh, "Ohne Hut", func():
-		GameState.outfit.hat = "none"
-		current.text = "Hut: Kein Hut")
+		draft.hat = "none"
+		dirty = true
+		current.text = "Hut: Kein Hut"
+		rebuild_preview.call())
 	jh.add_child(current)
-	_button(vb, "Fertig", func(): page_home())
+
+	var add_slider := func(title: String, key: String, init_val: float) -> HSlider:
+		var r := HBoxContainer.new()
+		ctrl.add_child(r)
+		var l := Label.new()
+		l.text = title
+		l.custom_minimum_size.x = 120
+		r.add_child(l)
+		var sl := HSlider.new()
+		sl.min_value = 0.0
+		sl.max_value = 1.0
+		sl.step = 0.05
+		sl.value = init_val
+		sl.custom_minimum_size = Vector2(180, 22)
+		sl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		r.add_child(sl)
+		var vl := Label.new()
+		vl.text = "%.2f" % init_val
+		vl.custom_minimum_size.x = 48
+		r.add_child(vl)
+		sl.value_changed.connect(func(val: float):
+			draft[key] = val
+			dirty = true
+			vl.text = "%.2f" % val
+			rebuild_preview.call())
+		return sl
+
+	var gut_sl: HSlider = add_slider.call("Gut Belly", "gut_belly", float(draft.get("gut_belly", 0.55)))
+	var fh_sl: HSlider = add_slider.call("Forehead", "forehead", float(draft.get("forehead", 0.45)))
+
+	var act := HBoxContainer.new()
+	ctrl.add_child(act)
+	_button(act, "RANDOMISE", func():
+		var rng := RandomNumberGenerator.new()
+		rng.randomize()
+		draft.gender = "male" if rng.randf() > 0.35 else "female"
+		draft.hat = ["hunter", "floppy", "none"][rng.randi_range(0, 2)]
+		draft.gut_belly = snappedf(rng.randf_range(0.1, 0.95), 0.05)
+		draft.forehead = snappedf(rng.randf_range(0.15, 0.9), 0.05)
+		dirty = true
+		g_lbl.text = "Geschlecht: %s" % ("Mann" if draft.gender == "male" else "Frau")
+		current.text = "Hut: %s" % ("Kein Hut" if draft.hat == "none" else "Jagdhut")
+		gut_sl.set_value_no_signal(float(draft.gut_belly))
+		fh_sl.set_value_no_signal(float(draft.forehead))
+		rebuild_preview.call())
+	_button(act, "SAVE", func():
+		GameState.outfit = draft.duplicate(true)
+		dirty = false
+		unsaved_lbl.visible = false)
+	_button(ctrl, "Zurück", func(): page_home())
 	_finish_page()
 
 

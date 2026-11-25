@@ -209,7 +209,7 @@ func _tooltip(id: String) -> String:
 		lines.append("Illegal! Die Polizei beschlagnahmt das.")
 	var sells: Dictionary = it.get("sell", {})
 	for shop in sells:
-		lines.append("Verkauf: %d € (%s)" % [sells[shop], Items.SHOP_NAMES.get(shop, shop)])
+		lines.append("Verkauf: $%d (%s)" % [sells[shop], Items.SHOP_NAMES.get(shop, shop)])
 	return "\n".join(lines)
 
 

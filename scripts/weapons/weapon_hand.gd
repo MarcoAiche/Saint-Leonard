@@ -488,8 +488,8 @@ func _fire() -> void:
 	var dir: Vector3 = (ray[1] + Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * spread).normalized()
 	rig.add_recoil(float(w.recoil) * (1.2 if aiming else 0.9))
 	rig.shake(0.35 if slot == "assault_rifle" else 0.6)
-	var pitch := 1.25 if slot == "pistol" else (1.1 if slot == "assault_rifle" else (0.85 if slot == "sniper" else randf_range(0.95, 1.05)))
-	Sfx.play_3d(player, Sfx.gunshot(), 4.0, pitch)
+	var pitch := 1.15 if slot == "pistol" else (1.05 if slot in ["assault_rifle", "lmg"] else (0.92 if slot == "sniper" else randf_range(0.95, 1.05)))
+	Sfx.play_3d(player, Sfx.gunshot_weapon(slot), 4.0, pitch)
 	GameState.make_noise(player.global_position, 900.0, "shot")
 	fired.emit(ray[0], dir)
 	if bool(w.bolt):

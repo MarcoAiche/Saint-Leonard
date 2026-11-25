@@ -25,7 +25,7 @@ static func open(game: Node, app := "home") -> void:
 	var top := HBoxContainer.new()
 	vb.add_child(top)
 	var clock := Label.new()
-	clock.text = "%s   %d €" % [GameState.clock_text(), GameState.money]
+	clock.text = "%s   $%d" % [GameState.clock_text(), GameState.money]
 	clock.add_theme_color_override("font_color", Color.WHITE)
 	clock.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(clock)
@@ -81,7 +81,7 @@ static func _home(game: Node, body: VBoxContainer) -> void:
 	_btn(body, "Karte", func():
 		Menus.close_all(game.hud)
 		game.hud.toggle_map())
-	_btn(body, "Pannenhilfe (250 €)", func():
+	_btn(body, "Pannenhilfe ($250)", func():
 		if GameState.pay(250):
 			game.tow_truck_to_player()
 			Menus.close_all(game.hud)
@@ -125,7 +125,7 @@ static func _jobs(game: Node, body: VBoxContainer) -> void:
 	for j in GameState.side_jobs:
 		if j.state == "active":
 			any = true
-			_label(body, "%s (%d €)" % [j.text, int(j.reward)], 14)
+			_label(body, "%s ($%d)" % [j.text, int(j.reward)], 14)
 			if j.has("target"):
 				_btn(body, "Wegpunkt setzen", func():
 					game.set_waypoint(Vector2(j.target[0], j.target[1]))
@@ -137,7 +137,7 @@ static func _jobs(game: Node, body: VBoxContainer) -> void:
 		_label(body, "Keine.", 14)
 	_label(body, "Neue Angebote (heute)", 18)
 	for j in ms.offers():
-		_label(body, "%s (%d €)" % [j.text, int(j.reward)], 14)
+		_label(body, "%s ($%d)" % [j.text, int(j.reward)], 14)
 		_btn(body, "Annehmen", func():
 			ms.accept(j)
 			open(game, "jobs"))

@@ -57,7 +57,7 @@ func add_player(pname: String, chips: int, npc := false, peer := 0) -> int:
 			if n.name == pname:
 				style = n.style
 	players.append({name = pname, chips = chips, npc = npc, peer = peer, hole = [], folded = true, all_in = false, bet = 0, total = 0, acted = false, style = style, sitting_out = false})
-	_log("%s setzt sich mit %d € an den Tisch." % [pname, chips])
+	_log("%s setzt sich mit $%d an den Tisch." % [pname, chips])
 	changed.emit()
 	return players.size() - 1
 
@@ -277,8 +277,8 @@ func _next_street() -> void:
 
 func _win_uncontested(p: Dictionary) -> void:
 	p.chips += pot
-	_log("%s gewinnt %d € (alle anderen sind raus)." % [p.name, pot])
-	var s := "%s gewinnt %d €" % [p.name, pot]
+	_log("%s gewinnt $%d (alle anderen sind raus)." % [p.name, pot])
+	var s := "%s gewinnt $%d" % [p.name, pot]
 	pot = 0
 	street = 4
 	turn = -1
@@ -317,7 +317,7 @@ func _showdown() -> void:
 		var winners := contenders.filter(func(p): return scores[players.find(p)] == best)
 		for w in winners:
 			w.chips += part / winners.size()
-		summary.append("%s gewinnt %d € mit %s" % [" und ".join(winners.map(func(w): return w.name)), part, HAND_NAMES[best / 759375]])
+		summary.append("%s gewinnt $%d mit %s" % [" und ".join(winners.map(func(w): return w.name)), part, HAND_NAMES[best / 759375]])
 		prev = lv
 	pot = 0
 	for line in summary:

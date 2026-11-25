@@ -19,7 +19,7 @@ static func window(hud: Hud, title: String, width := 620.0) -> VBoxContainer:
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t)
 	var money := Label.new()
-	money.text = "%d €" % GameState.money
+	money.text = "$%d" % GameState.money
 	money.add_theme_color_override("font_color", Color(0.1, 0.45, 0.15))
 	money.name = "Geld"
 	head.add_child(money)
@@ -102,7 +102,8 @@ static func shop(game: Node, id: String) -> void:
 		for item in Items.stock(id):
 			var it := Items.info(item)
 			var have := GameState.count(item)
-			var label := "%s  (%d €)" % [it.name, it.price]
+			var badge := "  [NEW]" if id == "gun" and have == 0 else ""
+			var label := "%s%s  ($%d)" % [it.name, badge, it.price]
 			if have > 0:
 				label += "   hast: %d" % have
 			row(body, label, "Kaufen", func():
@@ -120,7 +121,7 @@ static func shop(game: Node, id: String) -> void:
 				heading(body, "Verkaufen")
 				any = true
 			var n := GameState.count(b[0])
-			row(body, "%s  x%d  (je %d €)" % [Items.display(b[0]), n, b[1]], "Alle verkaufen", func():
+			row(body, "%s  x%d  (je $%d)" % [Items.display(b[0]), n, b[1]], "Alle verkaufen", func():
 				GameState.sell(b[0], b[1], n)
 				game.on_sold(b[0], n, id)
 				reopen.call())
@@ -129,7 +130,7 @@ static func shop(game: Node, id: String) -> void:
 		for i in Items.HOUSES.size():
 			var h: Dictionary = Items.HOUSES[i]
 			var owned := GameState.house >= 0
-			row(body, "%s  (%d €)" % [h.name, h.price], "Gekauft" if owned else "Kaufen", func():
+			row(body, "%s  ($%d)" % [h.name, h.price], "Gekauft" if owned else "Kaufen", func():
 				game.buy_house(i)
 				reopen.call(), not owned and GameState.can_pay(h.price))
 	if id == "gas":
@@ -145,12 +146,12 @@ static func garage(game: Node) -> void:
 	var t: Dictionary = GameState.truck
 	text(body, "Schaden: %d %%   Tank: %d l" % [int(t.damage), int(t.fuel)])
 	var repair := int(t.damage * 9.0)
-	row(body, "Reparieren (%d €)" % repair, "Reparieren", func():
+	row(body, "Reparieren ($%d)" % repair, "Reparieren", func():
 		if GameState.pay(repair):
 			GameState.truck.damage = 0.0
 			game.car.broken = false
 		reopen.call(), repair > 0 and GameState.can_pay(repair))
-	row(body, "Pickup in die Werkstatt holen (Abschleppen, 120 €)", "Holen", func():
+	row(body, "Pickup in die Werkstatt holen (Abschleppen, $120)", "Holen", func():
 		if GameState.pay(120):
 			game.tow_truck_to_garage()
 		reopen.call(), GameState.can_pay(120))
@@ -158,13 +159,13 @@ static func garage(game: Node) -> void:
 	for id in Items.UPGRADES:
 		var u: Dictionary = Items.UPGRADES[id]
 		var has: bool = t.upgrades.has(id)
-		row(body, "%s  (%d €)" % [u.name, u.price], "Eingebaut" if has else "Einbauen", func():
+		row(body, "%s  ($%d)" % [u.name, u.price], "Eingebaut" if has else "Einbauen", func():
 			if GameState.pay(u.price):
 				GameState.truck.upgrades[id] = true
 				game.car.rebuild()
 				game.missions.event("upgrade", {id = id})
 			reopen.call(), not has and GameState.can_pay(u.price))
-	heading(body, "Lackierung (150 €)")
+	heading(body, "Lackierung ($150)")
 	var h := HFlowContainer.new()
 	body.add_child(h)
 	for i in Items.PAINTS.size():
@@ -209,7 +210,7 @@ static func inventory(game: Node) -> void:
 				hud.toast("%s hergestellt" % Items.display(out_id))
 				reopen.call(), ok)
 	var s: Dictionary = GameState.stats
-	text(body, "Strecke: Rehe %d, Wildschweine %d, Hasen %d, Bären %d   Gebrannt: %d Flaschen   Strafen: %d €" % [s.deer, s.boar, s.rabbit, s.bear, s.bottles, s.fines], 14)
+	text(body, "Strecke: Rehe %d, Wildschweine %d, Hasen %d, Bären %d   Gebrannt: %d Flaschen   Strafen: $%d" % [s.deer, s.boar, s.rabbit, s.bear, s.bottles, s.fines], 14)
 
 
 static func _inv_action(game: Node, view: InventoryView, id: String, what: String) -> void:
@@ -360,7 +361,10 @@ static func settings_ui(body: Control) -> void:
 	slider.call("Mausempfindlichkeit", "sensitivity", 0.2, 3.0, 0.05, "%.2f")
 	toggle.call("Maus invertieren (oben/unten)", "invert_y")
 	slider.call("Sichtfeld (FOV)", "fov", 55.0, 100.0, 1.0, "%d°")
-	slider.call("Lautstärke", "volume", 0.0, 1.0, 0.05, "%.2f")
+	slider.call("Gesamtlautstärke", "volume", 0.0, 1.0, 0.05, "%.2f")
+	slider.call("SFX-Lautstärke", "sfx_volume", 0.0, 1.0, 0.05, "%.2f")
+	slider.call("Ambience-Lautstärke", "ambience_volume", 0.0, 1.0, 0.05, "%.2f")
+	slider.call("Voice-Lautstärke", "voice_volume", 0.0, 1.0, 0.05, "%.2f")
 	slider.call("Radio-Lautstärke", "radio_volume", 0.0, 1.0, 0.05, "%.2f")
 	toggle.call("Vollbild", "fullscreen")
 	toggle.call("VSync", "vsync")

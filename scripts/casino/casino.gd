@@ -139,7 +139,7 @@ func open_slots() -> void:
 	cash_hb.add_child(cash_cap)
 	var money_lbl := Label.new()
 	money_lbl.name = "Geld"
-	money_lbl.text = "%d €" % GameState.money
+	money_lbl.text = "$%d" % GameState.money
 	money_lbl.add_theme_font_size_override("font_size", 18)
 	money_lbl.add_theme_color_override("font_color", Color.WHITE)
 	cash_hb.add_child(money_lbl)
@@ -349,13 +349,13 @@ func open_slots() -> void:
 			var top_r := HBoxContainer.new()
 			hvb.add_child(top_r)
 			var hl := Label.new()
-			hl.text = "Einsatz %d €" % int(h.bet)
+			hl.text = "Einsatz $%d" % int(h.bet)
 			hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			hl.add_theme_font_size_override("font_size", 12)
 			hl.add_theme_color_override("font_color", text_main if won else text_dim)
 			top_r.add_child(hl)
 			var hv := Label.new()
-			hv.text = "+%d €" % int(h.win) if won else "-%d €" % int(h.bet)
+			hv.text = "+$%d" % int(h.win) if won else "-$%d" % int(h.bet)
 			hv.add_theme_font_size_override("font_size", 12)
 			hv.add_theme_color_override("font_color", emerald if won else text_dim)
 			top_r.add_child(hv)
@@ -389,7 +389,7 @@ func open_slots() -> void:
 			var b: Button = pair[0]
 			var v: int = pair[1]
 			var active := v == slot_bet
-			var styled := _slot_btn("%d €" % v, gold if active else Color(0.14, 0.16, 0.20), Color(0.14, 0.10, 0.0) if active else text_main, gold if active else Color(1, 1, 1, 0.12), 14, 9, 10)
+			var styled := _slot_btn("$%d" % v, gold if active else Color(0.14, 0.16, 0.20), Color(0.14, 0.10, 0.0) if active else text_main, gold if active else Color(1, 1, 1, 0.12), 14, 9, 10)
 			b.add_theme_stylebox_override("normal", styled.get_theme_stylebox("normal"))
 			b.add_theme_stylebox_override("hover", styled.get_theme_stylebox("hover"))
 			b.add_theme_color_override("font_color", styled.get_theme_color("font_color"))
@@ -397,7 +397,7 @@ func open_slots() -> void:
 		spin_btn.disabled = reels.spinning or not GameState.can_pay(slot_bet)
 
 	for bet in [1, 5, 10, 50, 100]:
-		var b := _slot_btn("%d €" % bet, Color(0.14, 0.16, 0.20), text_main, Color(1, 1, 1, 0.12), 14, 9, 10)
+		var b := _slot_btn("$%d" % bet, Color(0.14, 0.16, 0.20), text_main, Color(1, 1, 1, 0.12), 14, 9, 10)
 		b.add_theme_font_size_override("font_size", 14)
 		b.pressed.connect(func():
 			slot_bet = bet
@@ -426,26 +426,26 @@ func open_slots() -> void:
 		var bet := slot_bet
 		if reels.spinning or not GameState.pay(bet):
 			return
-		money_lbl.text = "%d €" % GameState.money
+		money_lbl.text = "$%d" % GameState.money
 		Sfx.play_2d(win_panel, Sfx.slot_spin(), -6.0)
 		var res := [_slot_symbol(), _slot_symbol(), _slot_symbol()]
 		result.text = "Walzen laufen..."
 		result.add_theme_color_override("font_color", gold)
-		result_sub.text = "Einsatz: %d €" % bet
+		result_sub.text = "Einsatz: $%d" % bet
 		refresh_bets.call()
 		reels.spin(res, func():
 			var win := _slot_payout(res, bet)
 			if win > 0:
 				GameState.add_money(win)
-				result.text = "Gewonnen: %d €!" % win
+				result.text = "Gewonnen: $%d!" % win
 				result.add_theme_color_override("font_color", emerald)
-				result_sub.text = "Glückwunsch! (+%d €)" % (win - bet)
+				result_sub.text = "Glückwunsch! (+$%d)" % (win - bet)
 				Sfx.play_2d(win_panel, Sfx.jingle(win >= bet * 10), -4.0)
 				var ptw := win_panel.create_tween()
 				ptw.tween_property(win_panel, "scale", Vector2(1.03, 1.03), 0.10)
 				ptw.tween_property(win_panel, "scale", Vector2.ONE, 0.14)
 				if win >= bet * 25:
-					game.hud.toast("JACKPOT! %d €" % win, 3.0)
+					game.hud.toast("JACKPOT! $%d" % win, 3.0)
 			else:
 				result.text = "Kein Gewinn"
 				result.add_theme_color_override("font_color", text_dim)
@@ -454,7 +454,7 @@ func open_slots() -> void:
 			if slot_history.size() > 4:
 				slot_history.resize(4)
 			render_history.call()
-			money_lbl.text = "%d €" % GameState.money
+			money_lbl.text = "$%d" % GameState.money
 			refresh_bets.call())
 		GameState.make_noise(hall.global_position if hall and hall.inside(game.player.global_position) else game.player.global_position, 20.0, "slot")
 
@@ -503,15 +503,15 @@ func open_roulette() -> void:
 	var chips_row := HBoxContainer.new()
 	body.add_child(chips_row)
 	var chip_label := Label.new()
-	chip_label.text = "Chip: 5 €"
+	chip_label.text = "Chip: $5"
 	chip_label.custom_minimum_size.x = 110
 	chips_row.add_child(chip_label)
 	for v in [1, 5, 10, 50, 100]:
 		var b := Button.new()
-		b.text = "%d €" % v
+		b.text = "$%d" % v
 		b.pressed.connect(func():
 			chip[0] = v
-			chip_label.text = "Chip: %d €" % v)
+			chip_label.text = "Chip: $%d" % v)
 		chips_row.add_child(b)
 	var status := Menus.text(body, "", 16)
 	# Zahlenfeld
@@ -577,7 +577,7 @@ func open_roulette() -> void:
 		var mine := 0
 		for bt in roulette_bets:
 			mine += bt.amount
-		var t := "Deine Einsätze: %d €  (%s)" % [mine, ", ".join(roulette_bets.map(func(x): return "%d € %s" % [x.amount, x.label]))] if mine > 0 else "Keine Einsätze."
+		var t := "Deine Einsätze: $%d  (%s)" % [mine, ", ".join(roulette_bets.map(func(x): return "$%d %s" % [x.amount, x.label]))] if mine > 0 else "Keine Einsätze."
 		if Net.active():
 			t = ("Einsätze möglich: %d s\n" % ceili(roulette_t) if roulette_phase == "bets" else "Nichts geht mehr!\n") + t
 			if not roulette_feed.is_empty():
@@ -604,7 +604,7 @@ func place_roulette_bet(label: String, numbers: Array, pays: int, amount: int) -
 	roulette_bets.append({label = label, numbers = numbers, pays = pays, amount = amount})
 	Sfx.play_2d(game, Sfx.chips(), -6.0)
 	if Net.active():
-		Net.roulette_bet("%s: %d € auf %s" % [GameState.player_name, amount, label])
+		Net.roulette_bet("%s: $%d auf %s" % [GameState.player_name, amount, label])
 
 
 ## Kugel fällt auf result (im Mehrspieler vom Server bestimmt)
@@ -636,7 +636,7 @@ func _roulette_result(result: int) -> void:
 	var col := "Grün" if result == 0 else ("Rot" if result in RED else "Schwarz")
 	if win > 0:
 		GameState.add_money(win)
-		game.hud.toast("%d %s: Du gewinnst %d €!" % [result, col, win], 3.0)
+		game.hud.toast("%d %s: Du gewinnst $%d!" % [result, col, win], 3.0)
 		Sfx.play_2d(game, Sfx.jingle(win >= 100), -4.0)
 	else:
 		game.hud.toast("%d %s" % [result, col], 2.0)
@@ -665,7 +665,7 @@ func open_poker() -> void:
 	if not at_poker:
 		var hud: Hud = game.hud
 		hud.show_dialog("Pokerrunde", "Texas Hold'em, Blinds 5/10. Mit wie viel Geld setzt du dich hin?\nAchtung: Wird die Runde zu laut, kommt die Polizei.", [
-			["100 €", func(): _sit_poker(100)], ["250 €", func(): _sit_poker(250)], ["500 €", func(): _sit_poker(500)], ["Doch nicht", func(): pass]])
+			["$100", func(): _sit_poker(100)], ["$250", func(): _sit_poker(250)], ["$500", func(): _sit_poker(500)], ["Doch nicht", func(): pass]])
 		return
 	_show_poker_ui()
 
@@ -733,14 +733,14 @@ func _cash_out(pname: String, peer: int, chips: int) -> void:
 		return
 	if pname == GameState.player_name or peer == Net.my_id():
 		GameState.add_money(chips)
-		game.hud.toast("Du stehst mit %d € auf (Einsatz war %d €)" % [chips, poker_buyin], 3.0)
+		game.hud.toast("Du stehst mit $%d auf (Einsatz war $%d)" % [chips, poker_buyin], 3.0)
 	else:
 		Net.poker_cashout(peer, chips)
 
 
 func on_net_cashout(chips: int) -> void:
 	GameState.add_money(chips)
-	game.hud.toast("Du stehst mit %d € auf" % chips, 3.0)
+	game.hud.toast("Du stehst mit $%d auf" % chips, 3.0)
 
 
 func _broadcast_poker() -> void:
@@ -896,7 +896,7 @@ func _process_raid(delta: float) -> void:
 				lost += bt.amount
 			roulette_bets.clear()
 			game.police._fine(300)
-			game.hud.show_dialog("Razzia!", "Erwischt beim illegalen Glücksspiel.\nDer Einsatz (%d €) wird beschlagnahmt, dazu 300 € Strafe." % lost, [["Mist", func(): pass]])
+			game.hud.show_dialog("Razzia!", "Erwischt beim illegalen Glücksspiel.\nDer Einsatz ($%d) wird beschlagnahmt, dazu $300 Strafe." % lost, [["Mist", func(): pass]])
 		else:
 			game.hud.toast("Glück gehabt, die Polizei hat niemanden erwischt.", 3.0)
 
@@ -1028,7 +1028,7 @@ class RouletteWheel extends Control:
 			txt = "Die Kugel rollt ..."
 		draw_string(font, Vector2(280, 60), txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color.WHITE)
 		draw_string(font, Vector2(280, 100), "Zahl: 35 zu 1   Dutzend: 2 zu 1   Rot/Schwarz, Gerade/Ungerade, 1-18/19-36: 1 zu 1", HORIZONTAL_ALIGNMENT_LEFT, 520, 14, Color(0.9, 0.95, 0.9))
-		draw_string(font, Vector2(280, 140), "Geld: %d €" % GameState.money, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.9, 0.4))
+		draw_string(font, Vector2(280, 140), "Geld: $%d" % GameState.money, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.9, 0.4))
 
 
 class PokerTable extends Control:
@@ -1064,7 +1064,7 @@ class PokerTable extends Control:
 		var comm: Array = v.community
 		for i in comm.size():
 			_card(center + Vector2(-140 + i * 58, -40), comm[i], true)
-		draw_string(font, center + Vector2(-60, 60), "Pot: %d €" % v.pot, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.9, 0.4))
+		draw_string(font, center + Vector2(-60, 60), "Pot: $%d" % v.pot, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, Color(1, 0.9, 0.4))
 		var street_names := ["Preflop", "Flop", "Turn", "River", "Showdown"]
 		if int(v.street) >= 0:
 			draw_string(font, center + Vector2(-60, -60), street_names[clampi(int(v.street), 0, 4)], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.85, 0.95, 0.85))
@@ -1077,7 +1077,7 @@ class PokerTable extends Control:
 			var box := Rect2(pos, Vector2(130, 92))
 			draw_rect(box, Color(0.98, 0.78, 0.25, 0.9) if int(v.turn) == i else Color(0, 0, 0, 0.55))
 			draw_string(font, pos + Vector2(6, 18), ("%s%s" % [p.name, " (D)" if int(v.dealer) == i else ""]), HORIZONTAL_ALIGNMENT_LEFT, 120, 15, Color(0.1, 0.1, 0.1) if int(v.turn) == i else Color.WHITE)
-			var status := "raus" if p.folded else ("ALL-IN" if p.all_in else "%d €" % p.chips)
+			var status := "raus" if p.folded else ("ALL-IN" if p.all_in else "$%d" % p.chips)
 			draw_string(font, pos + Vector2(6, 36), status + ("  Einsatz %d" % p.bet if p.bet > 0 else ""), HORIZONTAL_ALIGNMENT_LEFT, 124, 13, Color(0.1, 0.1, 0.1) if int(v.turn) == i else Color(0.9, 0.9, 0.8))
 			var hole: Array = p.hole
 			for k in hole.size():

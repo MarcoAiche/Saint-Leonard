@@ -688,6 +688,14 @@ func _build_hub_landmarks(I: Interactions) -> void:
 		sm.material = smat
 		sparks.draw_pass_1 = sm
 		cn.add_child(sparks)
+		var fire_sfx := AudioStreamPlayer3D.new()
+		fire_sfx.stream = Sfx.campfire()
+		fire_sfx.bus = &"Ambience" if AudioServer.get_bus_index(&"Ambience") >= 0 else &"Master"
+		fire_sfx.unit_size = 4.0
+		fire_sfx.max_distance = 18.0
+		fire_sfx.volume_db = -4.0
+		fire_sfx.autoplay = true
+		cn.add_child(fire_sfx)
 		# Rocking Chair neben dem Lagerfeuer
 		var chair := AssetLoader.load_model("res://assets/models/props/rocking_chair.glb", 1.1, func() -> Node3D:
 			var fb := Node3D.new()

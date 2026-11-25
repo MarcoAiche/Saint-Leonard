@@ -34,6 +34,7 @@ func setup(s: DirectionalLight3D, e: Environment) -> void:
 	add_child(_rain)
 	_rain_sound = AudioStreamPlayer.new()
 	_rain_sound.stream = Sfx.rain()
+	_rain_sound.bus = &"Ambience" if AudioServer.get_bus_index(&"Ambience") >= 0 else &"Master"
 	_rain_sound.volume_db = -80.0
 	add_child(_rain_sound)
 	_rain_sound.play()

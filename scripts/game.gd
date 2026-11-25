@@ -363,6 +363,7 @@ Dein Fortschritt ist bis zur letzten Sicherung auf dem Server gespeichert." % re
 
 	var amb := AudioStreamPlayer.new()
 	amb.stream = Sfx.ambience()
+	amb.bus = &"Ambience" if AudioServer.get_bus_index(&"Ambience") >= 0 else &"Master"
 	amb.volume_db = -14.0
 	amb.autoplay = true
 	add_child(amb)
@@ -387,6 +388,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			Menus.close_all(hud)
 		elif hud.map_open():
 			hud.toggle_map()
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		else:
 			set_paused(not get_tree().paused)
 		return
@@ -853,7 +855,7 @@ func sell_truck_cargo() -> void:
 
 func fuel_prompt() -> String:
 	var need := int(ceil(Truck.TANK - float(GameState.truck.fuel)))
-	return "Volltanken (%d l, %d €)" % [need, int(need * 1.85)]
+	return "Volltanken (%d l, $%d)" % [need, int(need * 1.85)]
 
 
 func refuel() -> void:
@@ -869,7 +871,7 @@ func refuel() -> void:
 		hud.toast("Für %d l hat's gereicht" % int(liters))
 		return
 	GameState.truck.fuel = Truck.TANK
-	hud.toast("Vollgetankt: %d €" % cost)
+	hud.toast("Vollgetankt: $%d" % cost)
 
 
 func use_jerrycan() -> void:
@@ -1668,7 +1670,7 @@ func _process(delta: float) -> void:
 	if GameState.health <= 0.0 and player.passed_out <= 0.0:
 		GameState.health = 35.0
 		GameState.add_money(-mini(150, maxi(GameState.money, 0)))
-		_pass_out("Schwer verletzt! Der Notarzt kostet 150 €.")
+		_pass_out("Schwer verletzt! Der Notarzt kostet $150.")
 	if _placing != "" and _ghost:
 		_ghost.global_transform = _ghost_transform()
 		var ok := Placeables.check(_placing, _ghost.global_position, self).is_empty()
