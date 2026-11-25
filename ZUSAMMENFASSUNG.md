@@ -165,3 +165,5 @@ Alles synthetisch: Schritte, Tür, Hupe, Klick, Umgebung (Wind, Vögel), Schuss,
 - Windows-Build für Freunde (itch.io) und Server auf dem Raspberry Pi einrichten.
 - Antworten des Mitentwicklers auf die Kickoff-Fragen fehlen noch.
 - Test-Clients ohne Fenster (headless) stürzen beim Beenden ab; im Fenster tritt das nicht auf.
+- **Benutzer-System:** Spieler können mit ihrer Google-E-Mail-Adresse einen Benutzer-Account erstellen, auf dem ihr Spielstand und Fortschritt gespeichert werden.
+- **Private Spieler-Häuser (Zutrittskontrolle):** Nicht-öffentliche Häuser von Spielern können nur vom jeweiligen Besitzer betreten werden – oder in Begleitung des Besitzers (der Besitzer kann die Tür für Besuch öffnen).
