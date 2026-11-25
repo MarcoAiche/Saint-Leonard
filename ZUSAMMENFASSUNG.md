@@ -290,3 +290,8 @@ Ideen von Simon:
 - **Exakte Speicher- & Spawn-Position pro Spieler (DB-ready):**
   - Beim „Speichern & Verlassen“ werden exakte Spieler-Position `(x, z)`, Blickrichtung (`yaw`) sowie optional der aktive Fahrzeug-Zustand (`seat`) gespeichert.
   - Beim erneuten Einloggen spawnt der Spieler genau dort weiter (mit `world.height_at()`-Boden-Check, damit niemand durchs Terrain fällt) — im Solo/Host inkl. geparkter Fahrzeuge, im Multiplayer sauber getrennt in **User-Save** (Spieler-Position pro Account in der Datenbank) und **World-Save** (Fahrzeug-Positionen auf dem Server, Fallback zu Fuß falls Fahrzeug weggefahren wurde).
+- **Besitz- & Zugriffs-System für Häuser & Fahrzeuge (Account-/DB-gebunden):**
+  - **Häuser & Immobilien:** Kaufbare Häuser speichern eine `owner_id` (Account-ID) in der Datenbank. Türen/Eingänge blockieren automatisch alle Spieler, die nicht der Besitzer sind (Feedback: „Privatbesitz – kein Zutritt“).
+  - **Fahrzeug-Besitz:** Jeder Spieler erwirbt seine eigenen Fahrzeuge (z. B. Pickup, ATV), die fest an seine `owner_id` gebunden sind. Nur der Besitzer kann einsteigen und fahren (`[F]`-Check serverseitig verifiziert).
+  - **Persistenz beim Aus-/Einloggen:** Spieler-Position und eigene Fahrzeug-Position werden pro Account in der Datenbank gespeichert; eigene Fahrzeuge despawnen beim Ausloggen sauber und spawnen beim erneuten Einloggen exakt an der gespeicherten Position wieder.
+  - *(Optional später: Beifahrer-Sitz / „Schlüssel teilen“-Whitelist für Co-op-Freunde.)*
