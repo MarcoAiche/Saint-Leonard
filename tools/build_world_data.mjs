@@ -390,8 +390,8 @@ const polyDist = (x, z, poly) => {
     [4120, -4900], [4350, -4910], [4580, -4885], [4650, -4810], [4665, -4650], [4650, -4490], [4580, -4415], [4380, -4405], [4210, -4405],
     // b) B83-Ost-/Südseite (>= 120-160m Puffer) nach Süden
     [4210, -4200], [4260, -3950], [4360, -3700], [4410, -3450], [4410, -3200], [4390, -2950], [4310, -2700], [4120, -2450], [3700, -2320], [3100, -2240], [2680, -2200],
-    // a) Westspitze & Südkante des großen Verschiebebahnhofs (z ~ -1890 .. -2075) -> Nordost-Fürnitz -> border[53]
-    [2330, -2085], [2335, -1980], [2520, -1995], [2630, -1920], [2880, -1895], [3260, -1895], [3465, -1885], [3510, -1720], [3500, -1510], [3350, -1340],
+    // a) Westspitze (+280m nach Osten geschoben) & Südkante des großen Verschiebebahnhofs -> Nordost-Fürnitz -> border[53]
+    [2610, -2085], [2580, -1980], [2600, -1935], [2660, -1905], [2880, -1895], [3260, -1895], [3465, -1885], [3510, -1720], [3500, -1510], [3350, -1340],
   ];
   const newBorder = [...westPoly, ...splicePts];
 
@@ -456,6 +456,23 @@ const polyDist = (x, z, poly) => {
   }
   console.log(`NORD-FUERNITZ GEBAEUDE CHECK: innerhalb=${nfIn}, ausserhalb=${nfOut}`);
   if (nfOut > 0) throw new Error(`${nfOut} Nord-Fürnitz-Gebäude außerhalb der Border!`);
+
+  // 6) Hauptstraße Fürnitz -> Unterfederaun (Rosentalstraße / Kärntner Straße / B83 in z in [-2350..-1500]) komplett innerhalb mit >= 60 m Abstand
+  let minMainRoadDist = Infinity;
+  let mainRoadOut = 0;
+  for (const r of world.roads) {
+    if (!["primary", "primary_link", "secondary", "tertiary"].includes(r.kind)) continue;
+    if (!r.name || !(r.name.includes("Rosentalstraße") || r.name.includes("Kärntner Straße") || r.name.includes("B83"))) continue;
+    for (const [px, pz] of r.pts) {
+      if (px >= 2000 && px <= 2800 && pz >= -2350 && pz <= -1500) {
+        if (!inPoly(px, pz, newBorder)) mainRoadOut++;
+        minMainRoadDist = Math.min(minMainRoadDist, polyDist(px, pz, newBorder));
+      }
+    }
+  }
+  console.log(`FUERNITZ-UNTERFEDERAUN HAUPTSTRASSE CHECK: ausserhalb=${mainRoadOut}, MinDist=${minMainRoadDist.toFixed(1)}m`);
+  if (mainRoadOut > 0) throw new Error(`${mainRoadOut} Hauptstraßen-Punkte außerhalb der Border!`);
+  if (minMainRoadDist < 60) throw new Error(`Hauptstraßen-Abstand zur Border zu klein: ${minMainRoadDist.toFixed(1)} m (< 60 m)`);
 
   border.length = 0;
   border.push(...newBorder);
