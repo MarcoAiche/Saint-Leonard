@@ -277,3 +277,10 @@ Ideen von Simon:
 ### Phase 2: Fahrzeuge, Tiere & Physik
 - **Roadkill-System (Tiere anfahren):** Fahrzeuge (Pickup/ATV) richten bei Kollision mit Tieren geschwindigkeitsabhängigen Aufprallschaden an → ab entsprechender Geschwindigkeit sofortiger Tod, Kadaver-Spawn & Wegschleuder-Impuls (inkl. Co-op-Sync).
 - **Ragdoll-Physik für getötete/angefahrene Tiere & Menschen:** Physikbasiertes Ragdoll-Verhalten (`PhysicalBoneSimulator3D` bzw. Physik-Impuls) für erlegte oder angefahrene Tiere und Charaktere — erst einbauen, sobald die finalen 3D-Modelle/Skelette stehen.
+
+### Phase 2: Welt, Terrain & Straßen
+- **Straßen glätten & Kanten entfernen (Road Smoothing + Terrain Carving):**
+  - Höhenprofil entlang der Straßen-Mittellinie glätten (keine abrupten Wellen/Dellen mehr).
+  - Terrain direkt unter der Straße beim Welt-Bau plan auf Straßenhöhe abflachen (0° Querneigung) und mit einer 3–6 m breiten, weichen Böschung (Smoothstep-Blend) ins umliegende Gelände überführen.
+  - Feinere Straßen-Segmente an Steigungen/Kurven + dezente seitliche Ränder (Skirts) gegen schwebende Kanten und Z-Fighting.
+  - *Hinweis:* Erfordert Änderung an `world_builder.gd` und einmaliges Neu-Backen von `data/world_baked.scn` — erst nach Marcos Push in Phase 2 umsetzen.
