@@ -1,0 +1,326 @@
+================================================================================
+GAME MASTER BLUEPRINT: REDNECK REDEMPTION -> GODOT 4 1:1 SPECIFICATION
+Source Folder: /Users/s.h./Documents/game analyze (9 Reference Videos: V1 - V9)
+================================================================================
+
+================================================================================
+SECTION 1: VIDEO INVENTORY & GLOBAL TECHNICAL PROFILE
+================================================================================
+PLATFORM OVERRIDE (PC 16:9 LANDSCAPE + MOUSE/KEYBOARD):
+- The reference videos (V1-V9) were recorded/cropped in vertical portrait format,
+  but the target game is strictly a **PC 3D Game (16:9 Widescreen Landscape,
+  1920x1080 base viewport, canvas_items + expand, Mouse & Keyboard)**.
+- Do NOT implement mobile portrait layouts or touch/virtual-joystick controls.
+
+1.1 Reference Video Inventory (Sorted Alphabetically):
+- [V1] 024e996e461b46649c99ac3fe15c736b.mp4 | 25.57s | 720x1280 | Premise, Biomes (Forest, Snow, Swamp), Wildlife Agent, AK, Pistol, Bazooka, Moonshine, Lucky Buck Slot Machine.
+- [V2] 625c3c28066946fd9e33eb54c8a3fcb9.mp4 | 22.40s | 720x1280 | LMG, Bolt-Action ADS, AK ADS, Mutant Rabbit transformation, Moonshine drunk shader, 4x4 Pickup river crossing, Lucky Buck ($300), Bigfoot grab & throw.
+- [V3] 8b9f2d5979d5461caabb6453087d09eb.mp4 | 25.10s | 720x1280 | Steam page, Birch trees, Boar flip, Leaping Mutant Rabbit, 1st-person melee punch, Bazooka vs. Rabbit swarm, carrying dead 'X'-eyed Deer to Lucky Buck ("FEED ME ANIMALS" / "PUT ANIMAL HERE").
+- [V4] 99617bd605264d668e11d9f5d62aeee1.mp4 | 27.27s | 720x1280 | Hunting Lodge exterior & sign, carrying dead Mutant Rabbit, Lucky Buck ($25, BET / CASH OUT), Mason Jar Moonshine & drunk butterfly hallucination, Snow Mutant Stag flip, 3rd-person pistol.
+- [V5] ScreenRecording_11-25-2026 09-36-00_1.mp4 | 25.91s | 1206x2622 | Character Creator UI (Gut Belly Slider, Forehead Slider, Drag to Turn, Randomise, Save, Unsaved Changes), Wooden Rocking Chair tip-over physics by campfire, Wild Hog, carrying dead hog to Lucky Buck.
+- [V6] a6c665797694474ebab7a29240e240a5.mp4 | 32.97s | 720x1280 | Full Camp Plaza layout, Butcher Food Truck & Butcher NPC, Female Redneck, Pickup openable hood, driving dust trails, loading/unloading dead deer into blue truck bed, Slot LED states (+$300 POT $300 -> GOOD LUCK $300 -> MONEY BACK $300).
+- [V7] b042d01bf9a14f5b81114c2160f75017.mp4 | 32.70s | 720x1280 | Real-life shotgun hook, Butcher dialogue bubble ("BUTCHER: Bonjour, mon ami!"), open Butcher truck rear, Swamp area-unlock billboard, Green 4x4 ATV/Quad Bike, shocked googly-eye character expression.
+- [V8] c9d078da80b6423d96a9f693a1130ebb.mp4 | 26.30s | 720x1280 | Butcher "GASTON" quotes ("You bring me something to cook, oui?", "$300. Ze texture... mon dieu.") & truck loading, Full Weapon Wall prices, Hunting Lodge interior (fireplace, bar, stools), 3rd-person melee punch knockdown.
+- [V9] d3acbb0724334bd0947d8b3e761d746c.mp4 | 22.00s | 720x1280 | Outdoor Weapon Shack + Gunsmith NPC, Extended Weapon Wall (incl. Alien Blaster, Machete/Knife, "NEW" badges), LMG vs. Grizzly Bear, Sniper Rifle + exact Mil-Dot Scope overlay, Alien Blaster anti-gravity levitation.
+
+1.2 Core Game Loop:
+1. Customize Redneck character in live 3D Character Creator (Sliders, Randomise, Save) [V5 00:05-00:08].
+2. Start at Camp Plaza (Hunting Lodge, Butcher Food Truck, Weapon Shack, Wildlife Field Office, RV/Trailers) [V1, V6, V8, V9].
+3. Drive Pickup Truck (with cargo bed) or Green ATV out into Forest, River, Swamp, or Snow Mountain biomes [V2, V6, V7].
+4. Hunt aggressive/mutant alien-infected animals (Boar, Deer/Stag, Rabbit -> Mutant Rabbit, Bear, Bigfoot Boss) using progressive arsenal (Pistol, Shotgun, Bolt-Action, AK-47, LMG, Sniper, Bazooka, Alien Blaster, Melee Punch) [V1-V9].
+5. Load dead ('X'-eyed) animal carcasses into Pickup cargo bed (or carry by hand/antlers) and haul back to Camp [V3, V6].
+6. Sell carcasses directly to Butcher NPC ("GASTON") for guaranteed cash ($300 for Deer) OR feed carcasses into "LUCKY BUCK" Slot Machine inside Hunting Lodge to gamble up to 10x pot [V1-V8].
+7. Buy upgraded weapons, ammo, scopes, and alien tech at the Weapon Shack, drink Moonshine with co-op buddies for chaotic drunk effects, and unlock new areas / fight Bigfoot & Alien Bosses [V1, V2, V4, V7, V9].
+
+================================================================================
+SECTION 2: VISUAL DESIGN, ART DIRECTION, COLOR PALETTE & ENVIRONMENT
+================================================================================
+2.1 Rendering & Lighting Philosophy:
+- Clean, vibrant Stylized Low-Poly 3D WITHOUT heavy black comic/toon outlines around every object [V1-V9].
+- Matte-to-satin surface shading with crisp directional sunlight and soft colored ground shadows:
+  - Shadow on grass: #2B3A1E to #354D1E [V1, V2]
+  - Shadow on sand/dirt: #7A6A52 to #7A6B54 [V1, V2]
+  - Shadow on snow: #7B8898 [V1]
+
+2.2 Master Color Palette:
+- Summer Sky Gradient: #3B8EF3 (zenith) to #8BC8FF (horizon) [V1, V2]
+- Low-Poly Faceted Clouds: #FFFFFF (lit) / #C8DDF2 (underside shadow) [V1, V2, V6]
+- Meadow Grass Base: #63B81B (lit) / #3E7B12 (shaded) [V1, V2]
+- 3D Grass Tufts: #6EC81E to #82D928 [V1, V2]
+- Wildflowers: Yellow #F2D024, Purple #8E5CE6, White #F4F4EE [V1, V2]
+- Dirt Roads & Clearings: #C4AC86 to #C8B088 with dark pebbles #6E7680 [V2, V6]
+- River Water: Translucent cyan-blue #40B8E0 over pale sand #C8B894 with white splash rings #FFFFFF [V2, V6]
+- Swamp Fog & Water: Olive-green mist #4A5D3F to #5A6D4A, murky water #2E3B25, pale sun disc #F4FAD8 [V1, V7]
+- Snow Ground & Fog: Cool off-white #D4DCE6, pale blue-gray fog #B4C7DB, snow pine boughs #D8E2EC [V1, V4, V9]
+- Stylized Boulders: Faceted gray/blue-gray #7A828C, highlights #9AA3AD [V1, V9]
+- Pine Trees: Reddish-brown trunks #6E3B1E (bare lower third), layered angular needle tiers #2D6E22 to #438C2A [V1-V9]
+- Deciduous Trees: Tan-brown Y-branched trunks #8B5A2B, clumpy leaf crowns #59A828 [V1, V2, V8]
+- Birch Trees: White bark #E6E6E0 with dark horizontal streaks #2A2A2A [V3, V4]
+
+2.3 Camp & World Architecture:
+- "HUNTING LODGE" [V4 00:09, V6 00:06, V8 00:12, V8 00:18]:
+  - Large timber log cabin (#8C5E34 walls, #5C3D22 roof trim), stone-base porch pillars (#7A828C), gable plaque "HUNTING LODGE" (#D6C29F text on #4A301A wood), hanging yellow lanterns (#FFCC55), warm interior glow (#FFAA44).
+  - Interior: Stone fireplace (#7A828C) with orange fire (#FF7711) on left, long wooden bar counter with round barstools in center, hanging pendant lanterns, multiple "LUCKY BUCK" slot machines & dartboard (#181818/#D83030/#288838) on right [V3, V8].
+- Butcher Food Truck [V6 00:00, V6 00:06, V6 00:24, V7 00:12, V8 00:03]:
+  - Cream box van (#EFE8D8) with crimson red skirt & awning stripes (#B82828), side serving window, maple-leaf/meat emblem, 3D Steak-on-a-Bone rooftop sign (#C83838/#F0EDE6), wide-opening rear doors with wooden floor inside.
+- Outdoor Weapon Shack [V9 00:02-00:03]:
+  - Open-front timber shed (#6E4B2F) with slanted roof, front counter table holding olive-green (#4E6838) and red/black (#A82828/#24262A) ammo crates, wooden barrel (#8C6238) on right.
+- Dept. of Wildlife Mobile Trailer [V1 00:07-00:08]:
+  - White/gray box trailer (#DCE2E8) labeled "DEPT. OF WILDLIFE / FIELD OFFICE 07" with open rear door and orange/white striped cones (#FF6A1A/#FFFFFF).
+- Camping Trailer / RV [V1 00:00, V4 00:07, V6 00:22]:
+  - White & turquoise trailer (#EAECE8 / #4CA6A8) parked in camp/roadside.
+- Lakeside Campfire & Rocking Chair [V5 00:09-00:13]:
+  - Campfire (#FF7711) casting warm amber glow (#E86A20) with fluttering yellow moths (#FFEE88).
+- Roadside Wooden Signposts & Area-Unlock Billboards [V5 00:01, V5 00:17, V7 00:19-00:20].
+
+================================================================================
+SECTION 3: COMPLETE ENTITY & OBJECT CATALOG
+================================================================================
+3.1 Playable Redneck Characters (~1.8m height, stylized cartoon proportions, customizable Gut Belly & Forehead [V5]):
+- Variant A ("Overalls Redneck") [V1, V2, V8]: Brown floppy hat (#6B4E35), black sunglasses (#141414), large nose, stubble beard, shirtless (#E8B49A) with arm tattoos, blue denim overalls (#4A70B8) with 1 strap & brown knee patch (#7A5230), barefoot.
+- Variant B ("Mullet/Underwear Redneck") [V1, V2, V3, V4, V5, V7, V8]: Long dark mullet/ponytail (#221C18), gray handlebar mustache (#8C8882), shirtless (or white tank top #F0F0EC), white briefs with yellow front stain (#ECEAE0/#D8C638), tall olive rubber boots (#4A5934).
+- Variant C ("Female Redneck") [V6 00:11-00:24]: Brown ponytail (#5C3820), red/white cap (#C82828/#FFFFFF), light-blue sleeveless top (#78B8D8), olive-camo pants (#4E5E38), boots.
+- Variant D ("Blue Tank/Shorts") [V1 00:12, V5 00:00]: Short brown hair, gray beard, light-blue tank top (#6E8EA8), blue shorts (#2A3C58), sneakers.
+
+3.2 NPCs:
+- Butcher "GASTON" [V6, V7, V8]: White chef toque (#F4F4F0), brown curly hair (#4E3220), big handlebar mustache, blood-stained white apron (#F0F0EC/#A81818), dark pants, green boots.
+- Gunsmith Shopkeeper [V9 00:02]: Balding male, olive-green t-shirt (#4E5A38), dark pants (#2A2C30).
+- Dept. of Wildlife Agent [V1 00:07-00:08]: Bald head, black sunglasses, black suit & tie (#18181A), white dress shirt (#F0F0F0).
+
+3.3 Animals & Bosses (all feature oversized cartoon googly white eyes #FFFFFF / #111111 pupils; switch to black 'X' pupils on death):
+- Wild Boar / Hog [V1-V8]: Dark brown coat (#3B2E26 to #5A3A22), tusks (#EFECE0), charges head-on, flips player upside-down on impact, kicks up dirt crumbs.
+- Deer & Stag / Reindeer [V1, V3, V4, V6, V8, V9]: Brown coat (#6B4423), cream belly/throat (#DDD0B4), dark antlers (#2E2218); rams players on close approach; in Snow Biome / under Alien fire flips upside-down with glowing red-pink eyes (#FF6060) [V1, V4, V7].
+- Rabbit -> Mutant Rabbit [V2, V3, V4, V9]:
+  - Normal: ~0.4m black-and-white bunny (#222222/#F2F2F2).
+  - Mutant: Stands upright (~1.5m tall), claws, huge bloodshot glowing red-rimmed eyes (#FF2020), leaps ~2.5m high [V2 00:06-00:07, V3 00:03-00:05].
+- Grizzly / Brown Bear [V9 00:04-00:05]: Large aggressive brown bear (#6E4220) with googly eyes, roaring mouth, absorbs sustained LMG fire with visible circular bullet holes (#B01818).
+- Bigfoot Boss [V2 00:14-00:17, V9 00:00-00:01, V9 00:10-00:12]: ~3.2m tall (~1.8x-2.0x player height), shaggy brown fur (#6E4220), tan chest/face/hands/feet (#D8BA92), heavy brow, sharp white teeth, absorbs multiple pistol shots with bullet wounds; grabs player by ankle and flings them high above treetops.
+
+3.4 Vehicles:
+- Lifted 4x4 Offroad Pickup Truck [V2 00:10-00:11, V6 00:11-00:24]: Camo green/tan body (#6D8058/#9C885C), orange fenders (#D86A20), openable front hood (~70 deg tilt), rollbar with 2 yellow roof lights (#F0B020), blue cargo bed liner (#2B6CB0) storing dead ragdoll carcasses, knobby mud tires (#2A2C30).
+- Green 4x4 ATV / Quad Bike [V7 00:25-00:26]: Forest-green fenders/rack (#2D5A27), black seat & knobby tires (#1E2022), single-rider fast dirt-trail vehicle.
+
+3.5 Weapons, Consumables & Interactive Props (with Weapon Wall prices from V8 00:06 & V9 00:03):
+- Pistol (~$250) [V1, V2, V4, V8, V9]: Brushed gray/steel slide (#78808A) with white rear sight dots.
+- Shotgun ($700) [V8, V9]: Wood stock, dark barrel.
+- Bolt-Action Hunting Rifle ($900) [V2, V3, V4, V6, V7, V8, V9]: Warm wood stock (#B8743B), gray bolt/receiver (#68707A), iron-sight ADS.
+- AK-47 ($1,200) [V1, V2, V3, V5, V7, V8, V9]: Olive-green ribbed receiver (#4E7342/#6A8548), wood handguard/stock (#A66832), iron-sight ADS.
+- LMG / Machine Gun ($1,600) [V2, V3, V6, V9]: Gray receiver (#5E6670), box mag + hanging brass ammo belt, square red-dot optic.
+- Sniper Rifle ($2,000) + Scope ($500) [V8, V9]: Lime/olive stock (#7A9A2E), dark barrel, scope with green lens (#40A840) & black Mil-Dot reticle.
+- Bazooka / RPG ($2,500) + Rocket ($400) [V1, V2, V3, V4, V6, V8, V9]: Olive tube (#556B38) with yellow/orange hazard stripes (#E5A020), fires rocket with flame/smoke trail & AoE blast.
+- Alien Plasma Blaster [V9 00:03, V9 00:13-00:15]: Cream/gray shell (#D4D8C8), black grip (#202428), neon-green emitter (#50FF50) firing anti-gravity plasma that levitates animals.
+- Machete / Hunting Knife [V9 00:03] + 1st-person/3rd-person Melee Punch [V3 00:08, V8 00:19].
+- Moonshine [V1-V4]: Green "ABSINTH" bottle with glowing green liquid (#78E840) OR clear glass Mason Jar with white lid & cloudy liquid; clink/drink -> drop jar -> chromatic double-vision + fluttering white butterfly hallucinations.
+- "LUCKY BUCK" Slot Machine [V1-V4, V6-V8]: Red cabinet (#A82020), gold/bulb trim, neon deer topper + red "SPIN" arrow, 3 reels (Antlers, Pine, Rifle, Steak, Rabbit, Jug), "BET" (yellow) & "CASH OUT" (green) buttons, orange pull lever, "FEED ME ANIMALS" / "PUT ANIMAL HERE" chute, "SLOT RULES" poster.
+- Wooden Rocking Chair [V5 00:09-00:13].
+
+================================================================================
+SECTION 4: CAMERA, CONTROLS & PHYSICS KINEMATICS
+================================================================================
+PLATFORM OVERRIDE (PC MOUSE & KEYBOARD):
+- Pure PC Mouse & Keyboard controls: WASD movement, Mouse-Look with
+  `Input.MOUSE_MODE_CAPTURED` during 3D gameplay, visible mouse cursor
+  (`MOUSE_MODE_VISIBLE`) in Character Creator / Menus / Shop / Slot Machine,
+  LMB shoot/attack, RMB aim/scope, E/F interact, Space jump, Shift sprint,
+  1-9 / Mouse Wheel weapon switching, Esc pause. No touch controls.
+
+- 1st-Person Camera: FOV ~75-85 deg [INFERRED]; visible realistic 1st-person left/right arms & hands gripping forend and trigger/stock of each weapon, or holding moonshine bottle / carrying dead animal with both hands.
+- ADS (Aim Down Sights): Weapon centers cleanly onto iron sights (Bolt-Action [V2 00:03], AK-47 [V2 00:05]) or full-screen circular black vignette Mil-Dot scope overlay (~75% height, 4 mil-dots per axis [V9 00:16]).
+- Ragdoll & Knockback Physics: Boar, Stag, Bigfoot, Melee Punch, Friendly-Fire Shots, and Rocking Chair tip-over all trigger full-body ragdoll/tumble physics; Bigfoot grabs player by ankle and launches them ~20m above treetops [V2 00:16-00:17, V9 00:01, V9 00:12].
+- Vehicle Physics: Lifted 4x4 Pickup climbs river banks with wheel suspension bounce, emits continuous tan dust trails on dirt and white concentric ripple rings in rivers [V2 00:10-00:11, V6 00:14-00:23]; ATV leans into turns on dirt trails [V7 00:25-00:26].
+
+================================================================================
+SECTION 5: GAMEPLAY MECHANICS, STATE MACHINES, AI LOGIC, MATH & EDGE CASES
+================================================================================
+- Hunting & Economy Loop:
+  1. Shoot animals -> blood splatter + persistent red bullet wounds on body + blood pools on ground -> dead animals show 'X' pupils.
+  2. Drag/carry dead carcasses (by hand or loaded into Pickup blue cargo bed) to Camp.
+  3. Sell at Butcher Truck ("GASTON": $300 per deer [V8 00:05]) OR feed into "LUCKY BUCK" ("+$300 • POT $300" -> "GOOD LUCK $300" -> "UP TO 10X YOUR POT" or "MONEY BACK $300" [V1, V6]).
+- Weapon Progression: Locked/unlocked on Weapon Wall with red "NEW" tags; separate ammo purchases [V8 00:06, V9 00:03].
+- Animal States:
+  - Normal -> Alert/Googly-eyed Charge (Boar, Stag, Bear).
+  - Normal Rabbit -> Mutant Upright Red-Eyed Leaping Rabbit when attacked/triggered [V2 00:05-00:07].
+  - Snow Stag / Alien-hit Animal -> Levitating/Inverted Mutant State [V1 00:03-00:06, V4 00:16-00:19, V9 00:13-00:15].
+  - Bigfoot Boss -> Close-range Grab & High-Altitude Throw [V2 00:16-00:17, V9 00:00-00:01].
+- Rocking Chair State: Seated (can hold rifle) -> Rocking -> Excessive backward tilt exceeds threshold -> Tip-over ragdoll fall onto grass [V5 00:09-00:13].
+- Co-op Friendly Fire: Players can melee-punch and shoot/bazooka each other with full ragdoll knockdown [V1 00:17-00:21, V8 00:19-00:20].
+
+================================================================================
+SECTION 6: ANIMATIONS, PARTICLE SYSTEMS, VFX & GAME JUICE
+================================================================================
+- Muzzle Flash: Multi-spiked yellow-orange star burst (#FFE055 / #FF7711), ~0.05s duration per shot [V1-V4, V9].
+- Blood VFX: 10-20 glossy dark-red spheres (#A81010) spraying outward on bullet/melee hit + flat red blood puddles on grass/snow + circular red wound decals directly on animal fur [V1-V4, V8, V9].
+- Bazooka Rocket VFX: Orange flame exhaust (#FF8811) + billowing gray-tan smoke trail (#B8B2A6) + orange fireball explosion [V1, V2, V3, V4, V6, V9].
+- Alien Blaster VFX: Neon-green plasma projectiles & swirling green anti-gravity orb aura (#50FF50) around levitated target [V9 00:13-00:15].
+- Moonshine Drunk VFX: Chromatic aberration double-vision ghosting (pink/magenta & cyan edge smear) + camera sway + fluttering white cartoon butterfly/moth particles (#F4F4EE) [V2 00:08-00:09, V4 00:14-00:15].
+- Environmental Particles: Campfire yellow moths/embers [V5 00:13], Snow biome falling snowflakes [V4 00:16-00:19], River white concentric splash rings [V2 00:10-00:11], Dirt tire dust trails [V6 00:22-00:23], Animal charge dirt crumbs [V3 00:00, V5 00:17].
+
+================================================================================
+SECTION 7: COMPLETE UI, HUD, MENU FLOW & SCREEN ARCHITECTURE
+================================================================================
+PLATFORM OVERRIDE (16:9 PC WIDESCREEN UI):
+- Adapt all HUD, Character Creator, Weapon Wall, Slot Machine, and Menu layouts
+  cleanly to 16:9 PC widescreen (1920x1080 base, anchored Controls) while
+  preserving exact art style, Hex colors, typography, elements, and behavior.
+
+- Character Creator UI [V5 00:05-00:08]:
+  - Top-left header: `"CHARACTER"` (bold white uppercase).
+  - Center: Live 3D character standing in forest clearing + `"DRAG TO TURN"` prompt above bottom buttons.
+  - Bottom buttons: Dark semi-transparent (`#1A1A1E`, ~75% alpha, 1px `#888888` border) `"RANDOMISE"` (left) and `"SAVE"` (right), with `"UNSAVED CHANGES"` notice below.
+  - Sliders: Includes `"Gut Belly"` slider & `"Forehead"` slider.
+- World-Space NPC Speech Bubbles [V7 00:12-00:14, V8 00:04-00:05]:
+  - Dark rounded box (`#20242A`, ~85% alpha) above NPC head; bold orange speaker tag (`"BUTCHER"` / `"GASTON"`, `#E87820`) + white dialogue line (`"Bonjour, mon ami!"`, `"You bring me something to cook, oui?"`, `"$300. Ze texture... mon dieu."`).
+- Weapon Wall Price Tags & Badges [V8 00:06, V9 00:03]: White price plaques beneath each gun/ammo icon + red `"NEW"` corner ribbon.
+- Slot Machine UI [V1-V4, V6-V8]: `"LUCKY BUCK"`, `"FEED ME ANIMALS"`, `"PUT ANIMAL HERE"`, `"GOOD LUCK $25"` / `"$300"`, `"+$300 • POT $300"`, `"MONEY BACK $300"`, `"UP TO 10X YOUR POT"`, `"BET"`, `"CASH OUT"`, `"SPIN"`, `"SLOT RULES"`.
+- Sniper Scope Overlay [V9 00:16]: Full-screen black vignette mask, centered circular lens (~75% height), thin black crosshair + 4 mil-dots per cardinal axis.
+- Game Logo [V3 00:04, V6 00:02, V9 00:17]: `"REDNECK REDEMPTION"` bold white distressed woodcut letters with orange sniper crosshair replacing `"O"`.
+
+================================================================================
+SECTION 8: AUDIO, MUSIC & SOUND EFFECTS CATALOG
+================================================================================
+- Background Music: Upbeat country / bluegrass / banjo-rock loop across all clips [V1-V9].
+- Gunfire SFX: Distinct Pistol crack, Bolt-Action rifle shot, full-auto AK-47 & LMG bursts, Bazooka launch whoosh + explosion boom, Alien Blaster sci-fi zap/hum [V1-V9].
+- World & Interaction SFX: Bottle/jar glass clink, slot machine spin & payout jingle, Butcher Gaston French voice mumble / cash register, river water splash, truck engine [INFERRED across V1-V8].
+
+================================================================================
+SECTION 9: LEVEL LAYOUTS, SPATIAL DESIGN & PROGRESSION CURVE
+================================================================================
+- Central Hub (Camp Plaza) [V1, V4, V6, V8, V9]:
+  - Wide dirt clearing surrounded by pine/deciduous forest: Hunting Lodge (north), Butcher Food Truck (east), Weapon Shack (side), Dept. of Wildlife Mobile Trailer & Camper RV (west), Campfire & Rocking Chair by lake nearby.
+- Biomes & Progression [V1, V4, V7, V9]:
+  1. Sunny Pine & Birch Forest + River Valley (Starter area: Boars, Rabbits, Deer, Bigfoot).
+  2. Foggy Olive-Green Swamp (Unlocked via roadside billboard [V7 00:19-00:20]: wooden dock, weeping willows, cattails, aggressive boars).
+  3. Alpine Mountain Highlands (NO SNOW OVERRIDE: green pine forest & gray-brown alpine rock, boulders, Bear, Stag/Reindeer).
+
+================================================================================
+SECTION 10: COMPLETE CHRONOLOGICAL LOGS (VIDEOS 1 THROUGH 9)
+================================================================================
+--- VIDEO 1 (024e996e461b46649c99ac3fe15c736b.mp4) ---
+00:00.00: Forest clearing; Stag rams Overalls Redneck; dust cloud on sand; camper trailer & cans on ground.
+00:01.00-00:02.50: 1st-person AK fires at 2 charging googly-eyed boars; red blood droplets spray; knocked teammate flies left.
+00:03.00-00:06.50: Snow mountain biome; AK fires full-auto with star muzzle flash at flailing/inverted stag; blood pools & bullet wounds.
+00:07.00-00:08.50: Government Agent NPC before "DEPT. OF WILDLIFE FIELD OFFICE 07" trailer with traffic cones.
+00:09.00: Meme cutaway overlay.
+00:10.00-00:11.50: Co-op wide shot; both Rednecks fire AKs side-by-side in sunlit clearing.
+00:12.00: Foggy green swamp biome; 1st-person AK over wooden dock & blood-soaked grass with downed teammate.
+00:13.00-00:14.50: Camp clearing by cabin & buggy; 1st-person hand clinks green glowing moonshine bottle with Overalls Redneck.
+00:15.00-00:16.50: Wooden interior; "LUCKY BUCK" red slot machine spinning reels (Antlers, Pine, Rifle), "$25", "PUT ANIMAL HERE", "UP TO 10X YOUR POT".
+00:17.00-00:18.50: Forest river clearing; 1st-person Bazooka fires rocket with flame & smoke trail toward teammate.
+00:19.00-00:21.50: Tall grassy meadow with yellow/purple flowers; both Rednecks aim pistols point-blank at each other.
+00:22.00-00:25.57: Instagram end-card "@REDNECKREDEMPTION_GAME".
+
+--- VIDEO 2 (625c3c28066946fd9e33eb54c8a3fcb9.mp4) ---
+00:00.00: 1st-person LMG with belt ammo & red-dot fires in sunny pine forest; blood puddles on grass.
+00:01.00-00:02.50: Tank-top Mullet Redneck hit with blood droplets, then runs toward camera holding revolver.
+00:03.00: Bolt-Action wood hunting rifle in ADS aimed at googly-eyed boar on dirt path.
+00:04.00: "LUCKY BUCK" slot machine close-up showing Steak & Rabbit icons, "GOOD LUCK $300", "SLOT RULES".
+00:05.00-00:07.50: AK-47 in ADS aimed at small black-and-white rabbit; rabbit transforms upright into tall red-eyed mutant rabbit and charges.
+00:08.00-00:09.50: 1st-person drinks green moonshine with Overalls Redneck; chromatic double-vision drunk effect.
+00:10.00-00:11.50: Lifted camo/rust 4x4 pickup with blue bed tarp & roof lights splashes through cyan river onto dirt road with white ripple rings.
+00:12.00-00:13.50: 1st-person Bazooka fires rocket at Overalls Redneck near river, creating orange fireball & smoke cloud.
+00:14.00-00:15.50: 1st-person Pistol shoots charging Bigfoot repeatedly; red bullet holes appear on Bigfoot's chest.
+00:16.00-00:17.50: Bigfoot flings Tank-top Redneck high above treetops, then holds him upside-down by the ankle.
+00:18.00-00:22.40: Instagram end-card "@REDNECKREDEMPTION_GAME".
+
+--- VIDEO 3 (8b9f2d5979d5461caabb6453087d09eb.mp4) ---
+00:00.00-00:01.50: Bolt-action rifle aims at googly-eyed boar; boar flips Tank-top Redneck upside down by birch tree.
+00:02.00-00:05.50: AK-47 shoots mutant rabbit that leaps 2.5m into air; "REDNECK REDEMPTION" logo flashes at 00:04.
+00:06.00: Steam page preview card.
+00:07.00: LMG held in sunny pine forest with blood pools on grass.
+00:08.00: 1st-person melee punch hits boar in face, spraying blood droplets.
+00:09.00-00:10.50: Bazooka fires rocket into pack of 6-8 rabbits on meadow near distant fenced ramp.
+00:11.00-00:12.50: Moonshine clink with Overalls Redneck -> chromatic double-vision drunk effect.
+00:13.00-00:16.50: 1st-person carries dead 'X'-eyed deer head to "FEED ME ANIMALS" slot machine; close-up of "LUCKY BUCK" ($300); 3rd-person Mullet Redneck plays machine with "PUT ANIMAL HERE" & neon deer topper.
+00:17.00: Two stags charge across meadow as Overalls Redneck runs ahead.
+00:18.00-00:25.10: Classic Bigfoot footage gag + Instagram end-card "@REDNECKREDEMPTION_GAME".
+
+--- VIDEO 4 (99617bd605264d668e11d9f5d62aeee1.mp4) ---
+00:00.00-00:03.00: Bolt-action rifle aimed at charging googly-eyed boar; boar knocks player down near birch tree.
+00:04.00-00:06.50: Tank-top Mullet Redneck fires pistol at camera, then walks holding green-receiver AK-47.
+00:07.00-00:08.50: Bazooka fires rocket into swarm of rabbits on meadow near RV trailer.
+00:09.00-00:12.50: Player carries dead 'X'-eyed Mutant Rabbit toward "HUNTING LODGE" entrance, feeds it to "LUCKY BUCK" ($25, BET / CASH OUT).
+00:13.00-00:15.50: 1st-person blue-sleeved arm clinks glass Mason Jar moonshine with Tank-top Redneck; jar drops; chromatic drunk blur + white butterfly appears.
+00:16.00-00:19.50: Snow forest; Bolt-action rifle aims at normal Stag which flips upside-down with glowing red-pink eyes.
+00:20.00-00:27.27: Tank-top Redneck aims & fires pistol at camera; Instagram end-card "@REDNECKREDEMPTION_GAME".
+
+--- VIDEO 5 (ScreenRecording_11-25-2026 09-36-00_1.mp4) ---
+00:00.00-00:02.50: Blue-tank-top Redneck runs toward camera; 1st-person AK fires at charging googly-eyed boar.
+00:03.00-00:04.50: FBI door-kick meme clip.
+00:05.00-00:08.50: Character Creator UI showing "CHARACTER", "DRAG TO TURN", "RANDOMISE", "SAVE", "UNSAVED CHANGES", Gut Belly slider & Forehead slider.
+00:09.00-00:13.50: Wooden Rocking Chair by lakeside campfire; Overalls Redneck sits with rifle, swings too far back, and falls backward onto grass.
+00:14.00-00:19.50: Wild Hog showcase -> South Park meme -> AK shoots charging hog which flips Redneck upside down.
+00:20.00-00:25.91: Carrying dead 'X'-eyed hog into Hunting Lodge toward "LUCKY BUCK" ("FEED ME ANIMALS") + real-life slot machine meme clip.
+
+--- VIDEO 6 (a6c665797694474ebab7a29240e240a5.mp4) ---
+00:00.00-00:02.50: 1st-person Bolt-Action rifle looks out Hunting Lodge window toward Butcher Truck & snowy mountain peak; "REDNECK REDEMPTION" logo appears.
+00:03.00: Wide scenic shot of sunlit pine valley.
+00:04.00-00:05.50: 1st-person LMG fires across meadow at group of 3-4 boars.
+00:06.00-00:07.50: Wide shot of Camp Plaza (Hunting Lodge, Butcher Truck, smoking fire).
+00:08.00-00:10.50: Stag rams/pushes Mullet Redneck along dirt road.
+00:11.00-00:13.50: Camo/orange 4x4 Pickup with open hood; Female Redneck inspects front wheel/engine.
+00:14.00-00:16.50: Pickup splashes through cyan river onto dirt road.
+00:17.00-00:21.50: Female Redneck drags dead deer by antlers and loads it into the blue-lined truck bed.
+00:22.00-00:24.50: Pickup drives down dusty road into Camp Plaza past trailer & Butcher NPC, then unloads deer next to Butcher Truck.
+00:25.00-00:32.97: Player feeds 'X'-eyed deer into "LUCKY BUCK" (+$300 POT $300 -> GOOD LUCK $300 -> MONEY BACK $300).
+
+--- VIDEO 7 (b042d01bf9a14f5b81114c2160f75017.mp4) ---
+00:00.00-00:04.50: Live-action snowy river double-barrel shotgun reload hook.
+00:05.00: Mullet Redneck T-pose/arms-spread dance in sunny meadow.
+00:06.00-00:07.50: Snow forest; Bolt-action rifle aims at 2 black-and-white mutant stags/deer in snowfall.
+00:08.00-00:09.50: Boar knocks/drags Tank-top Redneck on meadow grass.
+00:10.00-00:11.50: Foggy swamp; AK-47 shoots charging boar amidst blood puddles and cattails.
+00:12.00-00:14.50: Player carries dead Mutant Rabbit up to Butcher NPC in front of open Butcher Truck; speech bubble "BUTCHER: Bonjour, mon ami!" appears.
+00:15.00-00:18.50: Player feeds Mutant Rabbit to "LUCKY BUCK" ($25); Mullet Redneck celebrates/gestures in cabin.
+00:19.00-00:20.50: Foggy swamp trail with wooden roadside billboard & weeping willows.
+00:21.00-00:22.50: Snow mountain; AK-47 fires at inverted flailing mutant stag spraying blood.
+00:23.00-00:24.50: Bolt-action ADS fires at rabbit pack on hillside.
+00:25.00-00:26.50: Mullet Redneck rides green 4x4 ATV/Quad Bike fast down dirt road.
+00:27.00-00:32.70: Mullet Redneck with shocked bulging eyes & fluttering moths; Instagram end-card "@REDNECKREDEMPTION_GAME".
+
+--- VIDEO 8 (c9d078da80b6423d96a9f693a1130ebb.mp4) ---
+00:00.00-00:02.50: Co-op AK shooting at charging googly-eyed boars in forest; Overalls Redneck knocked flying.
+00:03.00-00:05.50: Carrying dead deer to Butcher "GASTON" ("You bring me something to cook, oui?" -> "$300. Ze texture... mon dieu."); Gaston loads deer into Butcher Truck.
+00:06.00: Full Weapon Shop Wall panning across Pistol, Shotgun, Bolt-Action, LMG, Sniper, Scope, AK-47, Bazooka & Rockets.
+00:07.00: Foggy swamp with blood pools & downed Overalls Redneck.
+00:08.00-00:09.50: Mullet Redneck rubs hands together in camp clearing.
+00:10.00-00:18.50: Stag knocks Mullet Redneck -> carrying deer into "HUNTING LODGE" -> feeding "LUCKY BUCK" ($300) -> 3rd-person spin & disappointed slump beside fireplace & bar.
+00:19.00-00:20.50: Mullet Redneck punches Overalls Redneck down and aims rifle at him.
+00:21.00-00:26.30: Mullet Redneck raises middle finger / waves in camp; Instagram end-card "@REDNECKREDEMPTION_GAME".
+
+--- VIDEO 9 (d3acbb0724334bd0947d8b3e761d746c.mp4) ---
+00:00.00-00:01.50: Bigfoot swings/throws Tank-top Redneck upside down near chain-link fence.
+00:02.00-00:03.50: Outdoor Weapon Shack with Gunsmith NPC & full Weapon Wall (Pistol, Shotgun, Bolt-Action, LMG, Sniper, Scope, AK-47, Bazooka, Alien Blaster, Machete/Knife, "NEW" badges).
+00:04.00-00:05.50: 1st-person LMG shoots charging googly-eyed brown bear; bullet holes appear on bear's face/shoulder.
+00:06.00-00:07.50: Bazooka shoots rocket at deer on riverside dirt road.
+00:08.00-00:09.50: Snow biome; Sniper rifle aims at charging reindeer.
+00:10.00-00:12.50: 1st-person Pistol shoots Bigfoot -> Bigfoot throws player high above forest treetops.
+00:13.00-00:16.50: 1st-person Alien Blaster shoots snow reindeer, levitating it in neon-green particles; player switches to Sniper Rifle & zooms into Mil-Dot Scope overlay.
+00:17.00-00:22.00: "WISHLIST REDNECK REDEMPTION STEAM" end-card.
+
+================================================================================
+SECTION 11: GODOT 4 IMPLEMENTATION ARCHITECTURE (SAINT LEONARD INTEGRATION)
+================================================================================
+PLATFORM OVERRIDE (PC 16:9 VIEWPORT & INPUT):
+- `project.godot`: 1920x1080 landscape viewport, `window/stretch/mode="canvas_items"`,
+  `window/stretch/aspect="expand"`, `emulate_touch_from_mouse` disabled, pure PC
+  Mouse & Keyboard input map.
+
+- Environment & Lighting (`sky_cycle.gd`, `world_builder.gd`):
+  - Disable default constant fog on clear days; use `#3B8EF3 -> #8BC8FF` procedural sky with MultiMesh low-poly cloud clusters.
+  - Add dense MultiMesh 3D grass tufts (`#6EC81E-#82D928`) + scattered yellow/purple wildflowers + ferns on meadow chunks.
+  - Remove heavy black Toon outlines from terrain/nature/props; use clean stylized `StandardMaterial3D` with crisp sunlight + soft shadows.
+- Biomes (`world_builder.gd`, `landmarks.gd`):
+  - Forest Clearing Camp Plaza (Hunting Lodge, Gaston's Butcher Truck, Outdoor Weapon Shack, Wildlife Trailer, RV).
+  - Foggy Swamp Zone (area-unlock billboard, olive fog `#5A6D4A`, cattails, weeping willows, dock).
+  - Snow Mountain Zone (snowfall `GPUParticles3D`, snow-covered pines, boulders).
+- Character & Customization (`main_menu.gd`, `character_model.gd`, `player.gd`):
+  - 3D Character Creator with `"DRAG TO TURN"`, `"RANDOMISE"`, `"SAVE"`, `"UNSAVED CHANGES"`, Gut Belly & Forehead blendshape/bone-scale sliders.
+  - Physical ragdoll knockdown / Bigfoot grab-and-throw + Rocking Chair tip-over state.
+- Weapons, 1st-Person Hands & VFX (`weapon_hand.gd`, `hud.gd`):
+  - Realistic 1st-person forearm/hand meshes gripping each weapon; iron-sight ADS + Mil-Dot Sniper Scope overlay; star muzzle flash, blood droplet `GPUParticles3D`, persistent blood decals & animal wound decals, Bazooka projectile + smoke/fireball, Alien Blaster anti-gravity levitation.
+- Animals & Bosses (`animal.gd`, `animal_spawner.gd`):
+  - Googly-eye meshes on Boar, Deer/Stag, Bear (switch to `'X'` texture on death).
+  - Mutant Rabbit transformation state + Bigfoot Boss with grab/yeet attack.
+- Economy & Props (`casino.gd`, `menus.gd`, `truck.gd`):
+  - Carryable dead carcasses (`'X'` eyes) loadable into Pickup blue cargo bed, sellable to Butcher Gaston (`"GASTON"` world-space speech bubble) or feedable into `"LUCKY BUCK"` slot machine.
+  - Physical Weapon Shack wall with price plaques & `"NEW"` badges; Green 4x4 ATV alongside Lifted 4x4 Pickup.

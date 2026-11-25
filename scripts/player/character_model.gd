@@ -29,10 +29,34 @@ var _held_node: Node3D
 var _held_slot := ""
 
 
+const REDNECK_PRESETS := {
+	"overalls": {
+		shirt = Color(0.910, 0.706, 0.604), pants = Color(0.290, 0.439, 0.722),
+		skin = Color(0.910, 0.706, 0.604), hat = "floppy", hat_color = Color(0.420, 0.306, 0.208),
+		gut_belly = 0.55, forehead = 0.45,
+	},
+	"mullet": {
+		shirt = Color(0.941, 0.941, 0.925), pants = Color(0.290, 0.349, 0.204),
+		skin = Color(0.94, 0.76, 0.62), hat = "none", hat_color = Color(0.133, 0.110, 0.094),
+		gut_belly = 0.65, forehead = 0.60,
+	},
+	"female": {
+		shirt = Color(0.471, 0.722, 0.847), pants = Color(0.306, 0.369, 0.220),
+		skin = Color(0.96, 0.79, 0.66), hat = "cap", hat_color = Color(0.784, 0.157, 0.157),
+		gut_belly = 0.20, forehead = 0.40,
+	},
+	"blue_tank": {
+		shirt = Color(0.431, 0.557, 0.659), pants = Color(0.165, 0.235, 0.345),
+		skin = Color(0.94, 0.76, 0.62), hat = "none", hat_color = Color(0.22, 0.30, 0.18),
+		gut_belly = 0.40, forehead = 0.50,
+	},
+}
+
 func _init(o := {}, layer := 1) -> void:
 	outfit = {
 		shirt = Color(0.35, 0.42, 0.25), pants = Color(0.30, 0.26, 0.20), skin = Color(0.98, 0.80, 0.66),
 		hat = "cap", hat_color = Color(0.22, 0.30, 0.18), jacket = false, uniform = false,
+		gut_belly = 0.35, forehead = 0.50,
 	}
 	outfit.merge(o, true)
 	render_layer = layer
@@ -53,7 +77,7 @@ func _process(_delta: float) -> void:
 		hand_anchor.basis = Basis.IDENTITY if _aiming_glb else Basis(Vector3.RIGHT, deg_to_rad(40))
 
 
-func _part(parent: Node3D, mesh: Mesh, color: Color, pos: Vector3, outline := true) -> MeshInstance3D:
+func _part(parent: Node3D, mesh: Mesh, color: Color, pos: Vector3, outline := false) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = Toon.solid(color, outline, 0.015)
@@ -64,8 +88,17 @@ func _part(parent: Node3D, mesh: Mesh, color: Color, pos: Vector3, outline := tr
 
 
 func _build() -> void:
+	if not outfit.get("uniform", false) and ResourceLoader.exists("res://assets/models/characters/redneck_player.glb"):
+		var glb_wrap := AssetLoader.load_model("res://assets/models/characters/redneck_player.glb", 1.8, func() -> Node3D: return Node3D.new(), false, render_layer)
+		_glb_root = glb_wrap
+		add_child(_glb_root)
+		_anim = AssetLoader.get_animation_player(_glb_root)
+		hand_anchor = Node3D.new()
+		hand_anchor.name = "HandAnchor"
+		_glb_root.add_child(hand_anchor)
+		return
 	var gender_str := str(outfit.get("gender", ""))
-	if gender_str in ["male", "female"] and not outfit.get("uniform", false):
+	if outfit.get("use_glb", false) and gender_str in ["male", "female"] and not outfit.get("uniform", false):
 		var path := "res://assets/characters/female.glb" if gender_str == "female" else "res://assets/characters/male.glb"
 		var scene := load(path) as PackedScene
 		if scene:
@@ -79,6 +112,16 @@ func _build() -> void:
 	body.radius = 0.3
 	body.height = 0.95
 	body_mesh = _part(self, body, shirt, Vector3(0, 1.15, 0))
+	var gut := float(outfit.get("gut_belly", 0.35))
+	body_mesh.scale = Vector3(1.0 + gut * 0.28, 1.0, 1.0 + gut * 0.48)
+	body_mesh.position.z = gut * 0.05
+	if str(outfit.get("preset", "")) == "overalls":
+		var bib := BoxMesh.new()
+		bib.size = Vector3(0.40, 0.46, 0.14)
+		_part(self, bib, outfit.pants, Vector3(0, 1.05, 0.20 + gut * 0.09))
+		var strap := BoxMesh.new()
+		strap.size = Vector3(0.08, 0.38, 0.08)
+		_part(self, strap, outfit.pants, Vector3(-0.14, 1.38, 0.18 + gut * 0.05))
 	if outfit.jacket:
 		var jk := CapsuleMesh.new()
 		jk.radius = 0.32
@@ -96,7 +139,8 @@ func _build() -> void:
 	hm.radius = 0.28
 	hm.height = 0.54
 	_part(head, hm, skin, Vector3.ZERO)
-	head.scale = Vector3.ONE * 1.12  # etwas größerer Kopf: witziger
+	var fh := float(outfit.get("forehead", 0.50))
+	head.scale = Vector3(1.12, 1.06 + fh * 0.24, 1.12)  # etwas größerer Kopf + Forehead-Slider
 	var nose := SphereMesh.new()
 	nose.radius = 0.075
 	nose.height = 0.14
@@ -132,7 +176,22 @@ func _build() -> void:
 	_part(head, moustache, Color(0.35, 0.25, 0.15), Vector3(0, -0.12, 0.25), false)
 
 	var hc: Color = outfit.hat_color
+	if outfit.get("glasses", false):
+		var sh := BoxMesh.new()
+		sh.size = Vector3(0.30, 0.07, 0.06)
+		_part(head, sh, Color(0.078, 0.078, 0.078), Vector3(0, 0.06, 0.27))  # #141414 Sunglasses
 	match str(outfit.hat):
+		"floppy":
+			var fbrim := CylinderMesh.new()
+			fbrim.top_radius = 0.45
+			fbrim.bottom_radius = 0.48
+			fbrim.height = 0.04
+			_part(head, fbrim, hc, Vector3(0, 0.21, 0))
+			var fcrown := CylinderMesh.new()
+			fcrown.top_radius = 0.19
+			fcrown.bottom_radius = 0.26
+			fcrown.height = 0.22
+			_part(head, fcrown, hc.darkened(0.08), Vector3(0, 0.33, 0))
 		"cap":
 			var cap := CylinderMesh.new()
 			cap.top_radius = 0.25

@@ -79,33 +79,38 @@ func rebuild() -> void:
 	_body.position.y = lift
 	var dark := Color(0.14, 0.14, 0.15)
 	var glass := Color(0.45, 0.6, 0.7)
-	# Unterbau und Motorhaube
-	_box(_body, Vector3(1.9, 0.55, 5.0), Vector3(0, 0.12, -0.3), paint)
-	_box(_body, Vector3(1.86, 0.25, 1.5), Vector3(0, 0.5, 1.45), paint.lightened(0.04))  # Haube
-	_box(_body, Vector3(1.94, 0.16, 5.08), Vector3(0, -0.18, -0.3), dark)  # Schweller
-	# Kabine (Ebene 3: in der Ego-Ansicht im Auto ausgeblendet, damit man hinaussieht)
-	for cab in [_box(_body, Vector3(1.8, 0.8, 1.9), Vector3(0, 0.88, 0.35), paint),
-			_box(_body, Vector3(1.82, 0.5, 1.4), Vector3(0, 0.98, 0.35), glass, false),
-			_box(_body, Vector3(1.6, 0.5, 1.92), Vector3(0, 0.98, 0.35), glass, false),
-			_box(_body, Vector3(1.84, 0.08, 1.96), Vector3(0, 1.3, 0.35), paint.darkened(0.1))]:
-		cab.layers = 4
-	# Armaturenbrett und Lenkrad (nur innen zu sehen)
-	_box(_body, Vector3(1.6, 0.25, 0.3), Vector3(0, 0.62, 1.1), dark)
-	var wheel_ring := _box(_body, Vector3(0.38, 0.38, 0.04), Vector3(0.42, 0.82, 0.85), dark)
-	wheel_ring.rotation.x = -0.5
-	# Ladefläche mit Bordwänden
-	_box(_body, Vector3(1.8, 0.1, 2.2), Vector3(0, 0.45, -1.65), dark)
-	for sx in [-0.88, 0.88]:
-		_box(_body, Vector3(0.08, 0.45, 2.2), Vector3(sx, 0.68, -1.65), paint)
-	_box(_body, Vector3(1.8, 0.45, 0.08), Vector3(0, 0.68, -2.75), paint)  # Heckklappe
-	_box(_body, Vector3(1.8, 0.45, 0.08), Vector3(0, 0.68, -0.55), paint)
-	# Kühlergrill, Lichter, Nummer
-	_box(_body, Vector3(1.4, 0.32, 0.06), Vector3(0, 0.38, 2.22), dark)
-	for x in [-0.68, 0.68]:
-		_box(_body, Vector3(0.32, 0.18, 0.06), Vector3(x, 0.45, 2.22), Color(1.0, 0.95, 0.7), false)
-		_box(_body, Vector3(0.2, 0.25, 0.06), Vector3(x, 0.5, -2.8), Color(0.9, 0.12, 0.1), false)
-	_box(_body, Vector3(0.5, 0.14, 0.04), Vector3(0, 0.05, 2.24), Color(0.95, 0.95, 0.9), false)
-	_box(_body, Vector3(0.5, 0.14, 0.04), Vector3(0, 0.2, -2.82), Color(0.95, 0.95, 0.9), false)
+	if ResourceLoader.exists("res://assets/models/vehicles/pickup_4x4.glb"):
+		var glb_truck := AssetLoader.load_model("res://assets/models/vehicles/pickup_4x4.glb", 2.1, func() -> Node3D: return Node3D.new())
+		glb_truck.position.y = -0.35
+		_body.add_child(glb_truck)
+	else:
+		# Unterbau und Motorhaube
+		_box(_body, Vector3(1.9, 0.55, 5.0), Vector3(0, 0.12, -0.3), paint)
+		_box(_body, Vector3(1.86, 0.25, 1.5), Vector3(0, 0.5, 1.45), paint.lightened(0.04))  # Haube
+		_box(_body, Vector3(1.94, 0.16, 5.08), Vector3(0, -0.18, -0.3), dark)  # Schweller
+		# Kabine (Ebene 3: in der Ego-Ansicht im Auto ausgeblendet, damit man hinaussieht)
+		for cab in [_box(_body, Vector3(1.8, 0.8, 1.9), Vector3(0, 0.88, 0.35), paint),
+				_box(_body, Vector3(1.82, 0.5, 1.4), Vector3(0, 0.98, 0.35), glass, false),
+				_box(_body, Vector3(1.6, 0.5, 1.92), Vector3(0, 0.98, 0.35), glass, false),
+				_box(_body, Vector3(1.84, 0.08, 1.96), Vector3(0, 1.3, 0.35), paint.darkened(0.1))]:
+			cab.layers = 4
+		# Armaturenbrett und Lenkrad (nur innen zu sehen)
+		_box(_body, Vector3(1.6, 0.25, 0.3), Vector3(0, 0.62, 1.1), dark)
+		var wheel_ring := _box(_body, Vector3(0.38, 0.38, 0.04), Vector3(0.42, 0.82, 0.85), dark)
+		wheel_ring.rotation.x = -0.5
+		# Ladefläche mit Bordwänden
+		_box(_body, Vector3(1.8, 0.1, 2.2), Vector3(0, 0.45, -1.65), dark)
+		for sx in [-0.88, 0.88]:
+			_box(_body, Vector3(0.08, 0.45, 2.2), Vector3(sx, 0.68, -1.65), paint)
+		_box(_body, Vector3(1.8, 0.45, 0.08), Vector3(0, 0.68, -2.75), paint)  # Heckklappe
+		_box(_body, Vector3(1.8, 0.45, 0.08), Vector3(0, 0.68, -0.55), paint)
+		# Kühlergrill, Lichter, Nummer
+		_box(_body, Vector3(1.4, 0.32, 0.06), Vector3(0, 0.38, 2.22), dark)
+		for x in [-0.68, 0.68]:
+			_box(_body, Vector3(0.32, 0.18, 0.06), Vector3(x, 0.45, 2.22), Color(1.0, 0.95, 0.7), false)
+			_box(_body, Vector3(0.2, 0.25, 0.06), Vector3(x, 0.5, -2.8), Color(0.9, 0.12, 0.1), false)
+		_box(_body, Vector3(0.5, 0.14, 0.04), Vector3(0, 0.05, 2.24), Color(0.95, 0.95, 0.9), false)
+		_box(_body, Vector3(0.5, 0.14, 0.04), Vector3(0, 0.2, -2.82), Color(0.95, 0.95, 0.9), false)
 	if up.has("bullbar"):
 		for x in [-0.6, 0.6]:
 			_box(_body, Vector3(0.08, 0.7, 0.08), Vector3(x, 0.3, 2.45), dark)

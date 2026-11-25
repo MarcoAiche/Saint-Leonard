@@ -25,7 +25,7 @@ var stamina := 100.0
 var bac := 0.0  # Promille / 1000 (0.05 = 0,5 Promille)
 var smoke_time := 0.0  # Sekunden ruhige Hand nach einer Zigarette
 var cough_timer := 0.0
-var outfit := {gender = "male", shirt = Color(0.35, 0.42, 0.25), pants = Color(0.30, 0.26, 0.20), skin = Color(0.98, 0.80, 0.66), hat = "hunter", hat_color = Color(0.22, 0.30, 0.18), jacket = false}
+var outfit := {preset = "overalls", shirt = Color(0.910, 0.706, 0.604), pants = Color(0.290, 0.439, 0.722), skin = Color(0.910, 0.706, 0.604), hat = "floppy", hat_color = Color(0.420, 0.306, 0.208), jacket = false, glasses = true, gut_belly = 0.55, forehead = 0.45}
 var truck := {paint = 0, upgrades = {}, fuel = 70.0, damage = 0.0, cargo = []}
 var house := -1  # Bauplatz-Nummer des eigenen Hauses
 var furniture: Array = []  # [{id, pos:[x,y,z], rot}]
@@ -38,10 +38,10 @@ var trophies: Array = []  # Trophäenwand im Gasthaus: [{sp, score, unit, day, h
 var minimap_on := true
 
 # ---------------------------------------------------------------- gemeinsame Welt
-var time := 7.0  # Uhrzeit in Stunden
+var time := 11.0  # Uhrzeit in Stunden (klarer sonniger Tag)
 var day := 1
-var weather := "fog"  # clear, cloudy, fog, rain
-var wetness := 0.2  # 0 trocken .. 1 alles Matsch
+var weather := "clear"  # clear, cloudy, fog, rain
+var wetness := 0.0  # 0 trocken .. 1 alles Matsch
 var placed: Array = []  # [{uid, type, pos:[x,y,z], rot, owner, data:{}}]
 var houses := {}  # Bauplatz (String) -> {owner, type}
 var police_heat := 0.0  # steigt bei Explosionen, Verfolgungen
@@ -366,9 +366,10 @@ func reset_new_game() -> void:
 	side_jobs = []
 	stats = {deer = 0, boar = 0, rabbit = 0, bear = 0, bottles = 0, fines = 0}
 	trophies = []
-	time = 7.0
+	time = 11.0
 	day = 1
-	weather = "fog"
+	weather = "clear"
+	wetness = 0.0
 	placed = []
 	houses = {}
 
@@ -384,5 +385,5 @@ static func _colors_in(d: Dictionary) -> Dictionary:
 	var o := {}
 	for k in d:
 		var v = d[k]
-		o[k] = Color.html(v) if v is String and k not in ["hat", "gender"] and Color.html_is_valid(v) else v
+		o[k] = Color.html(v) if v is String and k not in ["hat", "gender", "preset"] and Color.html_is_valid(v) else v
 	return o
