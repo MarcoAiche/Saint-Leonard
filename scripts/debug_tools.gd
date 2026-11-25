@@ -56,12 +56,12 @@ func _ready() -> void:
 		GameState.save_game()
 		var d = JSON.parse_string(FileAccess.get_file_as_string("%s/%s.json" % [GameState.SAVE_DIR, GameState.slot]))
 		print("[Server] Gespeichert: Profile %s, %d aufgestellt, Häuser %s" % [d.get("profiles", {}).keys(), d.world.placed.size(), d.world.houses])
-		get_tree().quit()
+		await _quit()
 		return
 	if args.has("mptest") and Net.is_client():
 		var t := MpTest.new(game, str(args.mptest))
 		await t.run()
-		get_tree().quit()
+		await _quit()
 		return
 	await get_tree().create_timer(0.5).timeout
 	if args.has("money"):
@@ -221,7 +221,7 @@ func _ready() -> void:
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(args.shot)
 		print("Screenshot gespeichert: ", args.shot)
-	get_tree().quit()
+	await _quit()
 
 
 ## Sucht Knoten mit ungültiger Position (NaN) und meldet sie einmal
@@ -430,3 +430,8 @@ func _selftest(game: Game) -> void:
 
 static func _floats(s: String) -> Array:
 	return Array(s.split(",")).map(func(x): return float(x))
+
+
+## Sauber beenden: erst vom Server trennen (sonst stürzt Godot ohne Fenster ab)
+func _quit() -> void:
+	await Net.quit_game()

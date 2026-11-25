@@ -121,7 +121,7 @@ func _ready() -> void:
 	menu = MainMenu.new()
 	add_child(menu)
 	menu.start.connect(_on_menu_start)
-	menu.quit.connect(func(): get_tree().quit())
+	menu.quit.connect(func(): Net.quit_game())
 	# Hintergrund fürs Menü: Kamera über dem Dorf
 	var cam := Camera3D.new()
 	cam.name = "Menuekamera"
@@ -314,10 +314,7 @@ func _start_game() -> void:
 	hud.big_map.setup(world, true)
 	hud.big_map.clicked.connect(func(p): set_waypoint(p))
 	hud.resume_requested.connect(func(): set_paused(false))
-	hud.quit_requested.connect(func():
-		GameState.save_game()
-		await Net.leave_gracefully()
-		get_tree().quit())
+	hud.quit_requested.connect(func(): Net.quit_game())
 	hud.save_requested.connect(func():
 		GameState.save_game()
 		hud.toast("Gespeichert: %s" % GameState.slot_title, 2.0))
