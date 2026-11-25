@@ -18,6 +18,7 @@ var police: PoliceManager
 var missions: Missions
 var casino: Casino
 var hall: FireHall
+var gasthaus: Gasthaus
 var sitting := false
 var sky: SkyCycle
 var player: Player
@@ -243,6 +244,12 @@ func _setup_hall() -> void:
 		add_child(hall)
 		hall.setup(self, world, info)
 	casino.setup(self, hall)
+	var g_info := Gasthaus.find(world)
+	if not g_info.is_empty():
+		gasthaus = Gasthaus.new()
+		gasthaus.name = "GasthausPirtscher"
+		add_child(gasthaus)
+		gasthaus.setup(self, world, g_info)
 
 
 ## Hinsetzen (Bank, Pokertisch): Figur sitzt, Kamera bleibt frei
@@ -648,6 +655,9 @@ func _harvest(c: Carcass) -> void:
 	if c.species == "legend":
 		missions.event("legend_killed")
 	hud.toast("Ausgenommen: " + ", ".join(parts), 3.5)
+	var trophy := TrophyBoard.record(c.species, c.male, c.net_id)
+	if trophy != "":
+		GameState.notify("Wirt Sepp", trophy)
 	Net.carcass_removed(c.net_id)
 	c.queue_free()
 
@@ -963,6 +973,8 @@ func decorate_pub_trophy() -> void:
 	t.scale = Vector3.ONE * 2.5
 	t.look_at(t.global_position + out, Vector3.UP)
 	t.rotate_object_local(Vector3.UP, PI)
+	if gasthaus and gasthaus.board:
+		gasthaus.board.refresh.call_deferred()  # Ehrenplatz für den Riesenhirsch
 
 
 func start_festival() -> void:

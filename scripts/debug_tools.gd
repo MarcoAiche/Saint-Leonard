@@ -206,6 +206,10 @@ func _ready() -> void:
 		await _trailer_test(game)
 	if args.has("housetest"):
 		await _house_test(game)
+	if args.has("gasthaustest"):
+		await _gasthaus_test(game)
+	if args.has("trophytest"):
+		await _trophy_test(game)
 	if args.has("selftest"):
 		await _selftest(game)
 	if args.has("aim"):
@@ -229,6 +233,54 @@ func _ready() -> void:
 
 
 ## Sucht Knoten mit ungültiger Position (NaN) und meldet sie einmal
+## Gasthaus Pirtscher: von der Straße durch die Tür in die Gaststube gehen
+func _gasthaus_test(game: Game) -> void:
+	var g: Gasthaus = game.gasthaus
+	if g == null:
+		push_error("Gasthaus fehlt")
+		return
+	var hz := g.size.y * 0.5
+	var outside := g.global_transform * Vector3(0, 0, hz + 3.0)
+	print("Gasthaus bei %s, Größe %s, Boden Tür %.2f / Haus %.2f" % [g.global_position, g.size, game.world.height_at(outside.x, outside.z), g.global_position.y])
+	game.player.global_position = Vector3(outside.x, game.world.height_at(outside.x, outside.z) + 0.5, outside.z)
+	game.player.reset_physics_interpolation()
+	game.rig.yaw = g.rotation.y
+	await get_tree().create_timer(0.5).timeout
+	Input.action_press("move_forward")
+	await get_tree().create_timer(3.5).timeout
+	Input.action_release("move_forward")
+	await get_tree().create_timer(0.3).timeout
+	var local := g.global_transform.affine_inverse() * game.player.global_position
+	print("Spieler lokal im Gasthaus: %s -> %s" % [local, "drinnen" if absf(local.z) < hz - 0.3 and absf(local.x) < g.size.x * 0.5 else "DRAUSSEN"])
+
+## Trophäenwand: Stücke vermessen, aufhängen, Wand ansehen
+func _trophy_test(game: Game) -> void:
+	var counts := {}
+	var seed := 1
+	while GameState.trophies.size() < 9 and seed < 5000:
+		for sp in ["deer", "boar", "bear", "fox", "deer"]:
+			if int(counts.get(sp, 0)) >= (4 if sp == "deer" else 2):
+				continue
+			var msg := TrophyBoard.record(sp, true, seed)
+			if msg != "":
+				counts[sp] = int(counts.get(sp, 0)) + 1
+				print(msg)
+			seed += 1
+	print("Geiß gibt Trophäe: %s, Hase: %s" % [not TrophyBoard.measure("deer", false, 3).is_empty(), not TrophyBoard.measure("rabbit", true, 3).is_empty()])
+	GameState.story["done_legend_deliver"] = true
+	var b: TrophyBoard = game.gasthaus.board
+	print("Offen zum Aufhängen: %d" % TrophyBoard.pending().size())
+	b.hang_all()
+	await get_tree().process_frame
+	print("Offen danach: %d, an der Wand: %d Knoten" % [TrophyBoard.pending().size(), b._mounts.get_child_count()])
+	var front := b.global_transform * Vector3(0, -0.6, 4.5)
+	game.player.global_position = Vector3(front.x, b.global_position.y - 2.0, front.z)
+	game.player.reset_physics_interpolation()
+	var look := b.global_position - front
+	game.rig.yaw = atan2(-look.x, -look.z)
+	game.rig.pitch = 0.05
+	await get_tree().create_timer(0.6).timeout
+
 func _nan_watch(game: Node) -> void:
 	var seen := {}
 	while is_instance_valid(game):
