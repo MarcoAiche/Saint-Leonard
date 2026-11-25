@@ -9,7 +9,7 @@ extends Vehicle
 signal cargo_lost(node: Node3D)
 
 const TANK := 70.0
-const HITCH := Vector3(0, 0.1, -2.95)  # Anhängerkupplung (lokal, hinten)
+const HITCH := Vector3(0, 0.04, -2.82)  # Anhängerkupplung (lokal, bündig unter L200-Heck)
 const BED_SLOTS := [Vector3(-0.45, 0.55, -1.25), Vector3(0.45, 0.55, -1.25), Vector3(-0.45, 0.55, -2.0), Vector3(0.45, 0.55, -2.0)]
 const SEATS := {driver = Vector3(0.42, 0.75, 0.25), passenger = Vector3(-0.42, 0.75, 0.25), bed_l = Vector3(-0.5, 0.9, -1.6), bed_r = Vector3(0.5, 0.9, -1.6)}
 
@@ -27,6 +27,7 @@ var _cable: MeshInstance3D
 var _dist_acc := 0.0
 var _last_pos := Vector3.ZERO
 var _smoke: GPUParticles3D
+var _glb_wheels: Array[Node3D] = []
 
 
 func _ready() -> void:
@@ -72,6 +73,7 @@ func rebuild() -> void:
 	for l in _headlights:
 		l.queue_free()
 	_headlights.clear()
+	_glb_wheels.clear()
 
 	var paint: Color = Items.PAINTS[int(GameState.truck.paint) % Items.PAINTS.size()][1]
 	var lift := 0.22 if up.has("lift") else 0.0
@@ -79,10 +81,10 @@ func rebuild() -> void:
 	_body.position.y = lift
 	var dark := Color(0.14, 0.14, 0.15)
 	var glass := Color(0.45, 0.6, 0.7)
-	if ResourceLoader.exists("res://assets/models/vehicles/pickup_4x4.glb"):
-		var glb_truck := AssetLoader.load_model("res://assets/models/vehicles/pickup_4x4.glb", 2.1, func() -> Node3D: return Node3D.new())
-		glb_truck.position.y = -0.35
-		_body.add_child(glb_truck)
+	var glb_path := "res://assets/models/vehicles/pickup_truck.glb" if ResourceLoader.exists("res://assets/models/vehicles/pickup_truck.glb") else "res://assets/models/vehicles/pickup_4x4.glb"
+	var loaded_glb := _load_pickup_glb(glb_path)
+	if loaded_glb != null:
+		_body.add_child(loaded_glb)
 	else:
 		# Unterbau und Motorhaube
 		_box(_body, Vector3(1.9, 0.55, 5.0), Vector3(0, 0.12, -0.3), paint)
@@ -153,16 +155,20 @@ func rebuild() -> void:
 		w.wheel_rest_length = 0.3 + lift * 0.6
 		w.suspension_travel = 0.28 + lift * 0.6
 		w.suspension_stiffness = 36.0 if up.has("lift") else 42.0
-		if mud:
+		if _glb_wheels.size() == 4:
+			for ch in w.get_children():
+				if ch is Node3D:
+					(ch as Node3D).visible = false
+		elif mud:
 			# Stollen andeuten
 			for k in 8:
 				var a := TAU * k / 8.0
 				var lug := _box(w, Vector3(0.38, 0.06, 0.1), Vector3(0, cos(a) * r, sin(a) * r), Color(0.08, 0.08, 0.08), false)
 				lug.rotation.x = -a
 	_add_headlights(2.3, 0.45 + lift, 0.68)
-	# Anhängerkupplung
-	_box(_body, Vector3(0.12, 0.12, 0.35), Vector3(0, -0.05, -2.95), Color(0.15, 0.15, 0.16))
-	var ball := _box(_body, Vector3(0.12, 0.12, 0.12), Vector3(0, 0.08, -3.05), Color(0.6, 0.6, 0.62))
+	# Anhängerkupplung (bündig unter der hinteren Stoßstange)
+	_box(_body, Vector3(0.08, 0.07, 0.24), Vector3(0, -0.04, -2.72), Color(0.15, 0.15, 0.16))
+	var ball := _box(_body, Vector3(0.08, 0.08, 0.08), HITCH, Color(0.6, 0.6, 0.62))
 	ball.name = "Kupplungskugel"
 	set_lights(lights_on)
 	grip_mult = 1.0
@@ -170,6 +176,47 @@ func rebuild() -> void:
 	if up.has("lift"):
 		offroad_mult *= 1.12
 	_engine.volume_db = 4.0 if up.has("exhaust") else 0.0
+
+
+func _load_pickup_glb(glb_path: String) -> Node3D:
+	if not ResourceLoader.exists(glb_path):
+		return null
+	var scene := ResourceLoader.load(glb_path) as PackedScene
+	if scene == null:
+		return null
+	var inst := scene.instantiate() as Node3D
+	if inst == null:
+		return null
+	var bounds := AssetLoader._compute_visual_aabb(inst)
+	var wrapper := Node3D.new()
+	wrapper.add_child(inst)
+	if bounds.size.z > 0.001:
+		var sc := 5.0 / bounds.size.z
+		inst.scale = Vector3.ONE * sc
+		var center_xz := bounds.position + bounds.size * 0.5
+		inst.position = Vector3(-center_xz.x * sc, -0.47 - bounds.position.y * sc, -0.3 - center_xz.z * sc)
+	AssetLoader._configure_meshes(inst, false, 1)
+	for wname in ["Mesh3 Model", "Mesh5 Model", "Mesh6 Model", "Mesh7 Model"]:
+		var wn := inst.find_child(wname, true, false)
+		if wn is Node3D:
+			var mi: MeshInstance3D = wn as MeshInstance3D if wn is MeshInstance3D else wn.find_child("*", true, false) as MeshInstance3D
+			if mi:
+				var center: Vector3 = mi.get_aabb().get_center()
+				var pivot := Node3D.new()
+				pivot.name = wname + "_Pivot"
+				var parent := wn.get_parent()
+				var idx := wn.get_index()
+				pivot.transform = (wn as Node3D).transform
+				pivot.translate_object_local(center)
+				parent.add_child(pivot)
+				parent.move_child(pivot, idx)
+				parent.remove_child(wn)
+				pivot.add_child(wn)
+				(wn as Node3D).transform = Transform3D(Basis.IDENTITY, -center)
+				_glb_wheels.append(pivot)
+			else:
+				_glb_wheels.append(wn as Node3D)
+	return wrapper
 
 
 func set_lights(on: bool) -> void:
@@ -189,7 +236,10 @@ func is_mine() -> bool:
 	return owner_name.is_empty() or owner_name == GameState.player_name
 
 
-func _on_drive(delta: float, throttle: float, _v: float) -> void:
+func _on_drive(delta: float, throttle: float, v: float) -> void:
+	for gw in _glb_wheels:
+		if is_instance_valid(gw):
+			gw.rotate_x((v / 3.6) * delta / 0.42)
 	if not is_mine():
 		return
 	# Sprit: ca. 2,5 l pro km plus Leerlauf (verkürzt, damit Tanken eine Rolle spielt)

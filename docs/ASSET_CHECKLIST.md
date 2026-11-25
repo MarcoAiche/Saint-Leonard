@@ -26,6 +26,9 @@ Dieses Dokument trennt klar zwischen **(a) bereits eingebundenen echten 3D-Asset
 ### Weapons (`res://assets/weapons/`)
 - `pistol.glb`, `assault_rifle.glb`, `sniper_rifle.glb`
 
+### Vehicles (`res://assets/models/vehicles/`)
+- `pickup_truck.glb` (Mitsubishi L200 4x4 Pickup — automatisch per AABB zentriert, auf `5.0m` Länge skaliert, Rad-Unterkante am Boden)
+
 ---
 
 ## (b) Aktuell prozedurale Blueprint-Modelle (optionale Drop-in `.glb`-Upgrades in `res://assets/models/...`)

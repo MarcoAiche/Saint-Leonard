@@ -321,7 +321,7 @@ func _start_game() -> void:
 	player.attach_camera(rig)
 	var look: Vector2 = sp.look
 	rig.yaw = atan2(-look.x, -look.y)
-	rig.set_target(player, 1.65, 5.0, false, true)
+	rig.set_target(player, 1.65, 5.0, false, _foot_fp)
 
 	Animal.threats.assign([player, car])
 	spawner.players.assign([player])
@@ -413,7 +413,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("inventory"):
 		Menus.inventory(self)
 	elif event.is_action_pressed("toggle_view"):
-		rig.toggle_view()
+		if seat == "":
+			rig.toggle_view()
 	elif event.is_action_pressed("minimap"):
 		toggle_minimap()
 	elif event.is_action_pressed("mute"):
@@ -702,7 +703,11 @@ func _harvest(c: Carcass) -> void:
 
 # ------------------------------------------------------------------ Fahrzeuge
 
+var _foot_fp := true
+
 func enter_vehicle(t: Vehicle, s: String) -> void:
+	if seat == "":
+		_foot_fp = rig.first_person
 	seat = s
 	seat_truck = t
 	driving = s == "driver" and (t == car or t == atv)
@@ -752,7 +757,7 @@ func exit_vehicle() -> void:
 	seat = ""
 	seat_truck = null
 	driving = false
-	rig.set_target(player, 1.65, 5.0, false, true)
+	rig.set_target(player, 1.65, 5.0, false, _foot_fp)
 	hud.set_driving(false)
 	if GameState.has("sniper"):
 		player.hand.select("sniper")
