@@ -16,11 +16,11 @@ const SHOP_ORDER := ["bauhaus", "super", "gun", "butcher", "police"]
 ## Echte Läden in Villach: OSM-Name und ungefähre Lage in Kartenmetern (vor MAP_SCALE), damit bei
 ## gleichnamigen Orten (z. B. zwei Interspar) der richtige gewählt wird
 const CITY_SHOPS := {
-	"bauhaus": ["Bauhaus", Vector2(4284, -4603)],
-	"super": ["Interspar", Vector2(4183, -5168)],
-	"gun": ["Alpen Adria Jagd & Sportwaffen", Vector2(5005, -6972)],
-	"butcher": ["Ilgenfritz", Vector2(4525, -4927)],
-	"police": ["Polizeiinspektion Auen", Vector2(4359, -5220)],
+	"bauhaus": ["Baumarkt", Vector2(4345, -4565)],
+	"super": ["Supermarkt", Vector2(4345, -4735)],
+	"gun": ["Waffengeschäft", Vector2(4435, -4760)],
+	"butcher": ["Fleischerei", Vector2(4435, -4540)],
+	"police": ["Polizei", Vector2(4255, -4685)],
 }
 const SHOP_SIGNS := {
 	"bauhaus": ["BAUHAUS", Color(0.85, 0.10, 0.10)],
@@ -54,7 +54,7 @@ func setup(w: WorldBuilder, g: Node) -> void:
 	game = g
 	_rng.seed = 4711
 	_index_buildings()
-	city_center = _place_pos(CITY_PLACE, Vector2(5311, -7475) * WorldBuilder.MAP_SCALE)
+	city_center = _place_pos(CITY_PLACE, Vector2(4345, -4650) * WorldBuilder.MAP_SCALE)
 	home_center = _place_pos(HOME_PLACE, Vector2(1170, 10))
 	_find_pub()
 	_find_city_shops()

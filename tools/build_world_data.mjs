@@ -356,7 +356,7 @@ const world = LOCAL
     }
   : convertOsm(await loadOsm());
 
-// 1. Korridor-Cut: Nur Heimat-Map (z >= -2300), B83-Korridor bis B83/B86-Kreuzung und Bauhaus-Zone behalten
+// 1. Exakter Spleiß der Border zwischen border[3] (nordöstl. Unterfederaun) und border[53] (südöstl. FF Fürnitz)
 const townBox = { x0: 4205, x1: 4630, z0: -4830, z1: -4440 };
 const inBox = (x, z, b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1;
 const b83Segs = [];
@@ -364,20 +364,92 @@ for (const r of world.roads) {
   if (!r.name || !(r.name.includes("Kärntner Straße") || r.name.includes("B83"))) continue;
   for (let k = 1; k < r.pts.length; k++) {
     const a = r.pts[k - 1], b = r.pts[k];
-    if (Math.min(a[1], b[1]) <= -950 && Math.max(a[1], b[1]) >= -6150) b83Segs.push([a, b]);
+    if (Math.min(a[1], b[1]) <= -950 && Math.max(a[1], b[1]) >= -4950) b83Segs.push([a, b]);
   }
 }
-const distToB83 = (x, z) => {
+
+const polyDist = (x, z, poly) => {
   let best = Infinity;
-  for (const [a, b] of b83Segs) {
-    const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1e-6;
-    const t = Math.min(1, Math.max(0, ((x - a[0]) * dx + (z - a[1]) * dz) / l2));
-    best = Math.min(best, Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz));
+  for (let a = 0, b = poly.length - 1; a < poly.length; b = a++) {
+    const [xa, za] = poly[a], [xb, zb] = poly[b];
+    const dx = xb - xa, dz = zb - za, l2 = dx * dx + dz * dz || 1e-6;
+    const t = Math.min(1, Math.max(0, ((x - xa) * dx + (z - za) * dz) / l2));
+    best = Math.min(best, Math.hypot(x - xa - t * dx, z - za - t * dz));
   }
   return best;
 };
-const bauhausZone = { x0: 4160, x1: 4720, z0: -4920, z1: -4410 };
-const inKeepZone = (x, z) => z >= -2300 || (z >= -6150 && distToB83(x, z) <= 230) || inBox(x, z, bauhausZone);
+
+{
+  // Unveränderte Bestands-Eckpunkte: indices 53..85, 0, 1, 2, 3 (37 Punkte), mit B83-Kurven-Entlastung [2960, -2710] zwischen border[1] und border[2]
+  const keptExisting = [...border.slice(53), ...border.slice(0, 4)];
+  const westPoly = [...border.slice(53), border[0], border[1], [2960, -2710], border[2], border[3]];
+  const splicePts = [
+    // d) B83-Westseite (>= 120-160m Puffer) von border[3] nach Norden
+    [3950, -3450], [3920, -3700], [3890, -3950], [3880, -4200], [3880, -4450], [3900, -4700], [3980, -4860],
+    // c) Kompakte Stadt-Blase (60-90m Rand um Kleinstadt)
+    [4120, -4900], [4350, -4910], [4580, -4885], [4650, -4810], [4665, -4650], [4650, -4490], [4580, -4415], [4380, -4405], [4210, -4405],
+    // b) B83-Ost-/Südseite (>= 120-160m Puffer) nach Süden
+    [4210, -4200], [4260, -3950], [4360, -3700], [4410, -3450], [4410, -3200], [4390, -2950], [4310, -2700], [4120, -2450], [3700, -2320], [3100, -2240], [2680, -2160],
+    // a) Westspitze & Südkante Verschiebebahnhof bis nordöstlich FF Fürnitz -> Anschluss an border[53]
+    [2350, -2050], [2360, -1700], [2450, -1520], [2750, -1530], [3180, -1540], [3360, -1520], [3310, -1350],
+  ];
+  const newBorder = [...westPoly, ...splicePts];
+
+  // Pflicht-Checks VOR dem Bake
+  // 1) Unveränderter Bestand 1:1
+  for (const kp of keptExisting) {
+    if (!newBorder.some((p) => p[0] === kp[0] && p[1] === kp[1])) {
+      throw new Error(`Bestands-Border-Punkt [${kp[0]}, ${kp[1]}] fehlt!`);
+    }
+  }
+  // 2) Keine Selbstüberschneidung
+  const segInter = (a, b, c, d) => {
+    const ccw = (p1, p2, p3) => (p3[1] - p1[1]) * (p2[0] - p1[0]) > (p2[1] - p1[1]) * (p3[0] - p1[0]);
+    return ccw(a, c, d) !== ccw(b, c, d) && ccw(a, b, c) !== ccw(a, b, d);
+  };
+  let selfIntersections = 0;
+  for (let i = 0; i < newBorder.length; i++) {
+    const a = newBorder[i], b = newBorder[(i + 1) % newBorder.length];
+    for (let j = i + 2; j < newBorder.length; j++) {
+      if (i === 0 && j === newBorder.length - 1) continue;
+      const c = newBorder[j], d = newBorder[(j + 1) % newBorder.length];
+      if (segInter(a, b, c, d)) selfIntersections++;
+    }
+  }
+  if (selfIntersections > 0) throw new Error(`Border hat ${selfIntersections} Selbstüberschneidungen!`);
+
+  // 3) Kein B83-Einklemmen (>= 80 m Abstand zwischen Unterfederaun und Kleinstadt)
+  let minB83Dist = Infinity;
+  for (const [a, b] of b83Segs) {
+    for (const [px, pz] of [a, b]) {
+      if (pz <= -2200 && pz >= -4750) {
+        if (!inPoly(px, pz, newBorder)) throw new Error(`B83-Punkt [${px}, ${pz}] liegt außerhalb der Border!`);
+        minB83Dist = Math.min(minB83Dist, polyDist(px, pz, newBorder));
+      }
+    }
+  }
+  if (minB83Dist < 80) throw new Error(`B83-Abstand zur Border zu klein: ${minB83Dist.toFixed(1)} m (< 80 m)`);
+
+  // 4) Pflicht-Orte innerhalb / Verschiebebahnhof außerhalb
+  const checks = [
+    ["Gasthaus Dorfwirt", 2579.5, -1491.6, true],
+    ["FF Fürnitz", 3117.75, -1500.54, true],
+    ["Unterfederaun", 2576.97, -2350.13, true],
+    ["Supermarkt", 4345, -4735, true],
+    ["Baumarkt", 4345, -4565, true],
+    ["Verschiebebahnhof", 3400, -1850, false],
+  ];
+  for (const [nm, x, z, expected] of checks) {
+    const insideB = inPoly(x, z, newBorder);
+    if (insideB !== expected) throw new Error(`PiP-Check fehlgeschlagen für ${nm}: got ${insideB}, expected ${expected}`);
+  }
+
+  border.length = 0;
+  border.push(...newBorder);
+  console.log(`BORDER CHECKS OK: Bestand=${keptExisting.length}, Neu=${splicePts.length}, Selbstüberschneidungen=${selfIntersections}, B83-MinDist=${minB83Dist.toFixed(1)}m`);
+}
+
+const inKeepZone = (x, z) => inPoly(x, z, border) || polyDist(x, z, border) <= 35;
 
 function clipPolyline(pts, keepFn) {
   const chunks = [];
@@ -574,7 +646,7 @@ console.log(`Korridor-Cut: Straßen ${rawCounts.roads} -> ${world.roads.length},
   const NEEDED = new Set(["Gasthaus Pirtscher", "Eni Austria GmbH", "Supermarkt", "Baumarkt", "Alpen Adria Jagd & Sportwaffen"]);
   const KINDS = new Set(["police", "fire_station", "fuel", "townhall", "hospital", "station", "halt", "supermarket", "diy"]);
   const INN = /^(Gasthaus|Gasthof|Buschenschank|Wirtshaus|Landgasthof)\b/i;
-  const near = (x, z) => inKeepZone(x, z);
+  const near = (x, z) => inPoly(x, z, border);
   const before = world.pois.length;
   const seen = new Set();
   world.pois = world.pois.filter((q) => {
