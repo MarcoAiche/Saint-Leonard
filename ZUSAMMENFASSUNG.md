@@ -264,6 +264,8 @@ Ausführlich in [docs/RELEASE.md](docs/RELEASE.md).
 
 ## 14. Offene Punkte und Ideen
 
+> **Ausführliche Phase-2-Analyse & parallele Milestone-Roadmap (Simon & Marco):** siehe [docs/PHASE2_ROADMAP.md](docs/PHASE2_ROADMAP.md).
+
 Offene Issues auf GitHub, Stand 2026-11-25:
 - **Simon:** Polizei verbessern (#23), Oberflächen im Spiel neu gestalten (#16), Waffen- und Ladenfortschritt (#20).
 - **Marco:** itch.io-Upload und Pi-Server in Betrieb nehmen (#12; Skripte fertig, es fehlen itch.io-Konto und die übrigen Export-Templates).
