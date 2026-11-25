@@ -23,14 +23,15 @@ var sitting := false
 var sky: SkyCycle
 var player: Player
 var car: Truck
+var atv: ATV
 var rig: CameraRig
 var hud: Hud
 var menu: MainMenu
 var menu_stage: MenuStage
 var _wardrobe_cam: Camera3D
 var driving := false
-var seat := ""  # "" zu Fuß, sonst Sitz im eigenen oder fremden Pickup
-var seat_truck: Truck = null
+var seat := ""  # "" zu Fuß, sonst Sitz im eigenen oder fremden Fahrzeug
+var seat_truck: Vehicle = null
 var started := false
 var waypoint := Vector2.INF
 
@@ -48,6 +49,7 @@ var _ghost_rot := 0.0
 var _harvest_t := 0.0
 var _harvest_target: Carcass = null
 var _place_timer := 0.0
+var _dropzone_t := 0.0
 var _current_interaction := {}
 var _festival: Node3D
 
@@ -379,6 +381,16 @@ func _start_game() -> void:
 	car.world = world
 	car.owner_name = GameState.player_name
 	car.player_input = true
+
+	if not landmarks.atv_spawn.is_empty():
+		atv = ATV.new()
+		atv.name = "ATV"
+		atv.world = world
+		add_child(atv)
+		atv.global_position = landmarks.atv_spawn.pos
+		atv.rotation.y = landmarks.atv_spawn.yaw
+		atv.reset_physics_interpolation()
+		Animal.threats.append(atv)
 	car.process_mode = Node.PROCESS_MODE_PAUSABLE
 	car.add_to_group("vehicle")
 	add_child(car)
@@ -395,7 +407,7 @@ func _start_game() -> void:
 	player.attach_camera(rig)
 	var look: Vector2 = sp.look
 	rig.yaw = atan2(-look.x, -look.y)
-	rig.set_target(player, 1.65, 5.0, false, true)
+	rig.set_target(player, 1.65, 5.0, false, _foot_fp)
 
 	Animal.threats.assign([player, car])
 	spawner.players.assign([player])
@@ -417,8 +429,12 @@ func _start_game() -> void:
 		GameState.save_game()
 		hud.toast("Gespeichert: %s" % GameState.slot_title, 2.0))
 	hud.menu_requested.connect(func():
+		var t0 := Time.get_ticks_msec()
 		GameState.save_game()
+		var t_save := Time.get_ticks_msec()
 		await Net.leave_gracefully()
+		var t_net := Time.get_ticks_msec()
+		print("[PERF] Save: %d ms | Net leave: %d ms | Reloading scene..." % [t_save - t0, t_net - t_save])
 		get_tree().paused = false
 		get_tree().reload_current_scene())
 	Net.disconnected.connect(func(reason):
@@ -433,6 +449,7 @@ Dein Fortschritt ist bis zur letzten Sicherung auf dem Server gespeichert." % re
 
 	var amb := AudioStreamPlayer.new()
 	amb.stream = Sfx.ambience()
+	amb.bus = &"Ambience" if AudioServer.get_bus_index(&"Ambience") >= 0 else &"Master"
 	amb.volume_db = -14.0
 	amb.autoplay = true
 	add_child(amb)
@@ -457,6 +474,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			Menus.close_all(hud)
 		elif hud.map_open():
 			hud.toggle_map()
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		else:
 			set_paused(not get_tree().paused)
 		return
@@ -481,7 +499,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("inventory"):
 		Menus.inventory(self)
 	elif event.is_action_pressed("toggle_view"):
-		rig.toggle_view()
+		if seat == "":
+			rig.toggle_view()
 	elif event.is_action_pressed("minimap"):
 		toggle_minimap()
 	elif event.is_action_pressed("mute"):
@@ -504,7 +523,12 @@ func _foot_input(event: InputEvent) -> void:
 	var slot_labels := {
 		sniper = "Scharfschützengewehr",
 		pistol = "Pistole",
-		assault_rifle = "Sturmgewehr",
+		shotgun = "Schrotflinte",
+		bolt_action = "Jagdgewehr (Bolt-Action)",
+		assault_rifle = "AK-47 Sturmgewehr",
+		lmg = "LMG Maschinengewehr",
+		bazooka = "Bazooka / RPG",
+		plasma_blaster = "Alien Plasma Blaster",
 		none = "Hände frei",
 	}
 	if event.is_action_pressed("slot_1"):
@@ -513,10 +537,20 @@ func _foot_input(event: InputEvent) -> void:
 		_select_slot("pistol", slot_labels.pistol)
 	elif event.is_action_pressed("slot_3"):
 		_select_slot("assault_rifle", slot_labels.assault_rifle)
-	elif event.is_action_pressed("slot_4") or event.is_action_pressed("slot_5") or event.is_action_pressed("slot_6"):
+	elif event.is_action_pressed("slot_4"):
+		_select_slot("shotgun", slot_labels.shotgun)
+	elif event.is_action_pressed("slot_5"):
+		_select_slot("bolt_action", slot_labels.bolt_action)
+	elif event.is_action_pressed("slot_6"):
+		_select_slot("lmg", slot_labels.lmg)
+	elif event.is_action_pressed("slot_7"):
+		_select_slot("bazooka", slot_labels.bazooka)
+	elif event.is_action_pressed("slot_8"):
+		_select_slot("plasma_blaster", slot_labels.plasma_blaster)
+	elif event.is_action_pressed("slot_9"):
 		_select_slot("none", slot_labels.none)
 	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and rig.first_person and not player.hand.aiming:
-		var order := ["sniper", "pistol", "assault_rifle", "none"].filter(func(s): return s == "none" or GameState.has(s))
+		var order := ["sniper", "pistol", "assault_rifle", "shotgun", "bolt_action", "lmg", "bazooka", "plasma_blaster", "none"].filter(func(s): return s == "none" or GameState.has(s))
 		var i: int = order.find(player.hand.slot)
 		var step := 1 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1
 		var nxt: String = order[(i + step + order.size()) % order.size()]
@@ -604,6 +638,9 @@ func _interact() -> void:
 		(_current_interaction.action as Callable).call()
 		return
 	# Einsteigen
+	if atv and player.global_position.distance_to(atv.global_position) < ENTER_DISTANCE:
+		enter_vehicle(atv, "driver")
+		return
 	if player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
 		enter_vehicle(car, "driver")
 		return
@@ -637,6 +674,8 @@ func _update_interaction() -> String:
 	var c := _nearest_carcass(2.8)
 	if c:
 		return "[F] %s ausnehmen (halten)   [G] tragen" % c.display_name()
+	if atv and player.global_position.distance_to(atv.global_position) < ENTER_DISTANCE:
+		return "[F] ATV fahren / Einsteigen"
 	if player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
 		var t := "[F] Einsteigen"
 		if not car.cargo.is_empty():
@@ -750,10 +789,14 @@ func _harvest(c: Carcass) -> void:
 
 # ------------------------------------------------------------------ Fahrzeuge
 
-func enter_vehicle(t: Truck, s: String) -> void:
+var _foot_fp := true
+
+func enter_vehicle(t: Vehicle, s: String) -> void:
+	if seat == "":
+		_foot_fp = rig.first_person
 	seat = s
 	seat_truck = t
-	driving = s == "driver" and t == car
+	driving = s == "driver" and (t == car or t == atv)
 	player.visible = false
 	player.input_enabled = false
 	player.process_mode = Node.PROCESS_MODE_DISABLED
@@ -761,25 +804,30 @@ func enter_vehicle(t: Truck, s: String) -> void:
 	player.hand.select("none")
 	player.hand.aiming = false
 	if driving:
-		car.driving = true
-		car.player_input = true
+		t.driving = true
+		t.player_input = true
+		if t is ATV:
+			(t as ATV).set_rider(true, GameState.outfit)
 		if GameState.is_night():
-			car.set_lights(true)
+			t.set_lights(true)
 	Sfx.play_3d(t, Sfx.door(), -2.0)
-	rig.seat_offset = Truck.SEATS[s] + Vector3(0, 0.6, 0)
-	rig.set_target(t, 1.9, 9.0, true, false)
+	rig.seat_offset = (ATV.SEATS[s] if t is ATV else Truck.SEATS[s]) + Vector3(0, 0.6, 0)
+	rig.set_target(t, 1.9, 6.5 if t is ATV else 9.0, true, false)
 	rig.yaw = 0.0
 	hud.set_driving(driving)
 
 
 func exit_vehicle() -> void:
 	var t := seat_truck
-	if driving and absf(car.speed_kmh()) > 15.0:
+	if driving and absf(t.speed_kmh()) > 15.0:
 		hud.toast("Zuerst langsamer werden!", 1.5)
 		return
 	if driving:
-		car.driving = false
-		car.winching = false
+		t.driving = false
+		if t is ATV:
+			(t as ATV).set_rider(false)
+		if t is Truck:
+			(t as Truck).winching = false
 	var side := -1.0 if seat == "passenger" else 1.0
 	var p := t.global_position + t.global_basis.x * 2.2 * side
 	if seat.begins_with("bed"):
@@ -795,7 +843,7 @@ func exit_vehicle() -> void:
 	seat = ""
 	seat_truck = null
 	driving = false
-	rig.set_target(player, 1.65, 5.0, false, true)
+	rig.set_target(player, 1.65, 5.0, false, _foot_fp)
 	hud.set_driving(false)
 	if GameState.has("sniper"):
 		player.hand.select("sniper")
@@ -818,28 +866,102 @@ func truck_has_game_near(p: Vector3, r: float) -> bool:
 	return false
 
 
+func _process_butcher_dropzones(dt: float) -> void:
+	if landmarks == null or landmarks.butcher_zones.is_empty():
+		return
+	for n in get_tree().get_nodes_in_group("carcass"):
+		if not (n is Carcass):
+			continue
+		var c := n as Carcass
+		if c.sold or c.is_queued_for_deletion():
+			continue
+		if c.carried or c == player.carrying:
+			c.set_meta("dropzone_t", 0.0)
+			continue
+		var in_zone: Dictionary = {}
+		for z in landmarks.butcher_zones:
+			var zp: Vector3 = z.pos
+			if Vector2(c.global_position.x - zp.x, c.global_position.z - zp.z).length() <= 1.45 and absf(c.global_position.y - zp.y) < 2.5:
+				in_zone = z
+				break
+		if in_zone.is_empty():
+			c.set_meta("dropzone_t", 0.0)
+			continue
+		var t: float = float(c.get_meta("dropzone_t", 0.0)) + dt
+		c.set_meta("dropzone_t", t)
+		if t >= 0.3:
+			c.sold = true
+			c.remove_from_group("carcass")
+			var val := c.sell_value()
+			var cname := c.display_name()
+			TrophyBoard.record(c.species, c.male, c.net_id)
+			Net.carcass_removed(c.net_id)
+			c.queue_free()
+			GameState.add_money(val)
+			hud.toast("+$%d — %s verkauft!" % [val, cname], 3.5)
+			Sfx.play_2d(self, Sfx.jingle(false), -2.0)
+			landmarks.flash_butcher_zone(in_zone)
+			missions.event("sold_carcass")
+
+
+func sell_single_carcass(c: Carcass, holder: Node) -> void:
+	if not is_instance_valid(c) or c.sold or c.is_queued_for_deletion():
+		return
+	c.sold = true
+	c.remove_from_group("carcass")
+	var val := c.sell_value()
+	if holder == player and player.carrying == c:
+		player.carrying = null
+	elif holder and "cargo" in holder:
+		holder.cargo.erase(c)
+	Net.carcass_removed(c.net_id)
+	c.queue_free()
+	GameState.add_money(val)
+	hud.toast("GASTON: \"$%d. Ze texture... mon dieu!\"" % val, 3.0)
+	missions.event("sold_carcass")
+
+
 func sell_truck_cargo() -> void:
 	var total := 0
 	var count := 0
+	if player.carrying is Carcass:
+		var c := player.carrying as Carcass
+		if not c.sold and not c.is_queued_for_deletion():
+			c.sold = true
+			c.remove_from_group("carcass")
+			player.carrying = null
+			total += c.sell_value()
+			count += 1
+			Net.carcass_removed(c.net_id)
+			c.queue_free()
 	var holders: Array = [car]
 	if trailer:
 		holders.append(trailer)
 	for h in holders:
 		for n in h.cargo.duplicate():
 			if n is Carcass:
-				total += (n as Carcass).sell_value()
+				var cc := n as Carcass
+				if cc.sold or cc.is_queued_for_deletion():
+					h.cargo.erase(n)
+					continue
+				cc.sold = true
+				cc.remove_from_group("carcass")
+				total += cc.sell_value()
 				count += 1
 				h.cargo.erase(n)
-				Net.carcass_removed(n.net_id)
-				n.queue_free()
+				Net.carcass_removed(cc.net_id)
+				cc.queue_free()
+	if count == 0:
+		open_shop("butcher")
+		return
 	GameState.add_money(total)
-	hud.toast("%d Stück Wild verkauft: +%d €" % [count, total], 3.5)
+	hud.toast("GASTON: \"$%d. Ze texture... mon dieu!\" (%d Stück)" % [total, count], 3.5)
 	missions.event("sold_carcass")
 
 
 func fuel_prompt() -> String:
 	var need := int(ceil(Truck.TANK - float(GameState.truck.fuel)))
-	return "Volltanken (%d l, %d €)" % [need, int(need * 1.85)]
+	return "Volltanken (%d l, $%d)" % [need, int(need * 1.85)]
 
 
 func refuel() -> void:
@@ -855,7 +977,7 @@ func refuel() -> void:
 		hud.toast("Für %d l hat's gereicht" % int(liters))
 		return
 	GameState.truck.fuel = Truck.TANK
-	hud.toast("Vollgetankt: %d €" % cost)
+	hud.toast("Vollgetankt: $%d" % cost)
 
 
 func use_jerrycan() -> void:
@@ -1464,6 +1586,10 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 	var q := PhysicsRayQueryParameters3D.create(from, from + dir * 700.0, 1 | 4 | 8 | 16)
 	q.exclude = [player.get_rid()]
 	var hit := space.intersect_ray(q)
+	var impact_pt: Vector3 = hit.position if hit else from + dir * 200.0
+	var r_noise: float = player.hand.current_noise_radius()
+	Animal.notify_gunshot(get_tree(), from, impact_pt, r_noise, r_noise, player)
+	_spawn_tracer(from + dir * 0.8 - Vector3(0, 0.08, 0), impact_pt, Color(0.314, 1.0, 0.314) if player.hand.slot == "plasma_blaster" else Color(1.0, 0.878, 0.333))
 	# Schüsse im Ort rufen die Polizei
 	if landmarks.near_village(Vector2(from.x, from.z)) and randf() < 0.5:
 		police.dispatch(from, "Schüsse im Ortsgebiet")
@@ -1471,10 +1597,15 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 		return
 	var col: Object = hit.collider
 	_impact(hit.position, hit.normal)
+	if player.hand.slot == "bazooka":
+		_bazooka_blast(hit.position)
+		return
 	if col is Animal:
 		var a := col as Animal
 		var dmg := player.hand.current_damage()
 		hud.hitmarker()
+		if player.hand.slot == "plasma_blaster":
+			a.levitate(4.5)
 		if Net.is_client():
 			Net.hit_animal(a.net_id, dmg, hit.position, dir)
 		else:
@@ -1487,6 +1618,91 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 		hud.toast("Du hast auf die Polizei geschossen!", 3.0)
 	elif col is Carcass:
 		(col as RigidBody3D).apply_impulse(dir * 40.0, hit.position - (col as Node3D).global_position)
+
+
+func _bazooka_blast(pos: Vector3) -> void:
+	Sfx.play_3d(self, Sfx.explosion(), 6.0, 0.85)
+	if rig:
+		rig.shake(1.8)
+	# Feuerball & Rauch-GPUParticles3D (One-Shot mit sauberem Cleanup)
+	var p := GPUParticles3D.new()
+	p.amount = 28
+	p.lifetime = 0.85
+	p.one_shot = true
+	p.explosiveness = 0.95
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.6
+	pm.direction = Vector3.UP
+	pm.spread = 180.0
+	pm.initial_velocity_min = 3.5
+	pm.initial_velocity_max = 10.0
+	pm.gravity = Vector3(0, 2.5, 0)
+	var s := SphereMesh.new()
+	s.radius = 0.55
+	s.height = 1.1
+	var fm := StandardMaterial3D.new()
+	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fm.albedo_color = Color(1.0, 0.533, 0.067)  # #FF8811
+	s.material = fm
+	p.process_material = pm
+	p.draw_pass_1 = s
+	add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	get_tree().create_timer(1.5).timeout.connect(p.queue_free)
+
+	# Druckwellen-Kugel (expandierendes Glow-Mesh)
+	var wave := MeshInstance3D.new()
+	var ws := SphereMesh.new()
+	ws.radius = 1.0
+	ws.height = 2.0
+	var wm := StandardMaterial3D.new()
+	wm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	wm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	wm.albedo_color = Color(1.0, 0.65, 0.2, 0.65)
+	ws.material = wm
+	wave.mesh = ws
+	wave.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(wave)
+	wave.global_position = pos
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(wave, "scale", Vector3.ONE * 7.5, 0.35)
+	tw.tween_property(wm, "albedo_color:a", 0.0, 0.35)
+	tw.chain().tween_callback(wave.queue_free)
+
+	for n in get_tree().get_nodes_in_group("animal"):
+		if n is Animal and (n as Node3D).global_position.distance_to(pos) < 7.5:
+			var a := n as Animal
+			var d := (a.global_position - pos).normalized()
+			if not Net.is_client():
+				a.die(d, true)
+	for n in get_tree().get_nodes_in_group("carcass"):
+		if n is RigidBody3D and (n as Node3D).global_position.distance_to(pos) < 8.0:
+			var rb := n as RigidBody3D
+			rb.apply_central_impulse((rb.global_position - pos).normalized() * 350.0 + Vector3.UP * 180.0)
+
+
+func _spawn_tracer(from: Vector3, to: Vector3, col: Color) -> void:
+	var dist := from.distance_to(to)
+	if dist < 1.0:
+		return
+	var len := minf(dist, 28.0)
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.035, 0.035, len)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = col
+	bm.material = mat
+	var mi := MeshInstance3D.new()
+	mi.mesh = bm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	var dir := (to - from).normalized()
+	mi.global_position = from + dir * (len * 0.5)
+	mi.look_at(to, Vector3.UP)
+	get_tree().create_timer(0.06).timeout.connect(mi.queue_free)
 
 
 func _impact(pos: Vector3, normal: Vector3) -> void:
@@ -1545,6 +1761,10 @@ func take_photo() -> void:
 func _process(delta: float) -> void:
 	if not started or Net.is_dedicated() or get_tree().paused:
 		return
+	_dropzone_t += delta
+	if _dropzone_t >= 0.2:
+		_process_butcher_dropzones(_dropzone_t)
+		_dropzone_t = 0.0
 	# Sicherheitsnetz: niemand fällt durch die Welt
 	for body: Node3D in [player, car]:
 		var g := world.height_at(body.global_position.x, body.global_position.z)
@@ -1557,7 +1777,7 @@ func _process(delta: float) -> void:
 	if GameState.health <= 0.0 and player.passed_out <= 0.0:
 		GameState.health = 35.0
 		GameState.add_money(-mini(150, maxi(GameState.money, 0)))
-		_pass_out("Schwer verletzt! Der Notarzt kostet 150 €.")
+		_pass_out("Schwer verletzt! Der Notarzt kostet $150.")
 	if _placing != "" and _ghost:
 		_ghost.global_transform = _ghost_transform()
 		var ok := Placeables.check(_placing, _ghost.global_position, self).is_empty()
@@ -1721,6 +1941,7 @@ func on_fx(kind: String, pos: Vector3) -> void:
 	match kind:
 		"shot":
 			Sfx.play_3d(n, Sfx.gunshot(), 4.0, randf_range(0.95, 1.05))
+			Animal.notify_gunshot(get_tree(), pos, pos, 100.0, 100.0, null)
 			var flash := OmniLight3D.new()
 			flash.light_color = Color(1.0, 0.8, 0.4)
 			flash.omni_range = 6.0
@@ -1865,8 +2086,17 @@ func on_remote_animal_died(id: int, dir: Vector3) -> void:
 
 func on_carcass_gone(id: int) -> void:
 	for c in get_tree().get_nodes_in_group("carcass"):
-		if c.net_id == id and not c.get_parent() is Truck:
-			c.queue_free()
+		if c is Carcass and c.net_id == id:
+			c.sold = true
+			c.remove_from_group("carcass")
+			if player and player.carrying == c:
+				player.carrying = null
+			if not c.get_parent() is Truck:
+				c.queue_free()
+
+
+func _exit_tree() -> void:
+	Animal.threats.clear()
 
 
 func on_voice(id: int, samples: PackedFloat32Array, radio: bool) -> void:

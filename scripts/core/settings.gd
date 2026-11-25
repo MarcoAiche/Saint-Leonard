@@ -9,6 +9,9 @@ static var values := {
 	invert_y = false,
 	fov = 72.0,
 	volume = 0.8,
+	sfx_volume = 0.85,
+	ambience_volume = 0.8,
+	voice_volume = 0.9,
 	radio_volume = 0.8,
 	fullscreen = false,
 	vsync = true,
@@ -54,7 +57,12 @@ static func apply(tree: SceneTree = null) -> void:
 		return
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if values.fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if values.vsync else DisplayServer.VSYNC_DISABLED)
+	_ensure_audio_buses()
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(float(values.volume), 0.001)))
+	for pair in [["SFX", "sfx_volume"], ["Ambience", "ambience_volume"], ["Voice", "voice_volume"], ["VoiceMuffled", "voice_volume"]]:
+		var idx := AudioServer.get_bus_index(pair[0])
+		if idx >= 0:
+			AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(float(values.get(pair[1], 0.8)), 0.001)))
 	if tree == null:
 		tree = Engine.get_main_loop() as SceneTree
 	if tree:
@@ -70,6 +78,24 @@ static func apply(tree: SceneTree = null) -> void:
 		RenderingServer.directional_shadow_atlas_set_size(2048 if int(values.shadows) == 1 else 4096, true)
 		if main and main.has_node("World"):
 			_apply_view_distance(main.get_node("World"), float(values.view_distance))
+
+
+static func _ensure_audio_buses() -> void:
+	var has_limiter := false
+	for i in AudioServer.get_bus_effect_count(0):
+		if AudioServer.get_bus_effect(0, i) is AudioEffectLimiter:
+			has_limiter = true
+			break
+	if not has_limiter:
+		var lim := AudioEffectLimiter.new()
+		lim.ceiling_db = -0.3
+		AudioServer.add_bus_effect(0, lim)
+	for bus_name in ["SFX", "Ambience", "Voice"]:
+		if AudioServer.get_bus_index(bus_name) == -1:
+			AudioServer.add_bus()
+			var idx := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(idx, bus_name)
+			AudioServer.set_bus_send(idx, "Master")
 
 
 static func _apply_view_distance(node: Node, f: float) -> void:

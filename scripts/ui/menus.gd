@@ -19,7 +19,7 @@ static func window(hud: Hud, title: String, width := 620.0) -> VBoxContainer:
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t)
 	var money := Label.new()
-	money.text = "%d €" % GameState.money
+	money.text = "$%d" % GameState.money
 	money.add_theme_color_override("font_color", Color(0.1, 0.45, 0.15))
 	money.name = "Geld"
 	head.add_child(money)
@@ -95,20 +95,24 @@ static func shop(game: Node, id: String) -> void:
 			row(body, story_line, "Reden", func():
 				close_all(hud)
 				game.missions.talk_to_pub())
-	heading(body, "Kaufen")
-	for item in Items.stock(id):
-		var it := Items.info(item)
-		var have := GameState.count(item)
-		var label := "%s  (%d €)" % [it.name, it.price]
-		if have > 0:
-			label += "   hast: %d" % have
-		row(body, label, "Kaufen", func():
-			var err := GameState.buy(item)
-			if err.is_empty():
-				game.on_bought(item, id)
-			else:
-				hud.toast(err)
-			reopen.call(), GameState.can_pay(it.price))
+	if id == "butcher":
+		_butcher_sell_ui(game, body, hud, reopen)
+	else:
+		heading(body, "Kaufen")
+		for item in Items.stock(id):
+			var it := Items.info(item)
+			var have := GameState.count(item)
+			var badge := "  [NEW]" if id == "gun" and have == 0 else ""
+			var label := "%s%s  ($%d)" % [it.name, badge, it.price]
+			if have > 0:
+				label += "   hast: %d" % have
+			row(body, label, "Kaufen", func():
+				var err := GameState.buy(item)
+				if err.is_empty():
+					game.on_bought(item, id)
+				else:
+					hud.toast(err)
+				reopen.call(), GameState.can_pay(it.price))
 	var buys := Items.buys(id)
 	var any := false
 	for b in buys:
@@ -117,7 +121,7 @@ static func shop(game: Node, id: String) -> void:
 				heading(body, "Verkaufen")
 				any = true
 			var n := GameState.count(b[0])
-			row(body, "%s  x%d  (je %d €)" % [Items.display(b[0]), n, b[1]], "Alle verkaufen", func():
+			row(body, "%s  x%d  (je $%d)" % [Items.display(b[0]), n, b[1]], "Alle verkaufen", func():
 				GameState.sell(b[0], b[1], n)
 				game.on_sold(b[0], n, id)
 				reopen.call())
@@ -126,7 +130,7 @@ static func shop(game: Node, id: String) -> void:
 		for i in Items.HOUSES.size():
 			var h: Dictionary = Items.HOUSES[i]
 			var owned := GameState.house >= 0
-			row(body, "%s  (%d €)" % [h.name, h.price], "Gekauft" if owned else "Kaufen", func():
+			row(body, "%s  ($%d)" % [h.name, h.price], "Gekauft" if owned else "Kaufen", func():
 				game.buy_house(i)
 				reopen.call(), not owned and GameState.can_pay(h.price))
 	if id == "gas":
@@ -142,12 +146,12 @@ static func garage(game: Node) -> void:
 	var t: Dictionary = GameState.truck
 	text(body, "Schaden: %d %%   Tank: %d l" % [int(t.damage), int(t.fuel)])
 	var repair := int(t.damage * 9.0)
-	row(body, "Reparieren (%d €)" % repair, "Reparieren", func():
+	row(body, "Reparieren ($%d)" % repair, "Reparieren", func():
 		if GameState.pay(repair):
 			GameState.truck.damage = 0.0
 			game.car.broken = false
 		reopen.call(), repair > 0 and GameState.can_pay(repair))
-	row(body, "Pickup in die Werkstatt holen (Abschleppen, 120 €)", "Holen", func():
+	row(body, "Pickup in die Werkstatt holen (Abschleppen, $120)", "Holen", func():
 		if GameState.pay(120):
 			game.tow_truck_to_garage()
 		reopen.call(), GameState.can_pay(120))
@@ -155,13 +159,13 @@ static func garage(game: Node) -> void:
 	for id in Items.UPGRADES:
 		var u: Dictionary = Items.UPGRADES[id]
 		var has: bool = t.upgrades.has(id)
-		row(body, "%s  (%d €)" % [u.name, u.price], "Eingebaut" if has else "Einbauen", func():
+		row(body, "%s  ($%d)" % [u.name, u.price], "Eingebaut" if has else "Einbauen", func():
 			if GameState.pay(u.price):
 				GameState.truck.upgrades[id] = true
 				game.car.rebuild()
 				game.missions.event("upgrade", {id = id})
 			reopen.call(), not has and GameState.can_pay(u.price))
-	heading(body, "Lackierung (150 €)")
+	heading(body, "Lackierung ($150)")
 	var h := HFlowContainer.new()
 	body.add_child(h)
 	for i in Items.PAINTS.size():
@@ -208,7 +212,7 @@ static func inventory(game: Node) -> void:
 	var at_home: bool = game.inside_own_house(game.player.global_position)
 	row(body, "Kleiderschrank: Figur und Kleidung" + ("" if at_home else "  (nur zu Hause)"), "Öffnen", func(): game.open_wardrobe(), at_home)
 	var s: Dictionary = GameState.stats
-	text(body, "Strecke: Rehe %d, Wildschweine %d, Hasen %d, Bären %d   Gebrannt: %d Flaschen   Strafen: %d €" % [s.deer, s.boar, s.rabbit, s.bear, s.bottles, s.fines], 14)
+	text(body, "Strecke: Rehe %d, Wildschweine %d, Hasen %d, Bären %d   Gebrannt: %d Flaschen   Strafen: $%d" % [s.deer, s.boar, s.rabbit, s.bear, s.bottles, s.fines], 14)
 
 
 static func _inv_action(game: Node, view: InventoryView, id: String, what: String) -> void:
@@ -359,10 +363,53 @@ static func settings_ui(body: Control) -> void:
 	slider.call("Mausempfindlichkeit", "sensitivity", 0.2, 3.0, 0.05, "%.2f")
 	toggle.call("Maus invertieren (oben/unten)", "invert_y")
 	slider.call("Sichtfeld (FOV)", "fov", 55.0, 100.0, 1.0, "%d°")
-	slider.call("Lautstärke", "volume", 0.0, 1.0, 0.05, "%.2f")
+	slider.call("Gesamtlautstärke", "volume", 0.0, 1.0, 0.05, "%.2f")
+	slider.call("SFX-Lautstärke", "sfx_volume", 0.0, 1.0, 0.05, "%.2f")
+	slider.call("Ambience-Lautstärke", "ambience_volume", 0.0, 1.0, 0.05, "%.2f")
+	slider.call("Voice-Lautstärke", "voice_volume", 0.0, 1.0, 0.05, "%.2f")
 	slider.call("Radio-Lautstärke", "radio_volume", 0.0, 1.0, 0.05, "%.2f")
 	toggle.call("Vollbild", "fullscreen")
 	toggle.call("VSync", "vsync")
 	slider.call("Auflösung (Skalierung)", "render_scale", 0.5, 1.0, 0.05, "%.2f")
 	slider.call("Schatten (0 aus, 2 hoch)", "shadows", 0.0, 2.0, 1.0, "%d")
 	slider.call("Sichtweite Bäume", "view_distance", 0.4, 1.5, 0.05, "%.2f")
+
+
+static func _butcher_sell_ui(game: Node, body: VBoxContainer, _hud: Hud, reopen: Callable) -> void:
+	text(body, "GASTON: \"You bring me something to cook, oui?\"")
+	text(body, "Tipp: Wild einfach in den roten Kreis legen oder hier vom Pickup/Anhänger verkaufen!")
+	heading(body, "Wild-Verkauf (Hand, Pickup & Anhänger)")
+	var entries: Array = []
+	var ppos: Vector3 = game.player.global_position
+	if game.player.carrying is Carcass:
+		entries.append({c = game.player.carrying, holder = game.player, src = "In der Hand"})
+	if game.car and game.car.global_position.distance_to(ppos) < 25.0:
+		for n in game.car.cargo:
+			if n is Carcass:
+				entries.append({c = n, holder = game.car, src = "Pickup"})
+	if game.trailer and game.trailer.global_position.distance_to(ppos) < 25.0:
+		for n in game.trailer.cargo:
+			if n is Carcass:
+				entries.append({c = n, holder = game.trailer, src = "Anhänger"})
+
+	if entries.is_empty():
+		text(body, "Bring erlegte Tiere her! (Per Hand tragen oder auf Pickup/Anhänger laden)")
+		heading(body, "GASTON Preisliste")
+		for pair in [
+			["Reh / Hirsch", 300], ["Wildschwein", 220], ["Mutanten-Hase", 120],
+			["Hase", 25], ["Braunbär", 450], ["Riesenhirsch", 650], ["Bigfoot", 1000]
+		]:
+			text(body, "  • %s: $%d" % [pair[0], pair[1]])
+	else:
+		var total := 0
+		for e in entries:
+			var c: Carcass = e.c
+			var val := c.sell_value()
+			total += val
+			var label := "%s (%.0f kg, %s)  —  $%d" % [c.display_name(), c.mass, e.src, val]
+			row(body, label, "Einzeln verkaufen", func():
+				game.sell_single_carcass(c, e.holder)
+				reopen.call())
+		row(body, "Gesamte Ladung (%d Stück)" % entries.size(), "Alle verkaufen (+$%d)" % total, func():
+			game.sell_truck_cargo()
+			reopen.call())

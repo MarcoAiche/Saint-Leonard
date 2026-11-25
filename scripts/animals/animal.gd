@@ -16,10 +16,14 @@ const SPECIES := {
 		body = Color(0.45, 0.28, 0.15), belly = Color(0.82, 0.72, 0.58), loot = {meat = 4, hide = 2, legend_antlers = 1}, male_loot = {}},
 	boar = {name = "Wildschwein", hp = 110.0, walk = 1.2, run = 9.5, sight = 40.0, hear = 1.1, size = 0.9, aggressive = true, damage = 22.0,
 		body = Color(0.28, 0.22, 0.18), belly = Color(0.38, 0.30, 0.25), loot = {meat = 2, hide = 1}, male_loot = {tusks = 1}},
-	rabbit = {name = "Hase", hp = 15.0, walk = 1.0, run = 9.0, sight = 35.0, hear = 1.3, size = 0.35, aggressive = false,
-		body = Color(0.60, 0.50, 0.38), belly = Color(0.85, 0.80, 0.72), loot = {meat = 1}, male_loot = {}},
+	rabbit = {name = "Hase", hp = 20.0, walk = 1.0, run = 9.0, sight = 35.0, hear = 1.3, size = 0.35, aggressive = false,
+		body = Color(0.14, 0.14, 0.14), belly = Color(0.95, 0.95, 0.95), loot = {meat = 1}, male_loot = {}},
+	mutant_rabbit = {name = "Mutanten-Hase", hp = 140.0, walk = 2.0, run = 13.0, sight = 55.0, hear = 1.4, size = 1.15, aggressive = true, damage = 18.0,
+		body = Color(0.16, 0.16, 0.16), belly = Color(0.92, 0.92, 0.92), loot = {meat = 3}, male_loot = {}},
 	bear = {name = "Braunbär", hp = 420.0, walk = 1.4, run = 10.5, sight = 60.0, hear = 0.9, size = 1.5, aggressive = true, damage = 45.0,
-		body = Color(0.35, 0.24, 0.15), belly = Color(0.40, 0.29, 0.19), loot = {meat = 5, hide = 2}, male_loot = {}},
+		body = Color(0.431, 0.259, 0.125), belly = Color(0.49, 0.32, 0.19), loot = {meat = 5, hide = 2}, male_loot = {}},
+	bigfoot = {name = "Bigfoot", hp = 850.0, walk = 2.4, run = 12.5, sight = 65.0, hear = 1.1, size = 2.2, aggressive = true, damage = 35.0,
+		body = Color(0.431, 0.259, 0.125), belly = Color(0.847, 0.729, 0.573), loot = {meat = 6, hide = 3}, male_loot = {}},
 	fox = {name = "Fuchs", hp = 40.0, walk = 1.8, run = 13.5, sight = 65.0, hear = 1.2, size = 0.7, aggressive = false,
 		body = Color(0.75, 0.32, 0.12), belly = Color(0.92, 0.88, 0.82), loot = {meat = 1, hide = 1}, male_loot = {}},
 }
@@ -53,6 +57,10 @@ var _call: AudioStreamPlayer3D
 var _rng := RandomNumberGenerator.new()
 var _bleed := 0.0  # Lebenspunkte pro Sekunde (angeschossen)
 var _blood_t := 0.0
+var _levitate_t := 0.0
+var _wound_count := 0
+var _pupils: Array[Node3D] = []
+var _x_eyes: Array[Node3D] = []
 static var blood_mat: StandardMaterial3D
 
 
@@ -113,41 +121,35 @@ func _build_model() -> void:
 	match species:
 		"deer":
 			glb_path = "res://assets/animals/stag.glb" if male else "res://assets/animals/deer.glb"
-			target_h = 1.55 if male else 1.25
+			target_h = 1.60 if male else 1.30
 		"legend":
 			glb_path = "res://assets/animals/stag.glb"
-			target_h = 2.05
+			target_h = 2.10
 		"fox":
 			glb_path = "res://assets/animals/fox.glb"
 			target_h = 0.72
 		"bear":
-			glb_path = "res://assets/animals/bear.glb"
-			target_h = 1.60
-	if not glb_path.is_empty():
-		var scene := load(glb_path) as PackedScene
-		if scene:
-			_glb_root = scene.instantiate() as Node3D
-			_model.add_child(_glb_root)
-			var min_y := INF
-			var max_y := -INF
-			for mi in _glb_root.find_children("*", "MeshInstance3D", true, false):
-				var mesh_inst := mi as MeshInstance3D
-				if mesh_inst.mesh:
-					var a := mesh_inst.mesh.get_aabb()
-					var xf := _glb_root.global_transform.affine_inverse() * mesh_inst.global_transform
-					for ci in 8:
-						var c := xf * a.get_endpoint(ci)
-						min_y = minf(min_y, c.y)
-						max_y = maxf(max_y, c.y)
-			var h := max_y - min_y
-			if h > 0.001 and is_finite(h):
-				var s := target_h / h
-				_glb_root.scale = Vector3.ONE * s
-				_glb_root.position.y = -min_y * s
-			for ap in _glb_root.find_children("*", "AnimationPlayer", true, false):
-				_anim = ap as AnimationPlayer
-				break
-			return
+			glb_path = "res://assets/models/animals/grizzly_bear.glb" if ResourceLoader.exists("res://assets/models/animals/grizzly_bear.glb") else "res://assets/animals/bear.glb"
+			target_h = 2.10
+		"boar":
+			glb_path = "res://assets/models/animals/boar.glb"
+			target_h = 0.95
+		"rabbit":
+			glb_path = "res://assets/models/animals/rabbit.glb"
+			target_h = 0.42
+		"mutant_rabbit":
+			glb_path = "res://assets/models/animals/mutant_rabbit.glb"
+			target_h = 1.50
+		"bigfoot":
+			glb_path = "res://assets/models/animals/bigfoot.glb"
+			target_h = 3.20
+	if not glb_path.is_empty() and ResourceLoader.exists(glb_path):
+		_glb_root = AssetLoader.load_model(glb_path, target_h, func() -> Node3D: return Node3D.new(), false)
+		_model.add_child(_glb_root)
+		_anim = AssetLoader.get_animation_player(_glb_root)
+		return
+	_glb_root = null
+	_anim = null
 	_model.scale = Vector3.ONE * info.size
 	var bc: Color = info.body
 	var lc: Color = info.belly
@@ -203,11 +205,27 @@ func _build_model() -> void:
 	snout.radius = 0.09
 	snout.height = 0.16
 	_part(_head, snout, Color(0.15, 0.12, 0.1) if species != "boar" else Color(0.75, 0.55, 0.5), Vector3(0, 0.08, 0.38))
-	var eye := SphereMesh.new()
-	eye.radius = 0.05
-	eye.height = 0.1
+	var eye_white := SphereMesh.new()
+	eye_white.radius = 0.068
+	eye_white.height = 0.136
+	var eye_pupil := SphereMesh.new()
+	eye_pupil.radius = 0.036
+	eye_pupil.height = 0.072
+	var x_bar := BoxMesh.new()
+	x_bar.size = Vector3(0.085, 0.018, 0.02)
+	_pupils.clear()
+	_x_eyes.clear()
 	for x in [-0.13, 0.13]:
-		_part(_head, eye, Color(0.05, 0.05, 0.05), Vector3(x, 0.2, 0.22))
+		_part(_head, eye_white, Color(1, 1, 1) if species != "mutant_rabbit" else Color(1.0, 0.125, 0.125), Vector3(x, 0.2, 0.22))
+		var p_node := _part(_head, eye_pupil, Color(0.06, 0.06, 0.06), Vector3(x, 0.2, 0.265))
+		_pupils.append(p_node)
+		var x_holder := Node3D.new()
+		x_holder.position = Vector3(x, 0.2, 0.275)
+		x_holder.visible = false
+		_head.add_child(x_holder)
+		_part(x_holder, x_bar, Color(0.06, 0.06, 0.06), Vector3.ZERO, Vector3(0, 0, PI * 0.25))
+		_part(x_holder, x_bar, Color(0.06, 0.06, 0.06), Vector3.ZERO, Vector3(0, 0, -PI * 0.25))
+		_x_eyes.append(x_holder)
 	var ear := BoxMesh.new()
 	ear.size = Vector3(0.06, 0.22, 0.1) if species != "rabbit" else Vector3(0.07, 0.5, 0.12)
 	for x in [-0.13, 0.13]:
@@ -235,14 +253,44 @@ func _build_model() -> void:
 
 # ------------------------------------------------------------------ KI
 
+## Lokales Schuss- & Fluchtsystem: nur Tiere innerhalb shooter_radius um Schütze ODER impact_radius um Treffer reagieren
+static func notify_gunshot(tree: SceneTree, shooter_pos: Vector3, impact_pos: Vector3, shooter_radius := 100.0, impact_radius := 100.0, shooter: Node3D = null) -> void:
+	if tree == null:
+		return
+	for n in tree.get_nodes_in_group("animal"):
+		if not (n is Animal):
+			continue
+		var a := n as Animal
+		if a.state == State.DEAD or a.remote:
+			continue
+		var hear: float = float(a.info.get("hear", 1.0))
+		var d_shoot := a.global_position.distance_to(shooter_pos)
+		var d_impact := a.global_position.distance_to(impact_pos)
+		if d_shoot > shooter_radius * hear and d_impact > impact_radius * hear:
+			continue
+		var threat_pt := shooter_pos if d_shoot <= d_impact else impact_pos
+		if a.info.get("aggressive", false):
+			a.state = State.CHARGE
+			a._threat = shooter if is_instance_valid(shooter) else a._closest_player()
+			a._threat_pos = shooter_pos
+			a._timer = 16.0
+			a._call.play()
+		else:
+			a.state = State.FLEE
+			a._threat_pos = threat_pt
+			a._threat = null
+			a._timer = a._rng.randf_range(12.0, 20.0)
+			a._call.play()
+
+
 func _on_noise(pos: Vector3, radius: float, kind: String) -> void:
-	if state == State.DEAD or remote:
+	if state == State.DEAD or remote or kind == "shot":
 		return
 	var d := pos.distance_to(global_position)
 	var r: float = radius * info.hear
 	if d > r:
 		return
-	if kind == "shot" or d < r * 0.4 or state == State.ALERT:
+	if d < r * 0.4 or state == State.ALERT:
 		_startle(pos, null)
 	else:
 		_alert(pos)
@@ -328,7 +376,7 @@ func _good_spot(p: Vector2) -> bool:
 		return false
 	if landmarks and landmarks.near_village(p) and species != "rabbit":
 		return false
-	if species == "bear" and landmarks and not landmarks.in_mountains(p):
+	if species in ["bear", "bigfoot"] and landmarks and not landmarks.in_mountains(p):
 		return false
 	return true
 
@@ -338,6 +386,14 @@ func _physics_process(delta: float) -> void:
 		return
 	if remote:
 		_animate(delta, velocity.length())
+		return
+	if _levitate_t > 0.0:
+		_levitate_t -= delta
+		velocity = Vector3(0.0, sin(_phase * 2.0) * 0.6 + 0.3, 0.0)
+		_model.rotation.z = lerpf(_model.rotation.z, PI, 1.0 - exp(-delta * 5.0))
+		move_and_slide()
+		if _levitate_t <= 0.0:
+			_model.rotation.z = 0.0
 		return
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
@@ -385,9 +441,17 @@ func _physics_process(delta: float) -> void:
 					if _threat.has_method("take_hit"):
 						_threat.take_hit(info.damage, global_position)
 					elif _threat is Player:
+						var pl := _threat as Player
 						GameState.damage(info.damage)
-						if species == "bear" or _rng.randf() < 0.5:
-							(_threat as Player).knockdown(1.6, "Umgerannt!")
+						var push := (pl.global_position - global_position)
+						push.y = 0.0
+						push = push.normalized() if push.length() > 0.01 else global_basis.z
+						if species == "bigfoot":
+							pl.knockdown(2.8, "Bigfoot wirft dich!", Vector3(push.x * 9.0, 18.0, push.z * 9.0))
+						elif species == "boar":
+							pl.knockdown(1.6, "Vom Wildschwein umgerannt!", Vector3(push.x * 7.5, 3.2, push.z * 7.5))
+						elif species == "bear" or _rng.randf() < 0.5:
+							pl.knockdown(1.6, "Umgerannt!", Vector3(push.x * 5.0, 2.5, push.z * 5.0))
 				if d < 1.6:
 					speed = 0.0
 	var dir := goal - global_position
@@ -415,6 +479,12 @@ func _physics_process(delta: float) -> void:
 		var to := _threat_pos - global_position
 		rotation.y = lerp_angle(rotation.y, atan2(to.x, to.z), 1.0 - exp(-delta * 3.0))
 	move_and_slide()
+	if world:
+		var gy := world.height_at(global_position.x, global_position.z)
+		if global_position.y < gy:
+			global_position.y = gy
+			if velocity.y < 0.0:
+				velocity.y = 0.0
 	# Bei Wänden/Klippen wenden
 	if is_on_wall() and state == State.WANDER:
 		_pick_wander()
@@ -453,20 +523,35 @@ func _think_step() -> void:
 				_timer = 8.0
 
 
+func _play_anim(keywords: Array[String]) -> void:
+	if _anim == null:
+		return
+	var anims := _anim.get_animation_list()
+	for kw in keywords:
+		for anim_name in anims:
+			if str(anim_name).to_lower().contains(kw):
+				if _anim.current_animation != anim_name:
+					_anim.play(anim_name, 0.2)
+				return
+
+
 func _animate(delta: float, speed: float) -> void:
 	if speed > 0.2:
 		_phase += delta * (3.0 + speed * 1.2)
 	if _glb_root:
 		if _anim:
-			var want := "Idle"
-			if speed > 5.0:
-				want = "Gallop"
+			if state == State.DEAD:
+				_play_anim(["death", "die"])
+			elif state == State.CHARGE and _attack_cd > 0.8:
+				_play_anim(["attack", "bite", "leap", "run", "gallop"])
+			elif speed > 5.0:
+				_play_anim(["run", "gallop", "walk"])
 			elif speed > 0.2:
-				want = "Walk"
+				_play_anim(["walk", "run"])
 			elif state == State.GRAZE and _timer > 1.0:
-				want = "Eating"
-			if _anim.has_animation(want) and _anim.current_animation != want:
-				_anim.play(want, 0.2)
+				_play_anim(["eat", "idle"])
+			else:
+				_play_anim(["idle"])
 		elif speed > 0.2:
 			_glb_root.position.y = absf(sin(_phase)) * 0.05
 		return
@@ -493,14 +578,118 @@ func hit(dmg: float, point: Vector3, dir: Vector3, shooter: Node3D = null) -> vo
 	elif local.z < -0.4 * s:
 		mult = 0.6
 	hp -= dmg * mult
+	_spawn_blood_spray(point, dir)
+	_add_wound_spot(point)
 	if hp <= 0.0:
 		die(dir)
 	else:
+		if species == "rabbit":
+			_transform_to_mutant(shooter)
 		# angeschossen: verliert Blut und bricht nach einiger Zeit zusammen
 		_bleed += maxf(dmg * mult * 0.12, 4.0)
-		_startle(point - dir * 30.0, shooter)
+		if info.get("aggressive", false):
+			state = State.CHARGE
+			_threat = shooter if is_instance_valid(shooter) else _closest_player()
+			_threat_pos = point - dir * 30.0
+			_timer = 16.0
+		else:
+			_startle(point - dir * 30.0, shooter)
 		for i in 4:
 			_drop_blood()
+
+
+func _spawn_blood_spray(point: Vector3, dir: Vector3) -> void:
+	if not is_inside_tree():
+		return
+	var p := GPUParticles3D.new()
+	p.amount = 14
+	p.lifetime = 0.55
+	p.one_shot = true
+	p.explosiveness = 1.0
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = (-dir + Vector3.UP * 0.4).normalized()
+	pm.spread = 42.0
+	pm.initial_velocity_min = 2.5
+	pm.initial_velocity_max = 5.5
+	pm.gravity = Vector3(0, -12.0, 0)
+	var s := SphereMesh.new()
+	s.radius = 0.055
+	s.height = 0.11
+	s.radial_segments = 6
+	s.rings = 3
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.659, 0.063, 0.063)  # #A81010
+	m.roughness = 0.25
+	s.material = m
+	p.process_material = pm
+	p.draw_pass_1 = s
+	get_parent().add_child(p)
+	p.global_position = point
+	p.emitting = true
+	get_tree().create_timer(1.1).timeout.connect(p.queue_free)
+
+
+func _add_wound_spot(point: Vector3) -> void:
+	if _wound_count >= 5 or _model == null:
+		return
+	_wound_count += 1
+	var s := SphereMesh.new()
+	s.radius = 0.055
+	s.height = 0.03
+	var mi := MeshInstance3D.new()
+	mi.mesh = s
+	mi.material_override = Toon.solid(Color(0.690, 0.094, 0.094), false)  # #B01818
+	mi.position = _model.to_local(point)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_model.add_child(mi)
+
+
+func levitate(seconds: float) -> void:
+	if state == State.DEAD:
+		return
+	_levitate_t = maxf(_levitate_t, seconds)
+	velocity.y = 3.5
+	if is_inside_tree():
+		var p := GPUParticles3D.new()
+		p.amount = 18
+		p.lifetime = 0.9
+		p.one_shot = true
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+		pm.emission_sphere_radius = 0.9
+		pm.direction = Vector3.UP
+		pm.initial_velocity_min = 0.6
+		pm.initial_velocity_max = 1.6
+		pm.gravity = Vector3.ZERO
+		var s := SphereMesh.new()
+		s.radius = 0.06
+		s.height = 0.12
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = Color(0.314, 1.0, 0.314)  # #50FF50
+		s.material = m
+		p.process_material = pm
+		p.draw_pass_1 = s
+		add_child(p)
+		p.position = Vector3(0, 0.8, 0)
+		p.emitting = true
+		get_tree().create_timer(1.4).timeout.connect(p.queue_free)
+
+
+func _transform_to_mutant(shooter: Node3D) -> void:
+	species = "mutant_rabbit"
+	info = SPECIES.mutant_rabbit
+	hp = info.hp
+	if _model:
+		_model.queue_free()
+	_legs.clear()
+	_build_model()
+	state = State.CHARGE
+	_threat = shooter if is_instance_valid(shooter) else _closest_player()
+	_timer = 18.0
+	_call.play()
+	if is_inside_tree():
+		velocity.y = 6.8  # ~2.5m Sprungattacke beim Mutieren
 
 
 func _drop_blood() -> void:
@@ -527,19 +716,33 @@ func is_dead() -> bool:
 	return state == State.DEAD
 
 
-func die(dir: Vector3) -> Node3D:
+func die(dir: Vector3, launch := false) -> Node3D:
 	if state == State.DEAD:
 		return null
 	state = State.DEAD
+	for p_node in _pupils:
+		if is_instance_valid(p_node):
+			p_node.visible = false
+	for x_node in _x_eyes:
+		if is_instance_valid(x_node):
+			x_node.visible = true
 	var c := Carcass.new()
 	c.species = species
 	c.male = male
 	c.net_id = net_id
+	c.world = world
 	get_parent().add_child(c)
 	c.global_transform = global_transform
 	c.take_model(_model)
-	c.apply_central_impulse(dir.normalized() * 120.0 * info.size + Vector3.UP * 30.0)
-	c.apply_torque_impulse(Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)) * 60.0)
+	var d_xz := Vector3(dir.x, 0.0, dir.z)
+	d_xz = d_xz.normalized() if d_xz.length() > 0.01 else global_basis.z
+	if launch:
+		c.linear_velocity = d_xz * 7.5 + Vector3.UP * 12.0
+		c.angular_velocity = Vector3(randf_range(-6.0, 6.0), randf_range(-4.0, 4.0), randf_range(-6.0, 6.0))
+	else:
+		# Realistisches Taumeln / seitliches Umkippen am Boden ohne Hochschleudern
+		c.linear_velocity = d_xz * randf_range(3.0, 5.5) + Vector3.UP * randf_range(0.9, 1.6)
+		c.angular_velocity = Vector3(randf_range(-2.5, 2.5), randf_range(-1.5, 1.5), randf_range(4.0, 6.5))
 	match species:
 		"deer", "legend": GameState.stats.deer += 1
 		"boar": GameState.stats.boar += 1

@@ -28,6 +28,7 @@ func _ready() -> void:
 	unit_size = 10.0
 	max_db = 3.0
 	volume_db = -4.0
+	bus = &"SFX" if AudioServer.get_bus_index(&"SFX") >= 0 else &"Master"
 	play()
 	_playback = get_stream_playback()
 

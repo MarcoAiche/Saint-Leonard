@@ -128,26 +128,101 @@ static func ambience() -> AudioStreamWAV:
 	return _cache["amb"]
 
 
-static func play_2d(parent: Node, stream: AudioStream, volume_db := 0.0, pitch := 1.0) -> void:
+static func play_2d(parent: Node, stream: AudioStream, volume_db := 0.0, pitch := 1.0, bus_name := &"SFX") -> void:
 	var p := AudioStreamPlayer.new()
 	p.stream = stream
 	p.volume_db = volume_db
 	p.pitch_scale = pitch
+	p.bus = bus_name if AudioServer.get_bus_index(bus_name) >= 0 else &"Master"
 	p.process_mode = Node.PROCESS_MODE_ALWAYS
 	parent.add_child(p)
 	p.finished.connect(p.queue_free)
 	p.play()
 
 
-static func play_3d(parent: Node3D, stream: AudioStream, volume_db := 0.0, pitch := 1.0) -> void:
+static func play_3d(parent: Node3D, stream: AudioStream, volume_db := 0.0, pitch := 1.0, bus_name := &"SFX") -> void:
 	var p := AudioStreamPlayer3D.new()
 	p.stream = stream
 	p.volume_db = volume_db
 	p.pitch_scale = pitch
+	p.bus = bus_name if AudioServer.get_bus_index(bus_name) >= 0 else &"Master"
 	p.unit_size = 6.0
 	parent.add_child(p)
 	p.finished.connect(p.queue_free)
 	p.play()
+
+
+## Differenziertes Waffen-Audio je Waffentyp
+static func gunshot_weapon(slot: String) -> AudioStreamWAV:
+	var key := "gun_" + slot
+	if _cache.has(key):
+		return _cache[key]
+	if slot == "plasma_blaster":
+		var n := int(RATE * 0.28)
+		var s := PackedFloat32Array()
+		s.resize(n)
+		var ph := 0.0
+		for i in n:
+			var t := float(i) / RATE
+			var freq := lerpf(1650.0, 260.0, minf(1.0, t / 0.22))
+			ph += TAU * freq / RATE
+			s[i] = (sin(ph) * 0.65 + sin(ph * 2.5) * 0.25) * exp(-t * 10.0)
+		_cache[key] = _wav(s)
+		return _cache[key]
+	if slot == "bazooka":
+		var n := int(RATE * 0.65)
+		var s := PackedFloat32Array()
+		s.resize(n)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 41
+		var lp := 0.0
+		for i in n:
+			var t := float(i) / RATE
+			lp += (rng.randf_range(-1, 1) - lp) * 0.14
+			s[i] = (lp * 2.6 + sin(TAU * 52.0 * t) * 0.7) * exp(-t * 4.5) * minf(1.0, t * 250.0)
+		_cache[key] = _wav(s)
+		return _cache[key]
+	var dur := 0.22 if slot == "pistol" else (0.48 if slot in ["sniper", "shotgun", "bolt_action"] else 0.30)
+	var snap := 38.0 if slot == "pistol" else (14.0 if slot in ["sniper", "shotgun"] else 24.0)
+	var lp_rate := 0.22 if slot == "pistol" else (0.08 if slot in ["sniper", "shotgun"] else 0.14)
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 10 + slot.hash() % 97
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (rng.randf_range(-1, 1) - lp) * lp_rate
+		var crack := rng.randf_range(-1, 1) * exp(-t * 70.0)
+		var thump := sin(TAU * (110.0 if slot == "pistol" else 68.0) * t) * exp(-t * 25.0) * 0.5
+		s[i] = clampf((crack * 0.65 + lp * 1.9 * exp(-t * snap) + thump) * minf(1.0, t * 400.0), -1.0, 1.0)
+	_cache[key] = _wav(s)
+	return _cache[key]
+
+
+## Lagerfeuer-Knistern (3s Schleife)
+static func campfire() -> AudioStreamWAV:
+	if _cache.has("campfire"):
+		return _cache["campfire"]
+	var dur := 3.0
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var lp := 0.0
+	for i in n:
+		lp += (rng.randf_range(-1, 1) - lp) * 0.06
+		s[i] = lp * 0.45
+	for _c in 42:
+		var idx := rng.randi_range(0, n - 180)
+		var amp := rng.randf_range(0.18, 0.55)
+		for j in 160:
+			var u := float(j) / 160.0
+			s[idx + j] += rng.randf_range(-1, 1) * amp * exp(-u * 8.0)
+	_cache["campfire"] = _wav(s, true)
+	return _cache["campfire"]
 
 
 ## Gewehrschuss: lauter Knall mit Nachhall

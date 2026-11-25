@@ -27,6 +27,8 @@ var _surface_t := 0.0
 var _bump_t := 0.0
 var _last_vel := Vector3.ZERO
 var _engine: EngineSound
+var _dust: GPUParticles3D
+var _splash: GPUParticles3D
 var _headlights: Array[SpotLight3D] = []
 var _base_friction := 2.8
 var grip_mult := 1.0  # Umbauten (Geländereifen)
@@ -47,6 +49,12 @@ func _ready() -> void:
 	max_contacts_reported = 4
 	_engine = EngineSound.new()
 	add_child(_engine)
+	_dust = _make_vehicle_particles(Color(0.769, 0.675, 0.525, 0.55), 16, 0.65, 0.55)
+	_dust.position = Vector3(0, 0.25, -1.2)
+	add_child(_dust)
+	_splash = _make_vehicle_particles(Color(1.0, 1.0, 1.0, 0.75), 14, 0.45, 0.35)
+	_splash.position = Vector3(0, 0.2, 0.0)
+	add_child(_splash)
 
 
 func speed_kmh() -> float:
@@ -189,10 +197,18 @@ func _physics_process(delta: float) -> void:
 	if _surface_t <= 0.0 and world:
 		_surface_t = 0.2
 		_update_surface()
+	# Staub- & Wasser-VFX auf Schotter/Gelände/Wasser
+	var spd := absf(v)
+	var on_ground := _wheels_on_ground() >= 2
+	var in_water: bool = surface.kind == "water"
+	var dusty: bool = on_ground and spd > 12.0 and not in_water and (surface.tier == 0 or surface.tier >= WorldBuilder.TIER_DIRT)
+	if _dust:
+		_dust.emitting = dusty
+	if _splash:
+		_splash.emitting = on_ground and spd > 6.0 and in_water
 	# Holpern auf Schotter, Gelände und Bergpfaden
 	if surface.tier == 0 or surface.tier >= WorldBuilder.TIER_DIRT:
 		_bump_t -= delta
-		var spd := absf(v)
 		if _bump_t <= 0.0 and spd > 15.0 and _wheels_on_ground() >= 2:
 			_bump_t = randf_range(0.15, 0.5)
 			var strength := (spd - 15.0) * (1.8 if surface.tier == WorldBuilder.TIER_EXTREME else 1.0) * mass * 0.012
@@ -233,6 +249,34 @@ func _update_surface() -> void:
 	f *= grip_mult
 	for w in wheels:
 		w.wheel_friction_slip = f
+
+
+func _make_vehicle_particles(col: Color, cnt: int, life: float, radius: float) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	p.amount = cnt
+	p.lifetime = life
+	p.emitting = false
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = Vector3(0.85, 0.1, 0.8)
+	pm.direction = Vector3(0, 0.6, -1.0)
+	pm.spread = 35.0
+	pm.initial_velocity_min = 1.5
+	pm.initial_velocity_max = 3.5
+	pm.gravity = Vector3(0, -2.5, 0)
+	p.process_material = pm
+	var s := SphereMesh.new()
+	s.radius = radius
+	s.height = radius * 1.4
+	s.radial_segments = 6
+	s.rings = 3
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = col
+	s.material = m
+	p.draw_pass_1 = s
+	return p
 
 
 ## 0..1: Motorleistung (Schaden, leerer Tank)

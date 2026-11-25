@@ -114,7 +114,7 @@ func page_home() -> void:
 	if not saves.is_empty():
 		var last: Dictionary = saves[0]
 		first = _title_item(list, "Weiterspielen", func(): _go("single", "", last.slot, false))
-		var sub := MenuStyle.label("%s  ·  Tag %d  ·  %d €" % [last.title, last.day, last.money], 15, MenuStyle.MUTED)
+		var sub := MenuStyle.label("%s  ·  Tag %d  ·  $%d" % [last.title, last.day, last.money], 15, MenuStyle.MUTED)
 		sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		list.add_child(sub)
 	var b_new := _title_item(list, "Neues Spiel", func(): page_new())
@@ -287,7 +287,7 @@ func page_saves() -> void:
 	for sv in GameState.list_saves():
 		var row := HBoxContainer.new()
 		list.add_child(row)
-		var info := MenuStyle.label("%s\n%s, Tag %d, %d €, Kapitel %d   (%s)" % [sv.title, sv.player, sv.day, sv.money, min(sv.chapter, 3), sv.saved.replace("T", " ").left(16)], 15)
+		var info := MenuStyle.label("%s\n%s, Tag %d, $%d, Kapitel %d   (%s)" % [sv.title, sv.player, sv.day, sv.money, min(sv.chapter, 3), sv.saved.replace("T", " ").left(16)], 15)
 		info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(info)
 		_button(row, "Laden", func(): _go("single", "", sv.slot, false))
