@@ -8,3 +8,4 @@
 # wird beim ersten Start aus data/riegersdorf.json gebaut
 data/world_baked.scn
 data/raw/
+data/riegersdorf_full_backup.json

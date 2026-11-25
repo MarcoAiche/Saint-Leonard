@@ -20,6 +20,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const RAW = path.join(ROOT, "data", "raw");
 const OUT = path.join(ROOT, "data", "riegersdorf.json");
 const REFRESH = process.argv.includes("--refresh");
+const LOCAL = process.argv.includes("--local");
+const BACKUP = path.join(ROOT, "data", "riegersdorf_full_backup.json");
 const UA = "saint-leonard-dev/0.1";
 
 const LAT0 = 46.5491278; // Ortskern Riegersdorf (OSM place=village)
@@ -340,8 +342,204 @@ const smoothstep = (a, b, x) => {
 };
 
 // ---------------------------------------------------------------- main
-const osm = await loadOsm();
-const world = convertOsm(osm);
+const localSrc = LOCAL ? JSON.parse(fs.readFileSync(BACKUP, "utf8")) : null;
+const world = LOCAL
+  ? {
+      buildings: localSrc.buildings,
+      roads: localSrc.roads,
+      rails: localSrc.rails,
+      water_lines: localSrc.water_lines,
+      areas: [],
+      pois: localSrc.pois,
+      places: localSrc.places,
+      lone_trees: [],
+    }
+  : convertOsm(await loadOsm());
+
+// 1. Korridor-Cut: Nur Heimat-Map (z >= -2300), B83-Korridor bis B83/B86-Kreuzung und Bauhaus-Zone behalten
+const townBox = { x0: 4205, x1: 4630, z0: -4830, z1: -4440 };
+const inBox = (x, z, b) => x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1;
+const b83Segs = [];
+for (const r of world.roads) {
+  if (!r.name || !(r.name.includes("Kärntner Straße") || r.name.includes("B83"))) continue;
+  for (let k = 1; k < r.pts.length; k++) {
+    const a = r.pts[k - 1], b = r.pts[k];
+    if (Math.min(a[1], b[1]) <= -950 && Math.max(a[1], b[1]) >= -6150) b83Segs.push([a, b]);
+  }
+}
+const distToB83 = (x, z) => {
+  let best = Infinity;
+  for (const [a, b] of b83Segs) {
+    const dx = b[0] - a[0], dz = b[1] - a[1], l2 = dx * dx + dz * dz || 1e-6;
+    const t = Math.min(1, Math.max(0, ((x - a[0]) * dx + (z - a[1]) * dz) / l2));
+    best = Math.min(best, Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz));
+  }
+  return best;
+};
+const bauhausZone = { x0: 4160, x1: 4720, z0: -4920, z1: -4410 };
+const inKeepZone = (x, z) => z >= -2300 || (z >= -6150 && distToB83(x, z) <= 230) || inBox(x, z, bauhausZone);
+
+function clipPolyline(pts, keepFn) {
+  const chunks = [];
+  let cur = [];
+  for (const p of pts) {
+    if (keepFn(p[0], p[1])) cur.push(p);
+    else {
+      if (cur.length >= 2) chunks.push(cur);
+      cur = [];
+    }
+  }
+  if (cur.length >= 2) chunks.push(cur);
+  return chunks;
+}
+
+const rawCounts = {
+  roads: world.roads.length,
+  buildings: world.buildings.length,
+  tunnels: world.roads.filter((r) => r.tunnel || r.covered || (r.layer || 0) < 0).length,
+};
+
+// Bestehenden B83-Anschlusspunkt nahe Bauhaus finden
+let b83Conn = [4198.42, -4754.32];
+{
+  let bestD = Infinity;
+  for (const [a, b] of b83Segs) {
+    for (const p of [a, b]) {
+      const d = Math.hypot(p[0] - 4283.92, p[1] - (-4602.97));
+      if (d < bestD) { bestD = d; b83Conn = p; }
+    }
+  }
+}
+
+// Gebäude filtern (Bauhaus-Blase wird durch eigene Kleinstadt ersetzt)
+world.buildings = world.buildings.filter((b) => {
+  const cx = b.pts.reduce((s, p) => s + p[0], 0) / b.pts.length;
+  const cz = b.pts.reduce((s, p) => s + p[1], 0) / b.pts.length;
+  return inKeepZone(cx, cz) && !inBox(cx, cz, townBox);
+});
+
+// Straßen filtern & an Cut-Kanten sauber abschneiden (ohne Autobahn A2 & ohne abgeschnittene Tunnel-Stummel)
+{
+  const isMotorway = (r) => r.kind === "motorway" || r.kind === "motorway_link";
+  const removedMotorway = world.roads.filter(isMotorway).length;
+  const keptRoads = [];
+  for (const r of world.roads) {
+    if (isMotorway(r)) continue;
+    const isB83 = r.name && (r.name.includes("Kärntner Straße") || r.name.includes("B83"));
+    const chunks = clipPolyline(r.pts, (x, z) => inKeepZone(x, z) && (isB83 || !inBox(x, z, townBox)));
+    for (const pts of chunks) {
+      const len = pts.reduce((s, p, i) => i ? s + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0, 0);
+      if (len < 3) continue;
+      const isTun = r.tunnel || r.covered || (r.layer || 0) < 0;
+      const wasClipped = pts.length < r.pts.length;
+      if (isTun && (wasClipped || len < 15)) continue;
+      keptRoads.push({ ...r, pts });
+    }
+  }
+  // Tunnel-Flags entfernen, wenn weder ein Bahngleis noch eine verbliebene Nicht-Autobahn-Brücke darüber verläuft (z. B. ehemalige A2-Querung)
+  const nearLines = [
+    ...world.rails.filter((rl) => rl.kind === "rail" && !rl.tunnel),
+    ...keptRoads.filter((kr) => kr.bridge || (kr.layer || 0) > 0),
+  ];
+  const nearOverpass = (pts) => {
+    for (const [px, pz] of pts) {
+      for (const ol of nearLines) {
+        for (let k = 1; k < ol.pts.length; k++) {
+          const [ax, az] = ol.pts[k - 1], [bx, bz] = ol.pts[k];
+          const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1e-6;
+          const t = Math.min(1, Math.max(0, ((px - ax) * dx + (pz - az) * dz) / l2));
+          if (Math.hypot(px - ax - dx * t, pz - az - dz * t) <= 18.0) return true;
+        }
+      }
+    }
+    return false;
+  };
+  let clearedTunnels = 0;
+  for (const r of keptRoads) {
+    if ((r.tunnel || r.covered || (r.layer || 0) < 0) && !nearOverpass(r.pts)) {
+      r.tunnel = false;
+      r.covered = false;
+      r.layer = 0;
+      clearedTunnels++;
+    }
+  }
+  console.log(`Autobahn entfernt: ${removedMotorway} motorway/motorway_link-Segmente | A2-Tunnel bereinigt: ${clearedTunnels}`);
+  world.roads = keptRoads;
+}
+
+// Gleise, Wasser, Flächen & Einzelbäume filtern
+world.rails = world.rails.flatMap((r) => clipPolyline(r.pts, inKeepZone).map((pts) => ({ ...r, pts })));
+world.water_lines = world.water_lines.flatMap((w) => clipPolyline(w.pts, inKeepZone).map((pts) => ({ ...w, pts })));
+world.areas = world.areas.filter((a) =>
+  a.outer.some((ring) => ring.some(([x, z]) => inKeepZone(x, z) && !inBox(x, z, townBox)))
+);
+world.lone_trees = world.lone_trees.filter(([x, z]) => inKeepZone(x, z) && !inBox(x, z, townBox));
+
+// 2. Eigene LKW-taugliche Kleinstadt im Bauhaus-Bereich generieren (~350m x 350m)
+{
+  const rect = (cx, cz, w, d) => [
+    [+(cx - w / 2).toFixed(2), +(cz - d / 2).toFixed(2)],
+    [+(cx + w / 2).toFixed(2), +(cz - d / 2).toFixed(2)],
+    [+(cx + w / 2).toFixed(2), +(cz + d / 2).toFixed(2)],
+    [+(cx - w / 2).toFixed(2), +(cz + d / 2).toFixed(2)],
+  ];
+  const mkRoad = (kind, width, name, pts) => ({
+    kind, width, bridge: false, tunnel: false, covered: false, layer: 0, name, tracktype: null, surface: "asphalt", pts,
+  });
+
+  // Hauptstraße (secondary, 10m) von B83-Einfahrt bis zum LKW-Wendeplatz/Kreisverkehr
+  world.roads.push(mkRoad("secondary", 10.0, "Bauhausstraße", [b83Conn, [4245, -4650], [4445, -4650]]));
+  const rLoop = [];
+  for (let i = 0; i <= 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    rLoop.push([+(4467 + Math.cos(a) * 22).toFixed(2), +(-4650 + Math.sin(a) * 22).toFixed(2)]);
+  }
+  world.roads.push(mkRoad("secondary", 10.0, "Bauhaus-Kreisverkehr", rLoop));
+
+  // 3 gerade, breite Nebenstraßen (7.5-8m) + LKW-Ladezufahrt
+  world.roads.push(mkRoad("residential", 8.0, "Marktstraße", [[4290, -4785], [4290, -4510]]));
+  world.roads.push(mkRoad("residential", 8.0, "Gewerbestraße", [[4400, -4785], [4400, -4510]]));
+  world.roads.push(mkRoad("service", 7.5, "Ladezone Nord", [[4290, -4775], [4400, -4775]]));
+  world.roads.push(mkRoad("service", 7.5, "Baustoff-Zufahrt", [[4290, -4525], [4400, -4525]]));
+
+  // Pflicht-POI 1: Supermarkt (großes Gebäude + Kundenparkplatz + Ladezone)
+  let nextBid = 990000001;
+  world.buildings.push({
+    id: nextBid++, pts: rect(4345, -4735, 56, 36), name: "Supermarkt", housenumber: "1",
+    type: "supermarket", levels: 1, wall: 5.5, roof: "flat",
+  });
+  world.areas.push({ kind: "parking", outer: [rect(4345, -4688, 68, 28)], inner: [] });
+  world.pois.push({ id: "supermarket", name: "Supermarkt", kind: "supermarket", category: "general_store", housenumber: "1", pos: [4345, -4735] });
+
+  // Pflicht-POI 2: Baumarkt (große Halle + Baustoff-Einfahrt + LKW-Rangierhof)
+  world.buildings.push({
+    id: nextBid++, pts: rect(4345, -4565, 70, 40), name: "Baumarkt", housenumber: "2",
+    type: "commercial", levels: 2, wall: 7.5, roof: "flat",
+  });
+  world.areas.push({ kind: "industrial", outer: [rect(4345, -4612, 80, 26)], inner: [] });
+  world.pois.push({ id: "hardware_store", name: "Baumarkt", kind: "diy", category: "building_and_distillery", housenumber: "2", pos: [4345, -4565] });
+
+  // 12 schlichte, sauber ausgerichtete Wohn- und Gewerbegebäude entlang der Nebenstraßen
+  const townBuildings = [
+    [4255, -4760, 22, 16, "residential", 2, 6.0, "gabled"],
+    [4255, -4720, 22, 16, "residential", 2, 6.0, "gabled"],
+    [4255, -4685, 20, 14, "commercial", 2, 6.2, "flat"],
+    [4255, -4605, 22, 16, "residential", 2, 6.0, "gabled"],
+    [4255, -4565, 22, 16, "residential", 2, 6.0, "gabled"],
+    [4255, -4525, 22, 16, "residential", 2, 6.0, "gabled"],
+    [4435, -4760, 24, 18, "commercial", 2, 6.4, "flat"],
+    [4435, -4715, 22, 16, "residential", 2, 6.0, "gabled"],
+    [4435, -4585, 22, 16, "residential", 2, 6.0, "gabled"],
+    [4435, -4540, 24, 18, "commercial", 2, 6.4, "flat"],
+    [4520, -4680, 26, 18, "warehouse", 2, 6.8, "flat"],
+    [4520, -4620, 26, 18, "residential", 2, 6.0, "gabled"],
+  ];
+  for (const [cx, cz, w, d, type, levels, wall, roof] of townBuildings) {
+    world.buildings.push({ id: nextBid++, pts: rect(cx, cz, w, d), name: null, housenumber: null, type, levels, wall, roof });
+  }
+}
+
+console.log(`Korridor-Cut: Straßen ${rawCounts.roads} -> ${world.roads.length}, Gebäude ${rawCounts.buildings} -> ${world.buildings.length}, Tunnel ${rawCounts.tunnels} -> ${world.roads.filter((r) => r.tunnel || r.covered || (r.layer || 0) < 0).length}`);
 
 // Dächer: Satteldach, Walmdach usw. nur auf annähernd rechteckigen Grundrissen. Bei L-, U- oder
 // schrägen Formen würde das Dach über das umschließende Rechteck ragen und über leerem Boden
@@ -373,10 +571,10 @@ const world = convertOsm(osm);
 // übereinander). Behalten werden Gasthäuser, Polizei, Feuerwehr, Tankstellen, Rathaus, Bahnhof,
 // Krankenhaus und alles, was das Spiel per Name sucht (Landmarks).
 {
-  const NEEDED = new Set(["Gasthaus Pirtscher", "Eni Austria GmbH", "Bauhaus", "Interspar", "Alpen Adria Jagd & Sportwaffen", "Ilgenfritz", "Polizeiinspektion Auen"]);
-  const KINDS = new Set(["police", "fire_station", "fuel", "townhall", "hospital", "station", "halt"]);
+  const NEEDED = new Set(["Gasthaus Pirtscher", "Eni Austria GmbH", "Supermarkt", "Baumarkt", "Alpen Adria Jagd & Sportwaffen"]);
+  const KINDS = new Set(["police", "fire_station", "fuel", "townhall", "hospital", "station", "halt", "supermarket", "diy"]);
   const INN = /^(Gasthaus|Gasthof|Buschenschank|Wirtshaus|Landgasthof)\b/i;
-  const near = (x, z) => inside(x, z) || border.some(([bx, bz]) => Math.hypot(bx - x, bz - z) < 150);
+  const near = (x, z) => inKeepZone(x, z);
   const before = world.pois.length;
   const seen = new Set();
   world.pois = world.pois.filter((q) => {
@@ -392,24 +590,51 @@ const world = convertOsm(osm);
 }
 console.log(`Raster ${NX} x ${NZ} (${((NX * NZ) / 1e6).toFixed(2)} Mio Punkte)`);
 
-const sample = await heightSampler(ZOOM, S, W, N, E);
-const H = new Float32Array(NX * NZ);
-let minH = Infinity;
-for (let j = 0; j < NZ; j++)
-  for (let i = 0; i < NX; i++) {
-    const [la, lo] = toLatLon(X0 + i * STEP, Z0 + j * STEP);
-    const v = sample(la, lo);
-    H[j * NX + i] = v;
-    if (v < minH) minH = v;
-  }
-const BASE = Math.floor(minH);
-for (let k = 0; k < H.length; k++) H[k] -= BASE;
+const H = LOCAL
+  ? new Float32Array(Buffer.from(localSrc.grid.heights, "base64").buffer, Buffer.from(localSrc.grid.heights, "base64").byteOffset, NX * NZ)
+  : new Float32Array(NX * NZ);
+let BASE = LOCAL ? localSrc.info.base_height : 0;
+if (!LOCAL) {
+  const sample = await heightSampler(ZOOM, S, W, N, E);
+  let minH = Infinity;
+  for (let j = 0; j < NZ; j++)
+    for (let i = 0; i < NX; i++) {
+      const [la, lo] = toLatLon(X0 + i * STEP, Z0 + j * STEP);
+      const v = sample(la, lo);
+      H[j * NX + i] = v;
+      if (v < minH) minH = v;
+    }
+  BASE = Math.floor(minH);
+  for (let k = 0; k < H.length; k++) H[k] -= BASE;
+}
 
 const hAt = (x, z) => {
   const fx = Math.min(Math.max((x - X0) / STEP, 0), NX - 1.001), fz = Math.min(Math.max((z - Z0) / STEP, 0), NZ - 1.001);
   const i = Math.floor(fx), j = Math.floor(fz), ax = fx - i, az = fz - j, o = j * NX + i;
   return (H[o] * (1 - ax) + H[o + 1] * ax) * (1 - az) + (H[o + NX] * (1 - ax) + H[o + NX + 1] * ax) * az;
 };
+
+// Bauhaus-Kleinstadt sanft auf B83-Einfahrtshöhe angleichen (>= 30m Blend-Zone)
+{
+  const townH = hAt(b83Conn[0], b83Conn[1]);
+  const core = { x0: 4240, x1: 4555, z0: -4800, z1: -4490 };
+  const blend = 35;
+  for (let j = 0; j < NZ; j++) {
+    const pz = Z0 + j * STEP;
+    if (pz < core.z0 - blend || pz > core.z1 + blend) continue;
+    for (let i = 0; i < NX; i++) {
+      const px = X0 + i * STEP;
+      if (px < core.x0 - blend || px > core.x1 + blend) continue;
+      const dx = Math.max(core.x0 - px, 0, px - core.x1);
+      const dz = Math.max(core.z0 - pz, 0, pz - core.z1);
+      const dist = Math.hypot(dx, dz);
+      if (dist < blend) {
+        const w = 1 - smoothstep(0, blend, dist);
+        H[j * NX + i] = H[j * NX + i] + (townH - H[j * NX + i]) * w;
+      }
+    }
+  }
+}
 
 // Gelände unter Straßen und Gleisen glätten: geglättetes Längsprofil, seitlich sanft auslaufend
 const bestD = new Float32Array(NX * NZ).fill(Infinity);
@@ -482,7 +707,9 @@ for (const b of world.buildings) {
 }
 
 // Flächenarten je Rasterpunkt
-const CLS = new Uint8Array(NX * NZ);
+const CLS = LOCAL
+  ? new Uint8Array(Buffer.from(localSrc.grid.classes, "base64"))
+  : new Uint8Array(NX * NZ);
 const areas = world.areas.filter((a) => AREA_KINDS.includes(a.kind) && a.outer.length)
   .sort((a, b) => AREA_KINDS.indexOf(a.kind) - AREA_KINDS.indexOf(b.kind));
 for (const a of areas) {
@@ -503,43 +730,61 @@ for (const a of areas) {
 let seed = 12345;
 const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
 const trees = [];
-const forest = AREA_KINDS.indexOf("forest"), scrub = AREA_KINDS.indexOf("scrub");
-const sparse = new Set(["residential", "meadow", "grass", "cemetery"].map((k) => AREA_KINDS.indexOf(k)));
-for (let j = 0; j < NZ; j++)
-  for (let i = 0; i < NX; i++) {
-    const o = j * NX + i;
-    if (clear[o] || !nearPlay(i, j)) continue;
-    const c = CLS[o];
-    const p = c === forest ? 0.5 : c === scrub ? 0.18 : sparse.has(c) ? 0.012 : 0;
-    if (rnd() >= p) continue;
-    const x = X0 + i * STEP + (rnd() - 0.5) * STEP * 0.9, z = Z0 + j * STEP + (rnd() - 0.5) * STEP * 0.9;
-    const conifer = c === forest ? rnd() < 0.65 : rnd() < 0.25;
-    trees.push(+x.toFixed(1), +z.toFixed(1), conifer ? 1 : 0, +(0.75 + rnd() * 0.6).toFixed(2));
+if (LOCAL) {
+  const tb = Buffer.from(localSrc.trees, "base64");
+  const tf = new Float32Array(tb.buffer, tb.byteOffset, tb.byteLength / 4);
+  for (let k = 0; k < tf.length; k += 4) {
+    const tx = tf[k], tz = tf[k + 1];
+    if (inKeepZone(tx, tz) && !inBox(tx, tz, townBox)) trees.push(tx, tz, tf[k + 2], tf[k + 3]);
   }
-for (const [x, z] of world.lone_trees) trees.push(x, z, 0, 1);
+} else {
+  const forest = AREA_KINDS.indexOf("forest"), scrub = AREA_KINDS.indexOf("scrub");
+  const sparse = new Set(["residential", "meadow", "grass", "cemetery"].map((k) => AREA_KINDS.indexOf(k)));
+  for (let j = 0; j < NZ; j++)
+    for (let i = 0; i < NX; i++) {
+      const o = j * NX + i;
+      if (clear[o] || !nearPlay(i, j)) continue;
+      const c = CLS[o];
+      const p = c === forest ? 0.5 : c === scrub ? 0.18 : sparse.has(c) ? 0.012 : 0;
+      if (rnd() >= p) continue;
+      const x = X0 + i * STEP + (rnd() - 0.5) * STEP * 0.9, z = Z0 + j * STEP + (rnd() - 0.5) * STEP * 0.9;
+      const conifer = c === forest ? rnd() < 0.65 : rnd() < 0.25;
+      trees.push(+x.toFixed(1), +z.toFixed(1), conifer ? 1 : 0, +(0.75 + rnd() * 0.6).toFixed(2));
+    }
+  for (const [x, z] of world.lone_trees) trees.push(x, z, 0, 1);
+}
 
 // Berge rundherum (grob)
-const farSample = await heightSampler(FAR_ZOOM, ...toLatLon(-FAR_HALF, FAR_HALF), ...toLatLon(FAR_HALF, -FAR_HALF));
-const FN = Math.round((2 * FAR_HALF) / FAR_STEP) + 1;
-const FH = new Float32Array(FN * FN);
-for (let j = 0; j < FN; j++)
-  for (let i = 0; i < FN; i++) {
-    const [la, lo] = toLatLon(-FAR_HALF + i * FAR_STEP, -FAR_HALF + j * FAR_STEP);
-    FH[j * FN + i] = farSample(la, lo) - BASE;
-  }
+let farOut;
+if (LOCAL) {
+  farOut = localSrc.far;
+} else {
+  const farSample = await heightSampler(FAR_ZOOM, ...toLatLon(-FAR_HALF, FAR_HALF), ...toLatLon(FAR_HALF, -FAR_HALF));
+  const FN = Math.round((2 * FAR_HALF) / FAR_STEP) + 1;
+  const FH = new Float32Array(FN * FN);
+  for (let j = 0; j < FN; j++)
+    for (let i = 0; i < FN; i++) {
+      const [la, lo] = toLatLon(-FAR_HALF + i * FAR_STEP, -FAR_HALF + j * FAR_STEP);
+      FH[j * FN + i] = farSample(la, lo) - BASE;
+    }
+  farOut = { x0: -FAR_HALF, z0: -FAR_HALF, n: FN, step: FAR_STEP, heights: Buffer.from(FH.buffer, FH.byteOffset, FH.byteLength).toString("base64") };
+}
 
 const b64 = (typed) => Buffer.from(typed.buffer, typed.byteOffset, typed.byteLength).toString("base64");
+const waterAreas = LOCAL
+  ? localSrc.water_areas.filter((poly) => poly.some(([x, z]) => inKeepZone(x, z)))
+  : world.areas.filter((a) => a.kind === "water").map((a) => a.outer).flat();
 const out = {
   info: {
     name: "Riegersdorf", origin_lat: LAT0, origin_lon: LON0, base_height: BASE,
     attribution: "© OpenStreetMap-Mitwirkende (ODbL); Höhendaten: AWS Terrain Tiles / DGM Österreich",
   },
   grid: { x0: X0, z0: Z0, nx: NX, nz: NZ, step: STEP, heights: b64(H), classes: b64(CLS), kinds: AREA_KINDS },
-  far: { x0: -FAR_HALF, z0: -FAR_HALF, n: FN, step: FAR_STEP, heights: b64(FH) },
+  far: farOut,
   border,
   trees: b64(new Float32Array(trees)),
   buildings: world.buildings, roads: world.roads, rails: world.rails, water_lines: world.water_lines,
-  water_areas: world.areas.filter((a) => a.kind === "water").map((a) => a.outer).flat(),
+  water_areas: waterAreas,
   pois: world.pois, places: world.places,
 };
 fs.writeFileSync(OUT, JSON.stringify(out));

@@ -786,7 +786,7 @@ func build() -> void:
 	var steps := [
 		["Gelände", _build_terrain], ["Berge", _build_far_terrain], ["Wasser", _build_water],
 		["Straßen", _build_lines], ["Häuser", _build_buildings], ["Bäume", _build_trees],
-		["Gras & Blumen", _build_foliage], ["Felder", _build_fields], ["Grenze", _build_border], ["Schilder", _build_labels],
+		["Gras & Blumen", _build_foliage], ["Felder", _build_fields], ["Grenze", _build_border], ["Schilder", _build_labels], ["POIs", _build_pois],
 	]
 	for s in steps:
 		var t := Time.get_ticks_msec()
@@ -980,7 +980,7 @@ func _resample(pts: Array, max_seg := 1.8) -> PackedVector2Array:
 ## Band entlang einer Linie, dem Gelände folgend, aufgeteilt auf Kacheln.
 ## dash > 0 ergibt eine Strichlinie, caps rundet die Enden ab (saubere Kreuzungen).
 func _ribbon(bufs: Dictionary, line: PackedVector2Array, width: float, yoff: float, color: Color,
-		offset := 0.0, dash := 0.0, bridge := false, caps := false, sample_width := -1.0, skirt_drop := 0.0, tunnel_zones: Array = [], use_edge_max := true, suppress_on_asphalt := false) -> void:
+		offset := 0.0, dash := 0.0, bridge := false, caps := false, sample_width := -1.0, skirt_drop := 0.0, tunnel_grid: Dictionary = {}, use_edge_max := true, suppress_on_asphalt := false) -> void:
 	if line.size() < 2:
 		return
 	var hw := width * 0.5
@@ -1013,7 +1013,8 @@ func _ribbon(bufs: Dictionary, line: PackedVector2Array, width: float, yoff: flo
 		else:
 			var in_tunnel := false
 			var tun_y := 0.0
-			for tz: Dictionary in tunnel_zones:
+			var tkey := Vector2i(floori(p.x / ROAD_CELL), floori(p.y / ROAD_CELL))
+			for tz: Dictionary in tunnel_grid.get(tkey, []):
 				var q := Geometry2D.get_closest_point_to_segment(p, tz.a, tz.b)
 				if q.distance_to(p) <= float(tz.hw):
 					var seg_l: float = maxf(0.001, (tz.b - tz.a).length())
@@ -1106,6 +1107,18 @@ func _build_lines() -> void:
 		if tline.size() < 2:
 			continue
 		_build_tunnel_tube(bridge_bufs, tline, float(r.width), tunnel_zones, tys, tdys)
+	var tunnel_grid := {}
+	for tz: Dictionary in tunnel_zones:
+		var pad: float = float(tz.wall_hw) + 4.5
+		var lo := Vector2i(floori((minf(tz.a.x, tz.b.x) - pad) / ROAD_CELL), floori((minf(tz.a.y, tz.b.y) - pad) / ROAD_CELL))
+		var hi := Vector2i(floori((maxf(tz.a.x, tz.b.x) + pad) / ROAD_CELL), floori((maxf(tz.a.y, tz.b.y) + pad) / ROAD_CELL))
+		for cx in range(lo.x, hi.x + 1):
+			for cz in range(lo.y, hi.y + 1):
+				var key := Vector2i(cx, cz)
+				if not tunnel_grid.has(key):
+					tunnel_grid[key] = []
+				tunnel_grid[key].append(tz)
+	print("  Tunnel-Zonen: %d (Grid-Zellen: %d)" % [tunnel_zones.size(), tunnel_grid.size()])
 
 	# Brücken behalten ihren Rand, normale Straßen liegen flächenbündig mit weichem Shader-Rand
 	for r in sorted:
@@ -1134,7 +1147,7 @@ func _build_lines() -> void:
 		else:
 			# Nebenstraßen (+0.045m Kernfläche) über Feldwegen
 			y = 0.019 + float(style[0]) * 0.0005
-		_ribbon(target, line, r.width, y, style[1], 0.0, 0.0, r.bridge, r.bridge, -1.0, 0.0, tunnel_zones, not is_dirt, is_dirt and not r.bridge)
+		_ribbon(target, line, r.width, y, style[1], 0.0, 0.0, r.bridge, r.bridge, -1.0, 0.0, tunnel_grid, not is_dirt, is_dirt and not r.bridge)
 		if style[3] and r.bridge:
 			_ribbon(target, line, 0.18, y + 0.012, Color(0.96, 0.96, 0.9), 0.0, 3.0, true, false, r.width)
 	_commit_chunks(roads_asphalt, group, "SA", _road_shader_material(false))
@@ -1202,7 +1215,8 @@ func _build_lines() -> void:
 		for k in line.size():
 			var pt := line[k]
 			var min_deck := -INF
-			for tz: Dictionary in tunnel_zones:
+			var pt_key := Vector2i(floori(pt.x / ROAD_CELL), floori(pt.y / ROAD_CELL))
+			for tz: Dictionary in tunnel_grid.get(pt_key, []):
 				var d := Geometry2D.get_closest_point_to_segment(pt, tz.a, tz.b).distance_to(pt)
 				if d <= float(tz.wall_hw) + 3.0:
 					in_cut[k] = 1
@@ -1241,7 +1255,9 @@ func _build_lines() -> void:
 			var rbuf := _buf(rails, mid.x, mid.y)
 			# Bahndamm-Unterbau innerhalb von (wall_hw + 3.0 m) um eine tunnel_zone komplett weglassen
 			var inside_tunnel_box := false
-			for tz: Dictionary in tunnel_zones:
+			var mid_key := Vector2i(floori(mid.x / ROAD_CELL), floori(mid.y / ROAD_CELL))
+			var near_tuns: Array = tunnel_grid.get(mid_key, [])
+			for tz: Dictionary in near_tuns:
 				var skip_w := float(tz.wall_hw) + 3.0
 				if Geometry2D.get_closest_point_to_segment(a, tz.a, tz.b).distance_to(a) <= skip_w \
 						or Geometry2D.get_closest_point_to_segment(mid, tz.a, tz.b).distance_to(mid) <= skip_w \
@@ -1265,7 +1281,7 @@ func _build_lines() -> void:
 				var ar_by := minf(height_at(ar_bp.x, ar_bp.y), ya) - 2.0
 				var bl_by := minf(height_at(bl_bp.x, bl_bp.y), yb) - 2.0
 				var br_by := minf(height_at(br_bp.x, br_bp.y), yb) - 2.0
-				for tz: Dictionary in tunnel_zones:
+				for tz: Dictionary in near_tuns:
 					var buf_w := float(tz.wall_hw) + 4.0
 					if Geometry2D.get_closest_point_to_segment(al_bp, tz.a, tz.b).distance_to(al_bp) <= buf_w or Geometry2D.get_closest_point_to_segment(a, tz.a, tz.b).distance_to(a) <= buf_w:
 						al_by = maxf(al_by, float(tz.deck_y))
@@ -2471,6 +2487,24 @@ func _label(parent: Node, text: String, pos: Vector3, size: int, color: Color, v
 	l.visibility_range_end_margin = 40.0
 	l.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	parent.add_child(l)
+
+
+func _build_pois() -> void:
+	var group := _group("POIs")
+	for poi in data.pois:
+		var nm: String = str(poi.get("name", ""))
+		if nm not in ["Supermarkt", "Baumarkt"]:
+			continue
+		var anchor := Node3D.new()
+		anchor.name = nm
+		var px: float = float(poi.pos[0])
+		var pz: float = float(poi.pos[1])
+		anchor.position = Vector3(px, height_at(px, pz), pz)
+		if poi.has("id"):
+			anchor.set_meta("poi_id", str(poi.id))
+		if poi.has("category"):
+			anchor.set_meta("category", str(poi.category))
+		group.add_child(anchor)
 
 
 func _build_labels() -> void:
