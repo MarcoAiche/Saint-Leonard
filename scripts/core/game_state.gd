@@ -51,6 +51,7 @@ var placed: Array = []  # [{uid, type, pos:[x,y,z], rot, owner, data:{}}]
 var houses := {}  # Bauplatz (String) -> {owner, type}
 var police_heat := 0.0  # steigt bei Explosionen, Verfolgungen
 var vehicles_state := {}  # {truck:{pos,rot,...}, atv:{pos,rot}, trailer:{pos,rot,hitched}}
+var dead_animals: Array = []  # [{species, male, net_id, pos:[x,y,z], rot:[x,y,z]}]
 
 var slot := "einzelspieler"
 var slot_title := "Einzelspieler"
@@ -94,7 +95,8 @@ func _process(delta: float) -> void:
 	_autosave -= delta
 	if _autosave <= 0.0:
 		_autosave = 90.0
-		save_game()
+		if Net.game != null and Net.game.get("started") == true:
+			save_game()
 
 
 func is_night() -> bool:
@@ -359,6 +361,7 @@ func save_game() -> void:
 		schema = SAVE_SCHEMA,
 		world = world_dict(),
 		vehicles = vehicles_state,
+		dead_animals = dead_animals,
 		police_heat = police_heat,
 		meta = meta,
 	}
@@ -382,6 +385,8 @@ func load_game() -> bool:
 			apply_world(w_save.get("world", {}))
 			var v = w_save.get("vehicles", {})
 			vehicles_state = v if typeof(v) == TYPE_DICTIONARY else {}
+			var da = w_save.get("dead_animals", [])
+			dead_animals = da if typeof(da) == TYPE_ARRAY else []
 			police_heat = float(w_save.get("police_heat", 0.0))
 			if w_save.has("profiles"):
 				Net.profiles = w_save.profiles
@@ -409,17 +414,22 @@ func load_game() -> bool:
 ## Alle Spielstände: [{slot, title, player, day, money, chapter, saved}] (neueste zuerst)
 static func list_saves() -> Array:
 	var out := []
+	var seen := {}
 	var dir := DirAccess.open(SAVE_DIR)
 	if dir == null:
 		return out
 	for f in dir.get_files():
 		if not f.ends_with(".json") or f.begins_with("server_") or f == "dedicated.json":
 			continue
+		var sname := f.get_basename()
+		if seen.has(sname):
+			continue
 		var d = JSON.parse_string(FileAccess.get_file_as_string(SAVE_DIR.path_join(f)))
 		if typeof(d) != TYPE_DICTIONARY:
 			continue
+		seen[sname] = true
 		var m: Dictionary = d.get("meta", {})
-		out.append({slot = f.get_basename(), title = m.get("title", f.get_basename()), player = m.get("player", "?"),
+		out.append({slot = sname, title = m.get("title", sname), player = m.get("player", "?"),
 			day = int(m.get("day", 1)), money = int(m.get("money", 0)), chapter = int(m.get("chapter", 1)), saved = str(m.get("saved", "")),
 			time = FileAccess.get_modified_time(SAVE_DIR.path_join(f))})
 	out.sort_custom(func(a, b): return a.time > b.time)
@@ -448,6 +458,7 @@ func reset_new_game() -> void:
 	player_pos = Vector3.INF
 	player_rot_y = 0.0
 	vehicles_state = {}
+	dead_animals = []
 	money = 600
 	inv = {"pistol": 1, "assault_rifle": 1, "sniper": 1, "ammo": 80, "knife": 1, "flashlight": 1, "beer": 3, "cigarettes": 10, "snack": 2}
 	loaded = MAG_SIZE

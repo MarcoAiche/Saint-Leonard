@@ -17,12 +17,13 @@ func _ready() -> void:
 	collision_layer = 16
 	collision_mask = 1 | 4 | 16
 	var info: Dictionary = Animal.SPECIES[species]
-	mass = 60.0 * info.size * info.size
+	var s: float = info.size * (1.5 if (species == "deer" and male) else 1.0)
+	mass = 60.0 * s * s
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(0.6, 0.6, 1.4) * info.size
+	box.size = Vector3(0.6, 0.6, 1.4) * s
 	cs.shape = box
-	cs.position.y = 0.8 * info.size
+	cs.position.y = 0.8 * s
 	add_child(cs)
 	angular_damp = 1.5
 	linear_damp = 0.3

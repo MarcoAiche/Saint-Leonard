@@ -82,7 +82,8 @@ func _ready() -> void:
 	collision_mask = 1
 	floor_max_angle = deg_to_rad(55)
 	floor_snap_length = 0.8
-	var s: float = info.size
+	var scale_mult := 1.5 if (species == "deer" and male) else 1.0
+	var s: float = info.size * scale_mult
 	var cs := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = Vector3(0.6, 1.0, 1.5) * s
@@ -123,7 +124,7 @@ func _build_model() -> void:
 	match species:
 		"deer":
 			glb_path = "res://assets/animals/stag.glb" if male else "res://assets/animals/deer.glb"
-			target_h = 1.60 if male else 1.30
+			target_h = (1.60 * 1.5) if male else 1.30
 		"legend":
 			glb_path = "res://assets/animals/stag.glb"
 			target_h = 2.10
@@ -152,7 +153,7 @@ func _build_model() -> void:
 		return
 	_glb_root = null
 	_anim = null
-	_model.scale = Vector3.ONE * info.size
+	_model.scale = Vector3.ONE * info.size * (1.5 if (species == "deer" and male) else 1.0)
 	var bc: Color = info.body
 	var lc: Color = info.belly
 	var leg_h := 0.75
@@ -777,3 +778,45 @@ func die(dir: Vector3, launch := false) -> Node3D:
 ## Gegner für das Wildschwein: getroffen werden
 func take_hit(_dmg: float, _from: Vector3) -> void:
 	pass
+
+
+## Stellt ein gespeichertes totes Tier (Carcass) bodengenau wieder her
+static func spawn_saved_carcass(parent: Node, w: WorldBuilder, d: Dictionary) -> Carcass:
+	var sp: String = str(d.get("species", "deer"))
+	if not SPECIES.has(sp):
+		sp = "deer"
+	var is_male := bool(d.get("male", false))
+	var tmp := Animal.new()
+	tmp.species = sp
+	tmp.info = SPECIES[sp]
+	tmp.male = is_male
+	tmp.world = w
+	tmp._build_model()
+	var c := Carcass.new()
+	c.species = sp
+	c.male = is_male
+	c.net_id = int(d.get("net_id", 0))
+	c.world = w
+	parent.add_child(c)
+	c.take_model(tmp._model)
+	tmp.free()
+	var pos := Vector3.INF
+	var p_arr = d.get("pos", null)
+	if p_arr is Array and p_arr.size() >= 3:
+		var px := float(p_arr[0])
+		var py := float(p_arr[1])
+		var pz := float(p_arr[2])
+		if is_finite(px) and is_finite(py) and is_finite(pz):
+			pos = Vector3(px, py, pz)
+	var rot_arr = d.get("rot", [0.0, 0.0, 0.0])
+	var rx := float(rot_arr[0]) if rot_arr is Array and rot_arr.size() >= 3 else 0.0
+	var ry := float(rot_arr[1]) if rot_arr is Array and rot_arr.size() >= 3 else 0.0
+	var rz := float(rot_arr[2]) if rot_arr is Array and rot_arr.size() >= 3 else 0.0
+	if w and pos.is_finite():
+		var xf := w.find_safe_spawn_transform(pos, ry, pos, ry, 0.25, [c.get_rid()])
+		c.global_position = xf.origin
+	elif pos.is_finite():
+		c.global_position = pos
+	c.rotation = Vector3(rx, ry, rz)
+	c.reset_physics_interpolation()
+	return c

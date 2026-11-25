@@ -126,6 +126,29 @@ func _ready() -> void:
 		GameState.load_game()
 	Settings.apply(get_tree())
 	MainMenu.load_figure()
+	_open_menu()
+	if not Net.peers_changed.is_connected(_on_peers_changed_menu):
+		Net.peers_changed.connect(_on_peers_changed_menu)
+	if not Net.disconnected.is_connected(_on_net_disconnected_menu):
+		Net.disconnected.connect(_on_net_disconnected_menu)
+
+
+func _on_peers_changed_menu() -> void:
+	if menu and is_instance_valid(menu):
+		menu.refresh_lobby()
+
+
+func _on_net_disconnected_menu(reason: String) -> void:
+	if menu and is_instance_valid(menu) and not started:
+		menu.page_home()
+		menu.show_error("Verbindung getrennt: %s" % reason)
+
+
+func _open_menu() -> void:
+	if menu_stage and is_instance_valid(menu_stage):
+		menu_stage.queue_free()
+	if menu and is_instance_valid(menu):
+		menu.queue_free()
 	# Hintergrund fürs Menü: 3D-Bühne (Figur auf dem Felsen, Spiegel, Lobby vor dem Gasthaus)
 	menu_stage = MenuStage.new()
 	menu_stage.name = "Menuebuehne"
@@ -138,13 +161,53 @@ func _ready() -> void:
 	menu.quit.connect(func(): Net.quit_game())
 	menu.play_from_lobby.connect(_play_from_lobby)
 	menu.leave_lobby.connect(_leave_lobby)
-	Net.peers_changed.connect(func():
-		if menu and is_instance_valid(menu):
-			menu.refresh_lobby())
-	Net.disconnected.connect(func(reason):
-		if menu and is_instance_valid(menu) and not started:
-			menu.page_home()
-			menu.show_error("Verbindung getrennt: %s" % reason))
+
+
+func _return_to_menu() -> void:
+	var t0 := Time.get_ticks_msec()
+	GameState.save_game()
+	var t_save := Time.get_ticks_msec()
+	await Net.leave_gracefully()
+	var t_net := Time.get_ticks_msec()
+	started = false
+	seat = ""
+	seat_truck = null
+	get_tree().paused = false
+	if hud:
+		hud.show_pause(false)
+		hud.visible = false
+	if not DebugTools.active:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if player and is_instance_valid(player):
+		player.queue_free()
+	player = null
+	for v in [car, atv, trailer]:
+		if v and is_instance_valid(v):
+			interactions.remove_node(v)
+			v.queue_free()
+	car = null
+	atv = null
+	trailer = null
+	if rig and is_instance_valid(rig):
+		rig.queue_free()
+	rig = null
+	if police and is_instance_valid(police):
+		police.queue_free()
+	police = null
+	for id in remote_trucks:
+		if is_instance_valid(remote_trucks[id]):
+			remote_trucks[id].queue_free()
+	remote_trucks.clear()
+	for node in get_tree().get_nodes_in_group("carcass"):
+		if is_instance_valid(node):
+			node.queue_free()
+	if spawner:
+		for ch in spawner.get_children():
+			ch.queue_free()
+		spawner.players.clear()
+	Animal.threats.clear()
+	_open_menu()
+	print("[PERF] Save: %d ms | Net leave: %d ms | Menu return total: %d ms" % [t_save - t0, t_net - t_save, Time.get_ticks_msec() - t0])
 
 
 func _on_menu_start(mode: String, address: String, slot: String, new_game: bool, keep_outfit := true) -> void:
@@ -438,39 +501,36 @@ func _start_game() -> void:
 	missions._on_chapter_start()
 	spawner.died_hook = _on_animal_died
 
-	hud.minimap.setup(world)
-	hud.big_map.setup(world, true)
-	hud.big_map.clicked.connect(func(p): set_waypoint(p))
-	hud.resume_requested.connect(func(): set_paused(false))
-	hud.quit_requested.connect(func(): Net.quit_game())
-	hud.save_requested.connect(func():
-		GameState.save_game()
-		hud.toast("Gespeichert: %s" % GameState.slot_title, 2.0))
-	hud.menu_requested.connect(func():
-		var t0 := Time.get_ticks_msec()
-		GameState.save_game()
-		var t_save := Time.get_ticks_msec()
-		await Net.leave_gracefully()
-		var t_net := Time.get_ticks_msec()
-		print("[PERF] Save: %d ms | Net leave: %d ms | Reloading scene..." % [t_save - t0, t_net - t_save])
-		get_tree().paused = false
-		get_tree().reload_current_scene())
-	Net.disconnected.connect(func(reason):
-		if DebugTools.active:
-			print("Getrennt: ", reason)
-			return
-		get_tree().paused = false
-		hud.show_dialog("Verbindung getrennt", "%s.
-Dein Fortschritt ist bis zur letzten Sicherung auf dem Server gespeichert." % reason, [["Zum Hauptmenü", func(): get_tree().reload_current_scene()]]))
+	if hud.minimap.world == null:
+		hud.minimap.setup(world)
+		hud.big_map.setup(world, true)
+		hud.big_map.clicked.connect(func(p): set_waypoint(p))
+		hud.resume_requested.connect(func(): set_paused(false))
+		hud.quit_requested.connect(func(): Net.quit_game())
+		hud.save_requested.connect(func():
+			GameState.save_game()
+			hud.toast("Gespeichert: %s" % GameState.slot_title, 2.0))
+		hud.menu_requested.connect(_return_to_menu)
+		Net.disconnected.connect(func(reason):
+			if not started or DebugTools.active:
+				return
+			get_tree().paused = false
+			hud.show_dialog("Verbindung getrennt", "%s.
+Dein Fortschritt ist bis zur letzten Sicherung auf dem Server gespeichert." % reason, [["Zum Hauptmenü", _return_to_menu]]))
 	hud.set_minimap(GameState.minimap_on)
 	_sync_world()
+	for d in GameState.dead_animals:
+		if typeof(d) == TYPE_DICTIONARY:
+			Animal.spawn_saved_carcass(spawner, world, d)
 
-	var amb := AudioStreamPlayer.new()
-	amb.stream = Sfx.ambience()
-	amb.bus = &"Ambience" if AudioServer.get_bus_index(&"Ambience") >= 0 else &"Master"
-	amb.volume_db = -14.0
-	amb.autoplay = true
-	add_child(amb)
+	if get_node_or_null("AmbienceAudio") == null:
+		var amb := AudioStreamPlayer.new()
+		amb.name = "AmbienceAudio"
+		amb.stream = Sfx.ambience()
+		amb.bus = &"Ambience" if AudioServer.get_bus_index(&"Ambience") >= 0 else &"Master"
+		amb.volume_db = -14.0
+		amb.autoplay = true
+		add_child(amb)
 
 	if not GameState.story.get("talked", false) and int(GameState.story.chapter) == 1:
 		hud.toast("Willkommen in Saint Leonard! Sprich mit Wirt Sepp (F).", 6.0)
@@ -618,6 +678,19 @@ func _sync_state_for_save() -> void:
 			hitched = trailer.towed_by != null,
 		}
 	GameState.vehicles_state = vs
+	var da := []
+	for node in get_tree().get_nodes_in_group("carcass"):
+		var c := node as Carcass
+		if c == null or c.sold or c.carried or c.get_parent() != spawner:
+			continue
+		da.append({
+			species = c.species,
+			male = c.male,
+			net_id = c.net_id,
+			pos = [c.global_position.x, c.global_position.y, c.global_position.z],
+			rot = [c.rotation.x, c.rotation.y, c.rotation.z],
+		})
+	GameState.dead_animals = da
 
 
 func _vehicle_input(event: InputEvent) -> void:
