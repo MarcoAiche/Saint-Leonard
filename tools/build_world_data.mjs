@@ -389,9 +389,9 @@ const polyDist = (x, z, poly) => {
     // c) Kompakte Stadt-Blase (60-90m Rand um Kleinstadt)
     [4120, -4900], [4350, -4910], [4580, -4885], [4650, -4810], [4665, -4650], [4650, -4490], [4580, -4415], [4380, -4405], [4210, -4405],
     // b) B83-Ost-/Südseite (>= 120-160m Puffer) nach Süden
-    [4210, -4200], [4260, -3950], [4360, -3700], [4410, -3450], [4410, -3200], [4390, -2950], [4310, -2700], [4120, -2450], [3700, -2320], [3100, -2240], [2680, -2160],
-    // a) Westspitze & Südkante Verschiebebahnhof bis nordöstlich FF Fürnitz -> Anschluss an border[53]
-    [2350, -2050], [2360, -1700], [2450, -1520], [2750, -1530], [3180, -1540], [3360, -1520], [3310, -1350],
+    [4210, -4200], [4260, -3950], [4360, -3700], [4410, -3450], [4410, -3200], [4390, -2950], [4310, -2700], [4120, -2450], [3700, -2320], [3100, -2240], [2680, -2200],
+    // a) Westspitze & Südkante des großen Verschiebebahnhofs (z ~ -1890 .. -2075) -> Nordost-Fürnitz -> border[53]
+    [2330, -2085], [2335, -1980], [2520, -1995], [2630, -1920], [2880, -1895], [3260, -1895], [3465, -1885], [3510, -1720], [3500, -1510], [3350, -1340],
   ];
   const newBorder = [...westPoly, ...splicePts];
 
@@ -437,12 +437,25 @@ const polyDist = (x, z, poly) => {
     ["Unterfederaun", 2576.97, -2350.13, true],
     ["Supermarkt", 4345, -4735, true],
     ["Baumarkt", 4345, -4565, true],
-    ["Verschiebebahnhof", 3400, -1850, false],
+    ["Verschiebebahnhof", 3200, -2050, false],
   ];
   for (const [nm, x, z, expected] of checks) {
     const insideB = inPoly(x, z, newBorder);
     if (insideB !== expected) throw new Error(`PiP-Check fehlgeschlagen für ${nm}: got ${insideB}, expected ${expected}`);
   }
+
+  // 5) Alle Nord-Fürnitz-Gebäude (zwischen unterer Bahnlinie -1500 und Verschiebebahnhof-Südkante -1910) müssen innerhalb liegen
+  let nfIn = 0, nfOut = 0;
+  for (const b of world.buildings) {
+    const cx = b.pts.reduce((s, p) => s + p[0], 0) / b.pts.length;
+    const cz = b.pts.reduce((s, p) => s + p[1], 0) / b.pts.length;
+    if (cx >= 2350 && cx <= 3480 && cz <= -1500 && cz >= -1890) {
+      if (inPoly(cx, cz, newBorder)) nfIn++;
+      else nfOut++;
+    }
+  }
+  console.log(`NORD-FUERNITZ GEBAEUDE CHECK: innerhalb=${nfIn}, ausserhalb=${nfOut}`);
+  if (nfOut > 0) throw new Error(`${nfOut} Nord-Fürnitz-Gebäude außerhalb der Border!`);
 
   border.length = 0;
   border.push(...newBorder);
