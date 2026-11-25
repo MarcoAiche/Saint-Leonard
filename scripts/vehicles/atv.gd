@@ -58,7 +58,7 @@ func set_rider(on: bool, outfit := {}) -> void:
 		_rider.queue_free()
 		_rider = null
 	if on and seat_marker:
-		_rider = CharacterModel.new(outfit, 1)
+		_rider = CharacterModel.new(Outfit.normalize(outfit), 1)
 		_rider.position = Vector3(0, -0.52, -0.08)
 		_rider.rotation.x = 0.24  # leicht nach vorne gelehnt Richtung Lenker
 		seat_marker.add_child(_rider)
