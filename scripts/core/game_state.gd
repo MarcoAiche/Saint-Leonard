@@ -25,7 +25,8 @@ var stamina := 100.0
 var bac := 0.0  # Promille / 1000 (0.05 = 0,5 Promille)
 var smoke_time := 0.0  # Sekunden ruhige Hand nach einer Zigarette
 var cough_timer := 0.0
-var outfit := {gender = "male", shirt = Color(0.35, 0.42, 0.25), pants = Color(0.30, 0.26, 0.20), skin = Color(0.98, 0.80, 0.66), hat = "hunter", hat_color = Color(0.22, 0.30, 0.18), jacket = false}
+var outfit := Outfit.DEFAULT.duplicate()  # Figur und Kleidung (siehe Outfit)
+var wardrobe: Array = []  # Kleidungsstücke, die man schon einmal angezogen hat (bleiben freigeschaltet)
 var truck := {paint = 0, upgrades = {}, fuel = 70.0, damage = 0.0, cargo = []}
 var house := -1  # Bauplatz-Nummer des eigenen Hauses
 var furniture: Array = []  # [{id, pos:[x,y,z], rot}]
@@ -249,7 +250,7 @@ func find_placed(uid: int) -> Dictionary:
 func profile_dict() -> Dictionary:
 	return {
 		player_name = player_name, money = money, inv = inv, inv_layout = inv_layout, loaded = loaded, health = health, bac = bac,
-		outfit = _colors_out(outfit), truck = truck, house = house, furniture = furniture, house_chest = house_chest, photos = photos,
+		outfit = _colors_out(outfit), truck = truck, house = house, furniture = furniture, house_chest = house_chest, wardrobe = wardrobe, photos = photos,
 		story = story, side_jobs = side_jobs, stats = stats, trophies = trophies, minimap_on = minimap_on,
 	}
 
@@ -362,6 +363,7 @@ func reset_new_game() -> void:
 	truck = {paint = 0, upgrades = {}, fuel = 70.0, damage = 0.0, cargo = [], trailer = false}
 	house = -1
 	furniture = []
+	wardrobe = []
 	story = {chapter = 1, step = 0, done = false}
 	side_jobs = []
 	stats = {deer = 0, boar = 0, rabbit = 0, bear = 0, bottles = 0, fines = 0}
@@ -384,5 +386,5 @@ static func _colors_in(d: Dictionary) -> Dictionary:
 	var o := {}
 	for k in d:
 		var v = d[k]
-		o[k] = Color.html(v) if v is String and k not in ["hat", "gender"] and Color.html_is_valid(v) else v
+		o[k] = Color.html(v) if v is String and k in ["shirt", "pants", "skin", "hat_color", "hair_color", "shoes"] and Color.html_is_valid(v) else v
 	return o

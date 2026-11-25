@@ -43,6 +43,15 @@ const ITEMS := {
 	"straps": {name = "Spanngurte", kind = "tool", price = 20, shops = ["bauhaus"]},
 	"trailer": {name = "Pickup-Anhänger", kind = "vehicle", price = 1500, shops = ["bauhaus"]},
 	"crate": {name = "Festkiste (Bier)", kind = "cargo", price = 30, shops = ["super"]},
+	# Kleidung: Arbeitskleidung im Bauhaus, Freizeit im Supermarkt
+	"hi_vis": {name = "Warnweste", kind = "outfit", price = 15, shops = ["bauhaus"]},
+	"work_helmet": {name = "Bauhelm", kind = "outfit", price = 25, shops = ["bauhaus"]},
+	"work_jacket": {name = "Arbeitsjacke", kind = "outfit", price = 70, shops = ["bauhaus"]},
+	"work_pants": {name = "Arbeitshose mit Werkzeuggurt", kind = "outfit", price = 50, shops = ["bauhaus"]},
+	"hoodie": {name = "Kapuzenpulli", kind = "outfit", price = 35, shops = ["super"]},
+	"beanie": {name = "Haube", kind = "outfit", price = 10, shops = ["super", "gas"]},
+	"sunglasses": {name = "Sonnenbrille", kind = "outfit", price = 12, shops = ["super", "gas"]},
+	"trachten": {name = "Trachtenjanker", kind = "outfit", price = 140, shops = ["super"]},
 	# Möbel
 	"table": {name = "Tisch", kind = "furniture", price = 60, shops = ["bauhaus"]},
 	"chair": {name = "Stuhl", kind = "furniture", price = 25, shops = ["bauhaus"]},
@@ -68,6 +77,11 @@ const ITEMS := {
 	"pelt_rug": {name = "Fellteppich", kind = "furniture", price = 0, shops = []},
 	"jacket": {name = "Lederjacke", kind = "outfit", price = 0, shops = []},
 	"hunter_hat": {name = "Jägerhut mit Gamsbart", kind = "outfit", price = 0, shops = []},
+	"fur_cap": {name = "Fellmütze", kind = "outfit", price = 0, shops = []},
+	"leather_vest": {name = "Lederweste", kind = "outfit", price = 0, shops = []},
+	"lederhose": {name = "Lederhose mit Hirschhornknöpfen", kind = "outfit", price = 0, shops = []},
+	"fur_coat": {name = "Pelzmantel", kind = "outfit", price = 0, shops = []},
+	"fur_pack": {name = "Fellrucksack", kind = "outfit", price = 0, shops = []},
 }
 
 ## Rezepte für die Werkbank zu Hause: Ergebnis -> benötigte Teile
@@ -77,6 +91,11 @@ const RECIPES := {
 	"pelt_rug": {hide = 2},
 	"jacket": {hide = 3},
 	"hunter_hat": {hide = 1, tusks = 1},
+	"fur_cap": {hide = 1},
+	"leather_vest": {hide = 2},
+	"lederhose": {hide = 2, antlers = 1},
+	"fur_pack": {hide = 2},
+	"fur_coat": {hide = 4},
 	"meat_cooked": {meat = 1},
 }
 

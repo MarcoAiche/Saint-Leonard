@@ -27,6 +27,9 @@ var _aiming_glb := false
 var hand_anchor: Node3D
 var _held_node: Node3D
 var _held_slot := ""
+## Kleidung am 3D-Modell: folgt Kopf- und Rumpfknochen (relativ zur Ruhelage)
+var _acc := {}  # Knochenname -> [Anker-Node, Knochenindex, Ruhelage (Modellraum)]
+const PALETTE_SHADER := preload("res://scripts/player/char_palette.gdshader")
 
 
 func _init(o := {}, layer := 1) -> void:
@@ -44,6 +47,8 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	if _glb_root and _skeleton and is_inside_tree():
+		_update_acc()
 	if _glb_root and _skeleton and _hand_bone_idx >= 0 and is_inside_tree():
 		if _aiming_glb:
 			var rest_q := _skeleton.get_bone_rest(_hand_bone_idx).basis.get_rotation_quaternion()
@@ -73,6 +78,8 @@ func _build() -> void:
 			return
 	var shirt: Color = outfit.shirt
 	var skin: Color = outfit.skin
+	if outfit.get("top", "") == "jacket":
+		outfit.jacket = true
 	if outfit.uniform:
 		shirt = Color(0.20, 0.30, 0.50)
 	var body := CapsuleMesh.new()
@@ -245,6 +252,74 @@ func _build_glb(scene: PackedScene) -> void:
 	head = Node3D.new()
 	head.position = Vector3(0, 1.08, 0)
 	add_child(head)
+	_dress_glb()
+
+
+## Farben (Haut, Oberteil, Hose, Haare, Schuhe) und Kleidungsteile für das 3D-Modell
+func _dress_glb() -> void:
+	var o := Outfit.normalize(outfit)
+	var female := str(o.gender) == "female"
+	for mi in _glb_root.find_children("*", "MeshInstance3D", true, false):
+		var mesh_inst := mi as MeshInstance3D
+		if mesh_inst.name != "Cube_003" or mesh_inst.mesh == null:
+			continue
+		var old := mesh_inst.mesh.surface_get_material(0) as StandardMaterial3D
+		var m := ShaderMaterial.new()
+		m.shader = PALETTE_SHADER
+		if old and old.albedo_texture:
+			m.set_shader_parameter("atlas", old.albedo_texture)
+		m.set_shader_parameter("col_skin", o.skin)
+		m.set_shader_parameter("col_shirt", o.shirt)
+		m.set_shader_parameter("col_pants", Color(0.42, 0.28, 0.16) if o.legs == "lederhose" else (Color(0.3, 0.3, 0.28) if o.legs == "work_pants" else o.pants))
+		m.set_shader_parameter("col_hair", o.hair_color)
+		m.set_shader_parameter("col_shoes", o.shoes)
+		m.set_shader_parameter("cell_hair", 7 if female else -1)
+		m.set_shader_parameter("cell_shoes", 1)
+		# Hose: unterer Teil des Rumpfes (Höhe im Modellraum -> Meshraum)
+		var to_mesh := (global_transform.affine_inverse() * mesh_inst.global_transform).affine_inverse() if is_inside_tree() else (_glb_root.transform * _rel_xf(mesh_inst)).affine_inverse()
+		m.set_shader_parameter("pants_y", (to_mesh * Vector3(0, 0.5 if female else 0.58, 0)).y)
+		mesh_inst.material_override = m
+	if _skeleton == null:
+		return
+	for bone in ["Head", "Body"]:
+		var idx := _skeleton.find_bone(bone)
+		if idx < 0:
+			continue
+		var anchor := Node3D.new()
+		anchor.name = "Kleidung_" + bone
+		add_child(anchor)
+		var holder := Node3D.new()
+		anchor.add_child(holder)
+		if bone == "Head":
+			Outfit.build_head(holder, o, female, render_layer)
+		else:
+			Outfit.build_body(holder, o, female, render_layer)
+		var rest := _bone_model_xf(_skeleton.get_bone_global_rest(idx))
+		_acc[bone] = [anchor, idx, rest]
+	_update_acc()
+
+
+## Transform eines Knotens relativ zum GLB-Wurzelknoten (vor dem Einfügen in den Baum)
+func _rel_xf(n: Node3D) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	var cur: Node = n
+	while cur and cur != _glb_root:
+		xf = (cur as Node3D).transform * xf if cur is Node3D else xf
+		cur = cur.get_parent()
+	return xf
+
+
+## Knochen-Transform (Skelettraum) -> Modellraum dieser Figur
+func _bone_model_xf(pose: Transform3D) -> Transform3D:
+	return _glb_root.transform * _rel_xf(_skeleton) * pose
+
+
+func _update_acc() -> void:
+	for bone in _acc:
+		var e: Array = _acc[bone]
+		var cur := _bone_model_xf(_skeleton.get_bone_global_pose(e[1]))
+		var rest: Transform3D = e[2]
+		(e[0] as Node3D).transform = Transform3D((cur.basis * rest.basis.inverse()).orthonormalized(), cur.origin)
 
 
 ## Hält ein Item/eine Waffe direkt an der rechten Hand (3rd-Person, NPCs, Mitspieler)

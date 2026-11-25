@@ -231,8 +231,8 @@ func _draw() -> void:
 			if active:
 				draw_rect(r, Color(0.98, 0.78, 0.25), false, 2.0)
 	if game.player:
-		var hat: String = GameState.outfit.get("hat", "")
-		draw_string(font, Vector2(10, size.y - 40), "Hut: %s   Jacke: %s" % [{cap = "Kappe", hunter = "Jägerhut", hunter_gams = "Jägerhut mit Gamsbart", none = "keiner"}.get(hat, hat), "ja" if GameState.outfit.get("jacket", false) else "nein"], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ink.darkened(0.2))
+		var o := Outfit.normalize(GameState.outfit)
+		draw_string(font, Vector2(10, size.y - 40), "Kopf: %s   Oberteil: %s   Hose: %s" % [Outfit.style("hat", o.hat).get("name", "?"), Outfit.style("top", o.top).get("name", "?"), Outfit.style("legs", o.legs).get("name", "?")], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ink.darkened(0.2))
 		draw_string(font, Vector2(10, size.y - 20), "Patronen im Magazin: %d/%d" % [GameState.loaded, GameState.MAG_SIZE], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ink.darkened(0.2))
 	# Raster
 	for x in COLS:

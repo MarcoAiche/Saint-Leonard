@@ -18,6 +18,16 @@ var _pb: AudioStreamGeneratorPlayback
 var _rpb: AudioStreamGeneratorPlayback
 
 
+## Neue Kleidung: Figur neu aufbauen
+func set_outfit(outfit: Dictionary) -> void:
+	var old := model
+	model = CharacterModel.new(GameState._colors_in(outfit))
+	add_child(model)
+	if old:
+		model.transform = old.transform
+		old.queue_free()
+
+
 func setup(id: int, pname: String, outfit: Dictionary) -> void:
 	peer_id = id
 	player_name = pname

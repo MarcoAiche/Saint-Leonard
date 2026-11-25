@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/ui/logo.png" alt="Saint Leonard" width="560"></p>
+
 # Saint Leonard
 
 **Jagen, Schnaps brennen, Offroad fahren, pokern und der Polizei entwischen: eine Koop-Sandbox in einem Kärntner Dorf.**
@@ -31,7 +33,9 @@ Gebaut mit Godot 4 und GDScript. Die Landschaft entsteht aus echten Kartendaten,
 3. **F5** drücken. Beim allerersten Start wird die Welt gebaut (einige Sekunden), danach lädt sie schnell.
 4. Im Hauptmenü Namen eingeben und "Neues Spiel" wählen.
 
-Das Hauptmenü hat Spielstände (weiterspielen, laden, löschen), Mehrspieler, Figur (Hemd, Hose, Haut, Kappe oder Jägerhut) und Einstellungen (Maus, Sichtfeld, Lautstärke, Radio, Vollbild, Grafik).
+Im Titelbildschirm steht deine Figur auf einem Felsen über dem Dorf. Das Menü hat Spielstände (weiterspielen, laden, löschen), Mehrspieler, Figur und Einstellungen (Maus, Sichtfeld, Lautstärke, Radio, Vollbild, Grafik).
+
+**Figur und Kleidung:** Im Menüpunkt "Figur" (und im Spiel zu Hause über den Rucksack, "Kleiderschrank") stehst du vor einem Standspiegel: Körper und Hautton, Frisur und Haarfarbe, Bart und Brille, Kopfbedeckung, Oberteil, Hose und Rücken, jeweils mit Farben. Ziehen mit der Maus dreht die Figur. Arbeitskleidung (Warnweste, Bauhelm, Arbeitsjacke, Arbeitshose) gibt es im Bauhaus, Freizeitkleidung (Kapuzenpulli, Haube, Sonnenbrille, Trachtenjanker) im Supermarkt. Aus Fell und Leder stellst du an der Werkbank Fellmütze, Lederweste, Lederhose, Fellrucksack, Pelzmantel, Lederjacke und den Jägerhut mit Gamsbart her. Einmal angezogen bleibt ein Teil im Kleiderschrank freigeschaltet.
 
 ---
 
@@ -74,6 +78,7 @@ Das Hauptmenü hat Spielstände (weiterspielen, laden, löschen), Mehrspieler, F
 Alle spielen auf **einem gemeinsamen Server**, mit dem sich jeder verbindet. Die Welt läuft dort weiter, auch wenn gerade niemand online ist, und der Server speichert die Welt (Uhrzeit, Wetter, Kessel, Hochstände, Häuser) und den Fortschritt jedes Spielers (Geld, Rucksack, Pickup, Haus, Geschichte) unter seinem Namen.
 
 - **Verbinden:** Hauptmenü, "Mehrspieler", Serveradresse (und Passwort, falls gesetzt) eingeben, "Verbinden". Port **24680 (UDP)**, eine andere Port-Nummer schreibt man als `adresse:port`.
+- **Lobby:** Nach dem Verbinden stehen alle, die gerade in der Lobby sind, mit ihren Figuren vor dem Gasthaus Pirtscher. Mit "Bereit" zeigst du, dass du startklar bist. Sind alle in der Lobby bereit, geht es nach einem kurzen Countdown gemeinsam los, mit "Spielen" sofort. Wer schon spielt, steht in der Liste als "im Spiel".
 - **Server auf dem eigenen PC:** Im selben Menü startet "Server auf diesem PC starten und verbinden" einen Server ohne Fenster und verbindet dich gleich damit. Freunde verbinden sich mit deiner IP, zum Beispiel über ZeroTier.
 - **Server rund um die Uhr** (eigener PC, Raspberry Pi oder Mietserver):
   ```
@@ -96,6 +101,8 @@ Alle spielen auf **einem gemeinsamen Server**, mit dem sich jeder verbindet. Die
 - **Kartendaten neu erzeugen:** `node tools/build_world_data.mjs` (Node.js, keine Pakete). Die Spielgrenze steht in `tools/map_border.json`.
 - **Release und Server rund um die Uhr:** [docs/RELEASE.md](docs/RELEASE.md) (`tools/build_release.ps1` baut alle Plattformen und lädt sie auf Wunsch zu itch.io hoch, `tools/install_pi_server.sh` richtet den Raspberry-Pi-Server als Dienst ein).
 - **Export:** Vorlagen für Windows, Linux-Server und Raspberry Pi stehen in `export_presets.cfg`. Vorher in Godot die Export-Templates installieren.
+- **Debug-Startparameter** (`--money`, `--tp`, `--selftest` usw.) wirken nur im Editor und in Debug-Builds. Ein Release-Export ignoriert sie, damit niemand damit schummelt.
+- **Logo und Spielsymbol:** `godot --path . res://tools/make_logo.tscn` zeichnet `assets/ui/logo.png`, `icon.png` und `icon.ico` neu. `res://tools/outfit_sheet.tscn` rendert alle Kleidungsstücke nebeneinander zum Prüfen.
 
 ---
 
