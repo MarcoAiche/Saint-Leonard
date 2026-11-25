@@ -74,17 +74,21 @@ func setup(w: WorldBuilder, full_map := false) -> void:
 			_marks.append([Vector2(lm.caravan_pos.x, lm.caravan_pos.z), Color(0.95, 0.45, 0.85), "C", "Wohnwagen"])
 	_border = w.border.duplicate()
 	_border.append(w.border[0])
-	# Fläche außerhalb der Grenze abdunkeln: Ring aus Streifen von der Grenze nach außen
+	# Fläche außerhalb der Grenze abdunkeln: großes Rechteck minus Spielgebiet. Damit kein Loch
+	# entsteht, wird das Rechteck senkrecht durch das Spielgebiet geteilt (funktioniert auch für
+	# lang gezogene Grenzen wie die Erweiterung bis Villach).
 	var outside := PackedVector2Array()
-	var c := Vector2.ZERO
-	for p in w.border:
-		c += p / w.border.size()
-	for k in w.border.size():
-		var a := w.border[k]
-		var b := w.border[(k + 1) % w.border.size()]
-		var fa := a + (a - c).normalized() * 30000.0
-		var fb := b + (b - c).normalized() * 30000.0
-		outside.append_array([a, b, fb, a, fb, fa])
+	var br := _bounds(w.border)
+	var big := br.grow(30000.0)
+	var cut := br.get_center().x
+	for half in [Rect2(big.position, Vector2(cut - big.position.x, big.size.y)), Rect2(Vector2(cut, big.position.y), Vector2(big.end.x - cut, big.size.y))]:
+		var rect := PackedVector2Array([half.position, Vector2(half.end.x, half.position.y), half.end, Vector2(half.position.x, half.end.y)])
+		for poly in Geometry2D.clip_polygons(rect, w.border):
+			if Geometry2D.is_polygon_clockwise(poly) != Geometry2D.is_polygon_clockwise(rect):
+				continue  # Loch (sollte durch die Teilung nicht vorkommen)
+			var idx := Geometry2D.triangulate_polygon(poly)
+			for i in idx:
+				outside.append(poly[i])
 	_outside = _mesh(outside)
 
 
