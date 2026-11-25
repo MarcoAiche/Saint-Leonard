@@ -317,6 +317,10 @@ func _lobby_test(game: Game) -> void:
 	if args.has("shot"):
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(args.shot)
+	if not game.menu._in_lobby:
+		print("LOBBY nicht verbunden, Test abgebrochen")
+		await _quit()
+		return
 	game.menu._ready_btn.pressed.emit()
 	t = 0.0
 	while not game.started and t < 30.0:

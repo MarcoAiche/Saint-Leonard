@@ -286,7 +286,7 @@ func run() -> void:
 	await tree.create_timer(1.5).timeout
 	GameState.money = 0
 	GameState.inv = {}
-	Net.join("127.0.0.1")
+	Net.join(str(DebugTools.args.get("join", "127.0.0.1")))  # gleiche Adresse wie beim Start (auch mit Port)
 	var res = await game._wait_connect()
 	check(res == "", "neu verbunden (%s)" % ("ok" if res == "" else res))
 	await tree.create_timer(1.0).timeout
