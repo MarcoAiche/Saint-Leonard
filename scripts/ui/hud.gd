@@ -61,11 +61,13 @@ uniform float amount = 0.0;
 void fragment() {
 	vec2 uv = SCREEN_UV;
 	vec2 wob = vec2(sin(TIME * 1.3 + uv.y * 7.0), cos(TIME * 1.1 + uv.x * 6.0)) * 0.005 * amount;
-	vec2 dbl = vec2(0.014 * sin(TIME * 0.6), 0.005 * cos(TIME * 0.8)) * amount;
+	vec2 dbl = vec2(0.016 * sin(TIME * 0.6), 0.006 * cos(TIME * 0.8)) * amount;
 	float blur = amount * 1.1;
 	vec3 a = textureLod(screen_tex, uv + wob, blur).rgb;
 	vec3 b = textureLod(screen_tex, uv + wob + dbl, blur).rgb;
-	vec3 col = mix(a, b, 0.5 * amount);
+	float r_ch = textureLod(screen_tex, uv + wob + dbl * 1.25, blur).r;
+	float b_ch = textureLod(screen_tex, uv + wob - dbl * 1.25, blur).b;
+	vec3 col = mix(a, vec3(r_ch, b.g, b_ch), 0.55 * amount);
 	float v = smoothstep(0.95, 0.25, length(uv - 0.5));
 	col *= mix(1.0, v, 0.55 * amount);
 	col = mix(col, col * vec3(1.08, 1.0, 0.88) + vec3(0.03, 0.0, 0.02), amount * 0.7);
@@ -535,13 +537,17 @@ func _scope_overlay(rifle: bool) -> Control:
 				var q1 := center + Vector2(cos(a1), sin(a1)) * s.x
 				c.draw_colored_polygon(PackedVector2Array([p0, p1, q1, q0]), black)
 			c.draw_arc(center, r, 0, TAU, 96, Color(0.05, 0.05, 0.05), 6.0)
-			# Absehen 4
-			c.draw_line(center - Vector2(r, 0), center - Vector2(18, 0), black, 4.0)
-			c.draw_line(center + Vector2(18, 0), center + Vector2(r, 0), black, 4.0)
-			c.draw_line(center + Vector2(0, 18), center + Vector2(0, r), black, 5.0)
-			c.draw_line(center - Vector2(0, 40), center - Vector2(0, 2), black, 1.5)
-			c.draw_line(center - Vector2(16, 0), center + Vector2(16, 0), black, 1.5)
-			c.draw_circle(center, 1.5, Color(0.9, 0.1, 0.1))
+			# Mil-Dot Fadenkreuz (4 Mil-Dots pro Achse)
+			c.draw_line(center - Vector2(r, 0), center + Vector2(r, 0), black, 1.5)
+			c.draw_line(center - Vector2(0, r), center + Vector2(0, r), black, 1.5)
+			c.draw_line(center - Vector2(r, 0), center - Vector2(r * 0.55, 0), black, 4.5)
+			c.draw_line(center + Vector2(r * 0.55, 0), center + Vector2(r, 0), black, 4.5)
+			c.draw_line(center + Vector2(0, r * 0.55), center + Vector2(0, r), black, 4.5)
+			for i in range(1, 5):
+				var step := r * 0.11 * i
+				for off in [Vector2(step, 0), Vector2(-step, 0), Vector2(0, step), Vector2(0, -step)]:
+					c.draw_circle(center + off, 2.5, black)
+			c.draw_circle(center, 2.0, Color(0.95, 0.15, 0.15))
 		else:
 			for side in [-1, 1]:
 				var cc := center + Vector2(r * 0.62 * side, 0)
@@ -753,7 +759,7 @@ func set_fade(a: float) -> void:
 
 ## Ansicht durch Zielfernrohr / Fernglas / Fadenkreuz
 func set_view(first_person: bool, aiming: bool, slot: String, driving: bool) -> void:
-	_scope.visible = aiming and WeaponHand.has_scope(slot)
+	_scope.visible = aiming and WeaponHand.has_scope(slot) and first_person and not driving and not menus_open()
 	_crosshair.visible = first_person and not driving and slot != "none" and not _scope.visible
 	if _scope.visible:
 		_scope.queue_redraw()
@@ -763,7 +769,9 @@ func update_status() -> void:
 	_clock.text = "%s  Tag %d  %s" % [GameState.clock_text(), GameState.day, {clear = "sonnig", cloudy = "bewölkt", fog = "Nebel", rain = "Regen"}.get(GameState.weather, "")]
 	_money.text = "%d €" % GameState.money
 	_hp_bar.value = GameState.health
-	_ammo.text = "Patronen %d/%d" % [GameState.loaded, GameState.count("ammo")] if (GameState.has("pistol") or GameState.has("assault_rifle") or GameState.has("sniper")) else ""
+	_ammo.text = "Patronen %d/%d" % [GameState.loaded, GameState.count("ammo")] if (GameState.has("pistol") or GameState.has("assault_rifle") or GameState.has("sniper") or GameState.has("shotgun") or GameState.has("bolt_action") or GameState.has("lmg") or GameState.has("bazooka") or GameState.has("plasma_blaster")) else ""
+	if _drunk_fx:
+		_drunk_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var pm := GameState.promille()
 	_bac_label.text = "%.1f ‰" % pm if pm >= 0.1 else ""
 	_bac_label.add_theme_color_override("font_color", RED if pm >= 0.5 else INK)

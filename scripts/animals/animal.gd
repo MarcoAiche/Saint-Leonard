@@ -58,6 +58,7 @@ var _rng := RandomNumberGenerator.new()
 var _bleed := 0.0  # Lebenspunkte pro Sekunde (angeschossen)
 var _blood_t := 0.0
 var _levitate_t := 0.0
+var _wound_count := 0
 var _pupils: Array[Node3D] = []
 var _x_eyes: Array[Node3D] = []
 static var blood_mat: StandardMaterial3D
@@ -577,6 +578,8 @@ func hit(dmg: float, point: Vector3, dir: Vector3, shooter: Node3D = null) -> vo
 	elif local.z < -0.4 * s:
 		mult = 0.6
 	hp -= dmg * mult
+	_spawn_blood_spray(point, dir)
+	_add_wound_spot(point)
 	if hp <= 0.0:
 		die(dir)
 	else:
@@ -595,11 +598,82 @@ func hit(dmg: float, point: Vector3, dir: Vector3, shooter: Node3D = null) -> vo
 			_drop_blood()
 
 
+func _spawn_blood_spray(point: Vector3, dir: Vector3) -> void:
+	if not is_inside_tree():
+		return
+	var p := GPUParticles3D.new()
+	p.amount = 14
+	p.lifetime = 0.55
+	p.one_shot = true
+	p.explosiveness = 1.0
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = (-dir + Vector3.UP * 0.4).normalized()
+	pm.spread = 42.0
+	pm.initial_velocity_min = 2.5
+	pm.initial_velocity_max = 5.5
+	pm.gravity = Vector3(0, -12.0, 0)
+	var s := SphereMesh.new()
+	s.radius = 0.055
+	s.height = 0.11
+	s.radial_segments = 6
+	s.rings = 3
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.659, 0.063, 0.063)  # #A81010
+	m.roughness = 0.25
+	s.material = m
+	p.process_material = pm
+	p.draw_pass_1 = s
+	get_parent().add_child(p)
+	p.global_position = point
+	p.emitting = true
+	get_tree().create_timer(1.1).timeout.connect(p.queue_free)
+
+
+func _add_wound_spot(point: Vector3) -> void:
+	if _wound_count >= 5 or _model == null:
+		return
+	_wound_count += 1
+	var s := SphereMesh.new()
+	s.radius = 0.055
+	s.height = 0.03
+	var mi := MeshInstance3D.new()
+	mi.mesh = s
+	mi.material_override = Toon.solid(Color(0.690, 0.094, 0.094), false)  # #B01818
+	mi.position = _model.to_local(point)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_model.add_child(mi)
+
+
 func levitate(seconds: float) -> void:
 	if state == State.DEAD:
 		return
 	_levitate_t = maxf(_levitate_t, seconds)
 	velocity.y = 3.5
+	if is_inside_tree():
+		var p := GPUParticles3D.new()
+		p.amount = 18
+		p.lifetime = 0.9
+		p.one_shot = true
+		var pm := ParticleProcessMaterial.new()
+		pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+		pm.emission_sphere_radius = 0.9
+		pm.direction = Vector3.UP
+		pm.initial_velocity_min = 0.6
+		pm.initial_velocity_max = 1.6
+		pm.gravity = Vector3.ZERO
+		var s := SphereMesh.new()
+		s.radius = 0.06
+		s.height = 0.12
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = Color(0.314, 1.0, 0.314)  # #50FF50
+		s.material = m
+		p.process_material = pm
+		p.draw_pass_1 = s
+		add_child(p)
+		p.position = Vector3(0, 0.8, 0)
+		p.emitting = true
+		get_tree().create_timer(1.4).timeout.connect(p.queue_free)
 
 
 func _transform_to_mutant(shooter: Node3D) -> void:

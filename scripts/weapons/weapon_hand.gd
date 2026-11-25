@@ -46,6 +46,7 @@ var _bottle_body: MeshInstance3D
 var _food: Node3D
 var _light: SpotLight3D
 var _flash: OmniLight3D
+var _muzzle_star: Node3D
 var _flash_t := 0.0
 var _sway_t := 0.0
 var _kick := 0.0
@@ -90,6 +91,9 @@ func setup(r: CameraRig, p: Node3D) -> void:
 	_flash.light_energy = 0.0
 	_flash.position = Vector3(0.22, -0.1, -1.4)
 	add_child(_flash)
+	_muzzle_star = _make_muzzle_star()
+	_muzzle_star.visible = false
+	add_child(_muzzle_star)
 	_update_visual()
 
 
@@ -364,6 +368,11 @@ func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) 
 	_cool = maxf(0.0, _cool - delta)
 	_flash_t = maxf(0.0, _flash_t - delta)
 	_flash.light_energy = _flash_t * 40.0
+	if _muzzle_star:
+		_muzzle_star.visible = _flash_t > 0.0 and rig.first_person and not (aiming and has_scope(slot))
+		if _muzzle_star.visible:
+			_muzzle_star.position = Vector3(0.22, -0.15, -1.05)
+			_muzzle_star.rotation.z += delta * 24.0
 	_swap = move_toward(_swap, 0.0, delta * 3.0)
 	if _reload > 0.0:
 		_reload -= delta
@@ -490,3 +499,33 @@ func _fire() -> void:
 func _rack_sound() -> void:
 	if is_instance_valid(player):
 		Sfx.play_3d(player, Sfx.reload_sound(), -10.0, 1.3)
+
+
+func _make_muzzle_star() -> Node3D:
+	var n := Node3D.new()
+	var m_outer := StandardMaterial3D.new()
+	m_outer.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m_outer.albedo_color = Color(1.0, 0.467, 0.067)  # #FF7711
+	m_outer.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var m_inner := StandardMaterial3D.new()
+	m_inner.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m_inner.albedo_color = Color(1.0, 0.878, 0.333)  # #FFE055
+	m_inner.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for rot_z in [0.0, PI * 0.25, PI * 0.5, PI * 0.75]:
+		var q := QuadMesh.new()
+		q.size = Vector2(0.05, 0.28)
+		var mi := MeshInstance3D.new()
+		mi.mesh = q
+		mi.rotation.z = rot_z
+		mi.material_override = m_outer
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		n.add_child(mi)
+	var core := SphereMesh.new()
+	core.radius = 0.045
+	core.height = 0.09
+	var cmi := MeshInstance3D.new()
+	cmi.mesh = core
+	cmi.material_override = m_inner
+	cmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	n.add_child(cmi)
+	return n

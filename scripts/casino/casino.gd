@@ -441,6 +441,9 @@ func open_slots() -> void:
 				result.add_theme_color_override("font_color", emerald)
 				result_sub.text = "Glückwunsch! (+%d €)" % (win - bet)
 				Sfx.play_2d(win_panel, Sfx.jingle(win >= bet * 10), -4.0)
+				var ptw := win_panel.create_tween()
+				ptw.tween_property(win_panel, "scale", Vector2(1.03, 1.03), 0.10)
+				ptw.tween_property(win_panel, "scale", Vector2.ONE, 0.14)
 				if win >= bet * 25:
 					game.hud.toast("JACKPOT! %d €" % win, 3.0)
 			else:

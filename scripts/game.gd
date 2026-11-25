@@ -1480,6 +1480,7 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 	var impact_pt: Vector3 = hit.position if hit else from + dir * 200.0
 	var r_noise: float = player.hand.current_noise_radius()
 	Animal.notify_gunshot(get_tree(), from, impact_pt, r_noise, r_noise, player)
+	_spawn_tracer(from + dir * 0.8 - Vector3(0, 0.08, 0), impact_pt, Color(0.314, 1.0, 0.314) if player.hand.slot == "plasma_blaster" else Color(1.0, 0.878, 0.333))
 	# Schüsse im Ort rufen die Polizei
 	if landmarks.near_village(Vector2(from.x, from.z)) and randf() < 0.5:
 		police.dispatch(from, "Schüsse im Ortsgebiet")
@@ -1511,9 +1512,57 @@ func _on_shot(from: Vector3, dir: Vector3) -> void:
 
 
 func _bazooka_blast(pos: Vector3) -> void:
-	Sfx.play_3d(self, Sfx.thump(), 6.0, 0.5)
+	Sfx.play_3d(self, Sfx.explosion(), 6.0, 0.85)
 	if rig:
-		rig.shake(1.2)
+		rig.shake(1.8)
+	# Feuerball & Rauch-GPUParticles3D (One-Shot mit sauberem Cleanup)
+	var p := GPUParticles3D.new()
+	p.amount = 28
+	p.lifetime = 0.85
+	p.one_shot = true
+	p.explosiveness = 0.95
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	pm.emission_sphere_radius = 0.6
+	pm.direction = Vector3.UP
+	pm.spread = 180.0
+	pm.initial_velocity_min = 3.5
+	pm.initial_velocity_max = 10.0
+	pm.gravity = Vector3(0, 2.5, 0)
+	var s := SphereMesh.new()
+	s.radius = 0.55
+	s.height = 1.1
+	var fm := StandardMaterial3D.new()
+	fm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fm.albedo_color = Color(1.0, 0.533, 0.067)  # #FF8811
+	s.material = fm
+	p.process_material = pm
+	p.draw_pass_1 = s
+	add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	get_tree().create_timer(1.5).timeout.connect(p.queue_free)
+
+	# Druckwellen-Kugel (expandierendes Glow-Mesh)
+	var wave := MeshInstance3D.new()
+	var ws := SphereMesh.new()
+	ws.radius = 1.0
+	ws.height = 2.0
+	var wm := StandardMaterial3D.new()
+	wm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	wm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	wm.albedo_color = Color(1.0, 0.65, 0.2, 0.65)
+	ws.material = wm
+	wave.mesh = ws
+	wave.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(wave)
+	wave.global_position = pos
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(wave, "scale", Vector3.ONE * 7.5, 0.35)
+	tw.tween_property(wm, "albedo_color:a", 0.0, 0.35)
+	tw.chain().tween_callback(wave.queue_free)
+
 	for n in get_tree().get_nodes_in_group("animal"):
 		if n is Animal and (n as Node3D).global_position.distance_to(pos) < 7.5:
 			var a := n as Animal
@@ -1524,6 +1573,27 @@ func _bazooka_blast(pos: Vector3) -> void:
 		if n is RigidBody3D and (n as Node3D).global_position.distance_to(pos) < 8.0:
 			var rb := n as RigidBody3D
 			rb.apply_central_impulse((rb.global_position - pos).normalized() * 350.0 + Vector3.UP * 180.0)
+
+
+func _spawn_tracer(from: Vector3, to: Vector3, col: Color) -> void:
+	var dist := from.distance_to(to)
+	if dist < 1.0:
+		return
+	var len := minf(dist, 28.0)
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.035, 0.035, len)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = col
+	bm.material = mat
+	var mi := MeshInstance3D.new()
+	mi.mesh = bm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	var dir := (to - from).normalized()
+	mi.global_position = from + dir * (len * 0.5)
+	mi.look_at(to, Vector3.UP)
+	get_tree().create_timer(0.06).timeout.connect(mi.queue_free)
 
 
 func _impact(pos: Vector3, normal: Vector3) -> void:

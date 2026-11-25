@@ -662,6 +662,32 @@ func _build_hub_landmarks(I: Interactions) -> void:
 		fl.light_energy = 1.8
 		fl.omni_range = 10.0
 		cn.add_child(fl)
+		var fl_tw := cn.create_tween().set_loops()
+		fl_tw.tween_property(fl, "light_energy", 2.3, 0.18)
+		fl_tw.tween_property(fl, "light_energy", 1.4, 0.22)
+		# Aufsteigende Lagerfeuer-Funken (#FFEE88)
+		var sparks := GPUParticles3D.new()
+		sparks.amount = 16
+		sparks.lifetime = 1.4
+		sparks.position = Vector3(0, 0.5, 0)
+		var spm := ParticleProcessMaterial.new()
+		spm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+		spm.emission_sphere_radius = 0.25
+		spm.direction = Vector3.UP
+		spm.spread = 22.0
+		spm.initial_velocity_min = 0.9
+		spm.initial_velocity_max = 1.8
+		spm.gravity = Vector3(0, 0.2, 0)
+		sparks.process_material = spm
+		var sm := SphereMesh.new()
+		sm.radius = 0.03
+		sm.height = 0.06
+		var smat := StandardMaterial3D.new()
+		smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		smat.albedo_color = Color(1.0, 0.933, 0.533)  # #FFEE88
+		sm.material = smat
+		sparks.draw_pass_1 = sm
+		cn.add_child(sparks)
 		# Rocking Chair neben dem Lagerfeuer
 		var chair := AssetLoader.load_model("res://assets/models/props/rocking_chair.glb", 1.1, func() -> Node3D:
 			var fb := Node3D.new()
