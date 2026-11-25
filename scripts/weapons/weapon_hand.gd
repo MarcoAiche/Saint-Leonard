@@ -14,9 +14,14 @@ const FIRE_DELAY := 1.1  # Repetieren
 const RIFLE_POS := Vector3(0.24, -0.27, -0.62)
 const ACTION_LEN := {smoke = 4.5, drink = 2.6, eat = 2.2}
 const WEAPONS := {
-	pistol = {name = "Pistole", auto = false, delay = 0.22, mag = 12, dmg = 55.0, recoil = 0.025, spread = 0.004, scope = false, zoom_fov = 54.0, reload = 1.5, bolt = false, pos = Vector3(0.22, -0.22, -0.48)},
-	assault_rifle = {name = "Sturmgewehr", auto = true, delay = 0.11, mag = 30, dmg = 65.0, recoil = 0.028, spread = 0.005, scope = false, zoom_fov = 50.0, reload = 2.0, bolt = false, pos = Vector3(0.24, -0.25, -0.58)},
-	sniper = {name = "Scharfschützengewehr", auto = false, delay = 1.4, mag = 5, dmg = 220.0, recoil = 0.09, spread = 0.0004, scope = true, zoom_fov = 8.0, reload = 2.6, bolt = true, pos = Vector3(0.25, -0.27, -0.64)},
+	pistol = {name = "Pistole", auto = false, delay = 0.22, mag = 12, dmg = 55.0, recoil = 0.025, spread = 0.004, scope = false, zoom_fov = 54.0, reload = 1.5, bolt = false, noise = 75.0, pos = Vector3(0.22, -0.22, -0.48)},
+	shotgun = {name = "Schrotflinte", auto = false, delay = 0.75, mag = 6, dmg = 145.0, recoil = 0.075, spread = 0.022, scope = false, zoom_fov = 56.0, reload = 2.1, bolt = false, noise = 100.0, pos = Vector3(0.24, -0.25, -0.56)},
+	bolt_action = {name = "Jagdgewehr", auto = false, delay = 1.0, mag = 5, dmg = 160.0, recoil = 0.06, spread = 0.001, scope = false, zoom_fov = 44.0, reload = 2.2, bolt = true, noise = 100.0, pos = Vector3(0.24, -0.26, -0.60)},
+	assault_rifle = {name = "AK-47", auto = true, delay = 0.11, mag = 30, dmg = 65.0, recoil = 0.028, spread = 0.005, scope = false, zoom_fov = 50.0, reload = 2.0, bolt = false, noise = 100.0, pos = Vector3(0.24, -0.25, -0.58)},
+	lmg = {name = "LMG", auto = true, delay = 0.085, mag = 60, dmg = 60.0, recoil = 0.032, spread = 0.007, scope = false, zoom_fov = 52.0, reload = 2.8, bolt = false, noise = 115.0, pos = Vector3(0.25, -0.27, -0.60)},
+	sniper = {name = "Scharfschützengewehr", auto = false, delay = 1.4, mag = 5, dmg = 220.0, recoil = 0.09, spread = 0.0004, scope = true, zoom_fov = 8.0, reload = 2.6, bolt = true, noise = 130.0, pos = Vector3(0.25, -0.27, -0.64)},
+	bazooka = {name = "Bazooka", auto = false, delay = 1.8, mag = 1, dmg = 420.0, recoil = 0.14, spread = 0.002, scope = false, zoom_fov = 58.0, reload = 2.8, bolt = false, noise = 160.0, pos = Vector3(0.28, -0.24, -0.55)},
+	plasma_blaster = {name = "Alien Plasma Blaster", auto = false, delay = 0.35, mag = 15, dmg = 45.0, recoil = 0.015, spread = 0.002, scope = false, zoom_fov = 55.0, reload = 1.6, bolt = false, noise = 55.0, pos = Vector3(0.22, -0.22, -0.48)},
 }
 
 var rig: CameraRig
@@ -25,7 +30,7 @@ var slot := "sniper"  # pistol, assault_rifle, sniper, binoculars, none
 var aiming := false
 var flashlight_on := false
 var action := ""  # smoke, drink, eat (gerade läuft eine Animation)
-var _mags := {pistol = 12, assault_rifle = 30, sniper = 5}
+var _mags := {pistol = 12, shotgun = 6, bolt_action = 5, assault_rifle = 30, lmg = 60, sniper = 5, bazooka = 1, plasma_blaster = 15}
 var _action_t := 0.0
 var _action_cb: Callable
 var _action_done := false
@@ -52,8 +57,13 @@ func setup(r: CameraRig, p: Node3D) -> void:
 	player = p
 	_weapon_nodes = {
 		pistol = _load_glb("res://assets/weapons/pistol.glb", Vector3.ONE * 0.075, Vector3.ZERO, WEAPONS.pistol.pos),
+		shotgun = _load_asset_weapon("res://assets/models/weapons/shotgun.glb", 0.22, WEAPONS.shotgun.pos, Color(0.45, 0.27, 0.14), Color(0.18, 0.19, 0.21)),
+		bolt_action = _load_asset_weapon("res://assets/models/weapons/bolt_action.glb", 0.24, WEAPONS.bolt_action.pos, Color(0.722, 0.455, 0.231), Color(0.408, 0.439, 0.478)),
 		assault_rifle = _load_glb("res://assets/weapons/assault_rifle.glb", Vector3.ONE * 0.18, Vector3.ZERO, WEAPONS.assault_rifle.pos),
+		lmg = _load_asset_weapon("res://assets/models/weapons/lmg.glb", 0.28, WEAPONS.lmg.pos, Color(0.369, 0.400, 0.439), Color(0.22, 0.22, 0.24)),
 		sniper = _load_glb("res://assets/weapons/sniper_rifle.glb", Vector3.ONE * 0.095, Vector3(0, PI * 0.5, 0), WEAPONS.sniper.pos),
+		bazooka = _load_asset_weapon("res://assets/models/weapons/bazooka.glb", 0.32, WEAPONS.bazooka.pos, Color(0.333, 0.420, 0.220), Color(0.898, 0.627, 0.125)),
+		plasma_blaster = _load_asset_weapon("res://assets/models/weapons/plasma_blaster.glb", 0.24, WEAPONS.plasma_blaster.pos, Color(0.831, 0.847, 0.784), Color(0.314, 1.0, 0.314)),
 	}
 	_cig = _build_cigarette()
 	add_child(_cig)
@@ -214,6 +224,26 @@ static func has_scope(s: String) -> bool:
 
 func current_damage() -> float:
 	return float(WEAPONS.get(slot, {}).get("dmg", 120.0))
+
+
+func current_noise_radius() -> float:
+	return float(WEAPONS.get(slot, {}).get("noise", 100.0))
+
+
+func _load_asset_weapon(path: String, target_h: float, pos: Vector3, c1: Color, c2: Color) -> Node3D:
+	var holder := Node3D.new()
+	holder.position = pos
+	var model := AssetLoader.load_model(path, target_h, func() -> Node3D:
+		var fb := Node3D.new()
+		_model_box(fb, Vector3(0.07, 0.10, 0.55), Vector3(0, -0.02, 0.08), c1)
+		_cyl(fb, 0.025, 0.75, Vector3(0, 0.04, -0.35), c2)
+		return fb
+	)
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		(mi as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(model)
+	add_child(holder)
+	return holder
 
 
 func _load_glb(path: String, scl: Vector3, rot: Vector3, pos: Vector3) -> Node3D:

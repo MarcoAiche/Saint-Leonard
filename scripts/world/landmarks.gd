@@ -31,6 +31,8 @@ var shops := {}  # id -> {pos: Vector3, door: Vector3, yaw}
 var plots: Array = []  # [{pos: Vector3, yaw, size: Vector2, idx}]
 var checkpoint := {}  # {pos: Vector3, dir: Vector2}
 var spawn := {}  # {pos: Vector3, yaw, car_pos: Vector3, car_dir: Vector3}
+var atv_spawn := {}  # {pos: Vector3, yaw: float}
+var butcher_zones: Array = []  # [{pos: Vector3, ring: MeshInstance3D, fill: MeshInstance3D}]
 
 var _bld_grid := {}  # Gebäude-Mittelpunkte zum schnellen Prüfen freier Flächen
 var _rng := RandomNumberGenerator.new()
@@ -356,6 +358,7 @@ func _build_props() -> void:
 		# Ankauf vom Pickup (ganzes Wild bei der Fleischerei)
 		if id == "butcher":
 			I.add(door, 14.0, "Wild von der Ladefläche verkaufen", func(): game.sell_truck_cargo(), func(): game.truck_has_game_near(door, 14.0))
+			_add_butcher_dropzone(Vector2(door.x, door.z) + dir * 2.2)
 
 	# Tankstelle
 	var gnode := Node3D.new()
@@ -441,7 +444,23 @@ func _slot_machine(p: Vector3) -> void:
 		return fb
 	)
 	n.add_child(visual)
-	game.interactions.add(Vector3(0, 1, 0), 2.0, "Spielautomat (LUCKY BUCK)", func(): game.casino.open_slots(), null, n)
+	game.interactions.add(Vector3(0, 1, 0), 2.0, func() -> String:
+		var pl = game.get("player")
+		if pl and pl.carrying is Carcass:
+			return "LUCKY BUCK: Kadaver einwerfen (+$%d Pot)" % (pl.carrying as Carcass).sell_value()
+		return "Spielautomat (LUCKY BUCK)"
+	, func():
+		var pl = game.get("player")
+		if pl and pl.carrying is Carcass:
+			var c := pl.carrying as Carcass
+			pl.carrying = null
+			var pot := c.sell_value()
+			Net.carcass_removed(c.net_id)
+			c.queue_free()
+			GameState.add_money(pot)
+			game.hud.toast("LUCKY BUCK: +$%d POT eingeworfen!" % pot, 3.0)
+		game.casino.open_slots()
+	, null, n)
 
 
 func _hall(s: Dictionary) -> void:
@@ -512,12 +531,12 @@ func _build_hub_landmarks(I: Interactions) -> void:
 	var lpos := Vector3(ld.x, world.height_at(ld.x, ld.z), ld.z)
 	var lfwd := Vector3(sin(lyaw), 0, cos(lyaw))
 	var lrgt := Vector3(lfwd.z, 0, -lfwd.x)
-	_sign(lodge, "HUNTING LODGE", Color(0.290, 0.188, 0.102), lpos + Vector3(0, 3.6, 0) + lfwd * 0.4, lyaw, 5.2)
-	for s: float in [-1.8, 1.8]:
-		var pbase: Vector3 = lpos + lrgt * s + lfwd * 0.6
+	_sign(lodge, "HUNTING LODGE", Color(0.290, 0.188, 0.102), lpos + Vector3(0, 4.4, 0) + lfwd * 0.4, lyaw, 5.2)
+	for s: float in [-3.4, 3.4]:
+		var pbase: Vector3 = lpos + lrgt * s + lfwd * 0.8
 		pbase.y = world.height_at(pbase.x, pbase.z)
-		_box(lodge, Vector3(0.45, 0.9, 0.45), pbase + Vector3(0, 0.45, 0), Color(0.478, 0.510, 0.549), true)
-		_box(lodge, Vector3(0.24, 2.3, 0.24), pbase + Vector3(0, 2.0, 0), Color(0.549, 0.369, 0.204), true)
+		_box(lodge, Vector3(0.42, 0.9, 0.42), pbase + Vector3(0, 0.45, 0), Color(0.478, 0.510, 0.549), false)
+		_box(lodge, Vector3(0.22, 2.3, 0.22), pbase + Vector3(0, 2.0, 0), Color(0.549, 0.369, 0.204), false)
 		var lant := _box(lodge, Vector3(0.26, 0.34, 0.26), pbase + Vector3(0, 2.9, 0) + lfwd * 0.25, Color(1.0, 0.80, 0.333))
 		var light := OmniLight3D.new()
 		light.light_color = Color(1.0, 0.667, 0.267)  # #FFAA44
@@ -556,6 +575,12 @@ func _build_hub_landmarks(I: Interactions) -> void:
 		g_npc_pos.y = world.height_at(g_npc_pos.x, g_npc_pos.z)
 		_npc(self, "GASTON", g_npc_pos, gspot.yaw, {shirt = Color(0.941, 0.941, 0.925), pants = Color(0.18, 0.18, 0.20), hat = "none"})
 		I.add(g_npc_pos, 3.5, "Butcher Gaston: Wild verkaufen", func(): game.open_shop("butcher"))
+		var g_fwd := Vector2(sin(gspot.yaw), cos(gspot.yaw))
+		var dz_2d := Vector2(g_npc_pos.x, g_npc_pos.z) + g_fwd * 2.0
+		if world.road_info(dz_2d, 3.5).tier != 0:
+			dz_2d = Vector2(g_npc_pos.x, g_npc_pos.z) - g_fwd * 1.2
+		_add_butcher_dropzone(dz_2d)
+		_log_hub_pos("GASTON Drop-Zone (Roter Kreis)", dz_2d)
 		print("Hub [GASTON Food Truck]: (%.1f, %.1f) | %.1fm von Gasthaus Pirtscher" % [gp2.x, gp2.y, gp2.distance_to(pub_2d)])
 
 	# 3. Outdoor Weapon Shack
@@ -648,4 +673,142 @@ func _build_hub_landmarks(I: Interactions) -> void:
 		)
 		chair.position = Vector3(1.6, 0, 0)
 		cn.add_child(chair)
-		print("Hub [Campfire & Rocking Chair]: (%.1f, %.1f) | %.1fm von Gasthaus Pirtscher" % [cp2.x, cp2.y, cp2.distance_to(pub_2d)])
+		var chair_world := cn.to_global(Vector3(1.6, 0.5, 0))
+		I.add(chair_world, 2.4, "Schaukelstuhl (Sitzen & Schaukeln)", func():
+			var pl = game.get("player")
+			if pl and pl.has_method("knockdown"):
+				pl.sitting = true
+				pl.global_position = Vector3(chair_world.x, world.height_at(chair_world.x, chair_world.z) + 0.1, chair_world.z)
+				var tw := create_tween()
+				tw.tween_property(chair, "rotation:x", deg_to_rad(-18.0), 0.55)
+				tw.tween_property(chair, "rotation:x", deg_to_rad(28.0), 0.65)
+				tw.tween_property(chair, "rotation:x", deg_to_rad(-42.0), 0.55)
+				tw.tween_callback(func():
+					pl.sitting = false
+					pl.knockdown(2.0, "Schaukelstuhl gekippt!", Vector3(0, 2.2, 0))
+					var rtw := create_tween()
+					rtw.tween_property(chair, "rotation:x", 0.0, 1.0).set_delay(1.5)
+				)
+		)
+		_log_hub_pos("GASTON Food Truck", Vector2(gspot.pos.x, gspot.pos.y))
+		_log_hub_pos("Weapon Shack", Vector2(wspot.pos.x, wspot.pos.y))
+		_log_hub_pos("Camper RV", Vector2(rvspot.pos.x, rvspot.pos.y))
+		_log_hub_pos("Campfire & Rocking Chair", cp2)
+
+	# 6. Dept. of Wildlife Field Office 07 Trailer + Kegel
+	var wfo_center := Vector2(gas.pos.x, gas.pos.z) if not gas.is_empty() else pub_2d
+	var fspot := _find_hub_spot(wfo_center, 18.0, 80.0, 4.5, avoid)
+	if not fspot.is_empty():
+		var fp2: Vector2 = fspot.pos
+		var fy := world.height_at(fp2.x, fp2.y)
+		var fn := Node3D.new()
+		fn.name = "WildlifeFieldOffice07"
+		fn.position = Vector3(fp2.x, fy, fp2.y)
+		fn.rotation.y = fspot.yaw
+		add_child(fn)
+		_foundation_skirt(fn, 6.4, 3.0, Color(0.55, 0.57, 0.60))
+		var wfo_vis := AssetLoader.load_model("res://assets/models/landmarks/wildlife_office_07.glb", 3.2, func() -> Node3D:
+			var fb := Node3D.new()
+			_box(fb, Vector3(6.0, 2.4, 2.5), Vector3(0, 1.5, 0), Color(0.863, 0.886, 0.910), true)  # #DCE2E8
+			for kx in [-2.2, 2.2]:
+				var cone := _box(fb, Vector3(0.32, 0.65, 0.32), Vector3(kx, 0.32, 1.6), Color(1.0, 0.416, 0.102))  # #FF6A1A
+				_box(cone, Vector3(0.28, 0.16, 0.33), Vector3(0, 0.08, 0), Color(1, 1, 1))
+			return fb
+		)
+		fn.add_child(wfo_vis)
+		_sign(fn, "DEPT. OF WILDLIFE / FIELD OFFICE 07", Color(0.22, 0.28, 0.35), Vector3(0, 3.1, 1.32), 0.0, 5.4)
+		var ag_pos := fn.to_global(Vector3(0.0, 0.0, 2.0))
+		ag_pos.y = world.height_at(ag_pos.x, ag_pos.z)
+		_npc(self, "Wildlife Agent", ag_pos, fspot.yaw, {shirt = Color(0.94, 0.94, 0.94), pants = Color(0.094, 0.094, 0.102), jacket = false, hat = "none", glasses = true})
+		_log_hub_pos("Wildlife Field Office 07", fp2)
+
+	# 7. Green 4x4 ATV / Quad Bike am Camp Hub
+	var aspot := _find_hub_spot(pub_2d, 10.0, 38.0, 2.2, avoid)
+	if not aspot.is_empty():
+		var ap2: Vector2 = aspot.pos
+		atv_spawn = {pos = Vector3(ap2.x, world.height_at(ap2.x, ap2.y) + 0.6, ap2.y), yaw = aspot.yaw}
+		_log_hub_pos("Green 4x4 ATV", ap2)
+	_log_hub_pos("Swamp Biome (West/NW Gail)", Vector2(-220.0, -180.0))
+	_log_hub_pos("Southern Mountains (Bear/Bigfoot)", Vector2(200.0, 1400.0))
+
+
+func _log_hub_pos(label: String, p2: Vector2) -> void:
+	var sp2 := Vector2(spawn.pos.x, spawn.pos.z)
+	var d := p2 - sp2
+	var ang := rad_to_deg(atan2(d.x, -d.y))
+	if ang < 0.0:
+		ang += 360.0
+	var dirs := ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
+	var compass: String = dirs[int(round(ang / 45.0)) % 8]
+	print("HUB_POS | %s | (%.1f, %.1f) | %.1fm | %s" % [label, p2.x, p2.y, d.length(), compass])
+
+
+func _add_butcher_dropzone(p2: Vector2) -> void:
+	var y := world.height_at(p2.x, p2.y) + 0.04
+	var holder := Node3D.new()
+	holder.name = "ButcherDropZone"
+	holder.position = Vector3(p2.x, y, p2.y)
+	# An Bodenneigung anpassen
+	var h_x := world.height_at(p2.x + 1.0, p2.y) - world.height_at(p2.x - 1.0, p2.y)
+	var h_z := world.height_at(p2.x, p2.y + 1.0) - world.height_at(p2.x, p2.y - 1.0)
+	var nrm := Vector3(-h_x, 2.0, -h_z).normalized()
+	if nrm.y > 0.5:
+		var up := nrm
+		var fwd := Vector3.FORWARD.slide(up).normalized()
+		if fwd.length_squared() > 0.01:
+			holder.basis = Basis(fwd.cross(up).normalized(), up, fwd)
+	add_child(holder)
+
+	var fill_mesh := CylinderMesh.new()
+	fill_mesh.top_radius = 1.05
+	fill_mesh.bottom_radius = 1.05
+	fill_mesh.height = 0.025
+	fill_mesh.radial_segments = 28
+	var fill_mat := StandardMaterial3D.new()
+	fill_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fill_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fill_mat.albedo_color = Color(0.851, 0.169, 0.169, 0.36)  # #D92B2B
+	var fill_mi := MeshInstance3D.new()
+	fill_mi.mesh = fill_mesh
+	fill_mi.material_override = fill_mat
+	fill_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(fill_mi)
+
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 0.96
+	ring_mesh.outer_radius = 1.08
+	ring_mesh.rings = 28
+	ring_mesh.ring_segments = 8
+	var ring_mat := StandardMaterial3D.new()
+	ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_mat.albedo_color = Color(0.851, 0.169, 0.169, 1.0)  # #D92B2B
+	var ring_mi := MeshInstance3D.new()
+	ring_mi.mesh = ring_mesh
+	ring_mi.position.y = 0.02
+	ring_mi.material_override = ring_mat
+	ring_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(ring_mi)
+
+	var lbl := Label3D.new()
+	lbl.text = "WILD HIER ABLEGEN"
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.font_size = 44
+	lbl.outline_size = 10
+	lbl.modulate = Color(1.0, 0.92, 0.88)
+	lbl.position = Vector3(0, 0.55, 0)
+	holder.add_child(lbl)
+
+	butcher_zones.append({pos = Vector3(p2.x, y, p2.y), ring = ring_mi, fill = fill_mi})
+
+
+func flash_butcher_zone(zone: Dictionary) -> void:
+	var ring_mi: MeshInstance3D = zone.ring
+	var fill_mi: MeshInstance3D = zone.fill
+	if ring_mi and fill_mi:
+		(ring_mi.material_override as StandardMaterial3D).albedo_color = Color(0.20, 0.92, 0.38, 1.0)
+		(fill_mi.material_override as StandardMaterial3D).albedo_color = Color(0.95, 0.80, 0.20, 0.55)
+		get_tree().create_timer(0.65).timeout.connect(func():
+			if is_instance_valid(ring_mi) and is_instance_valid(fill_mi):
+				(ring_mi.material_override as StandardMaterial3D).albedo_color = Color(0.851, 0.169, 0.169, 1.0)
+				(fill_mi.material_override as StandardMaterial3D).albedo_color = Color(0.851, 0.169, 0.169, 0.36)
+		)

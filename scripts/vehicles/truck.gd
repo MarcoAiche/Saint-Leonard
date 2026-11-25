@@ -295,9 +295,11 @@ func _drop_cargo(n: Node3D, thrown: bool) -> void:
 
 
 func _check_cargo() -> void:
-	# Ladung ohne Gurte rutscht bei starkem Kippen herunter
-	if not cargo.is_empty() and global_basis.y.y < 0.5 and not strapped:
-		_drop_cargo(cargo.back(), true)
+	# Ungesicherte Ladung fällt nur bei starkem Kippen/Überschlag oder heftiger G-Kraft herunter
+	if not cargo.is_empty() and not strapped:
+		var spd := linear_velocity.length() * 3.6
+		if global_basis.y.y < 0.45 or (spd > 70.0 and angular_velocity.length() > 3.4):
+			_drop_cargo(cargo.back(), true)
 
 
 func cargo_has(kind: String) -> bool:

@@ -11,7 +11,7 @@ extends Node3D
 @export var baked_path := "res://data/world_baked.scn"
 @export var show_labels := true
 
-const BUILD_VERSION := 17
+const BUILD_VERSION := 18
 const WORLD_SEED := 20261125
 const LAYER_TREES := 1
 const LAYER_ROCKS := 2
@@ -107,6 +107,12 @@ func _ready() -> void:
 		_save_baked()
 	_setup_obstacle_colliders()
 	print("Welt bereit in %d ms" % (Time.get_ticks_msec() - t0))
+
+
+func _exit_tree() -> void:
+	_obstacle_grid.clear()
+	_trunk_shapes.clear()
+	_rock_shapes.clear()
 
 
 func _physics_process(delta: float) -> void:
@@ -1364,37 +1370,37 @@ func _build_foliage() -> void:
 	_debug_log_mesh("Grass_Common_Short.gltf", grass_meshes[0])
 	_debug_log_mesh("Rock_Medium_1.gltf", rock_meshes[0])
 
-	const F_CHUNK := 100.0
+	const T_CHUNK := 450.0
+	const F_CHUNK := 280.0
 	var max_x := x0 + (nx - 2) * step
 	var max_z := z0 + (nz - 2) * step
-	var cx0 := floori(x0 / F_CHUNK)
-	var cz0 := floori(z0 / F_CHUNK)
-	var cx1 := floori(max_x / F_CHUNK)
-	var cz1 := floori(max_z / F_CHUNK)
 	var total_grass := 0
 	var total_flowers := 0
 	var total_bushes := 0
 	var total_trees := 0
 	var total_rocks := 0
-	for cz in range(cz0, cz1 + 1):
-		for cx in range(cx0, cx1 + 1):
+	var total_mmi := 0
+
+	# Grobe Chunks (450m) für Bäume & Felsen -> minimaler Node-Overhead bei voller Sichtweite
+	var tcx0 := floori(x0 / T_CHUNK)
+	var tcz0 := floori(z0 / T_CHUNK)
+	var tcx1 := floori(max_x / T_CHUNK)
+	var tcz1 := floori(max_z / T_CHUNK)
+	for cz in range(tcz0, tcz1 + 1):
+		for cx in range(tcx0, tcx1 + 1):
 			var p_buckets: Array = [[], [], []]
 			var d_buckets: Array = [[], []]
 			var s_buckets: Array = [[], []]
 			var r_buckets: Array = [[], []]
-			var b_buckets: Array = [[], [], []]
-			var g_buckets: Array = [[], []]
-			var f_buckets: Array = [[], []]
 
-			# 1. Trees (independent deterministic stream)
 			var rng_t := RandomNumberGenerator.new()
 			rng_t.seed = _layer_seed(LAYER_TREES, cx, cz)
-			for _i in 45:
+			for _i in 650:
 				var tree_count: int = p_buckets[0].size() + p_buckets[1].size() + p_buckets[2].size() + d_buckets[0].size() + d_buckets[1].size() + s_buckets[0].size() + s_buckets[1].size()
-				if tree_count >= 3:
+				if tree_count >= 60:
 					break
-				var px := cx * F_CHUNK + rng_t.randf() * F_CHUNK
-				var pz := cz * F_CHUNK + rng_t.randf() * F_CHUNK
+				var px := cx * T_CHUNK + rng_t.randf() * T_CHUNK
+				var pz := cz * T_CHUNK + rng_t.randf() * T_CHUNK
 				if px < x0 + 5.0 or pz < z0 + 5.0 or px > max_x or pz > max_z:
 					continue
 				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery"] or slope_at(px, pz) > 0.42:
@@ -1412,14 +1418,13 @@ func _build_foliage() -> void:
 					d_buckets[rng_t.randi() % 2].append(txf)
 				total_trees += 1
 
-			# 2. Rocks (independent deterministic stream)
 			var rng_r := RandomNumberGenerator.new()
 			rng_r.seed = _layer_seed(LAYER_ROCKS, cx, cz)
-			for _i in 25:
-				if (r_buckets[0].size() + r_buckets[1].size()) >= 2:
+			for _i in 350:
+				if (r_buckets[0].size() + r_buckets[1].size()) >= 40:
 					break
-				var px := cx * F_CHUNK + rng_r.randf() * F_CHUNK
-				var pz := cz * F_CHUNK + rng_r.randf() * F_CHUNK
+				var px := cx * T_CHUNK + rng_r.randf() * T_CHUNK
+				var pz := cz * T_CHUNK + rng_r.randf() * T_CHUNK
 				if px < x0 + 5.0 or pz < z0 + 5.0 or px > max_x or pz > max_z:
 					continue
 				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery"] or slope_at(px, pz) > 0.42:
@@ -1431,11 +1436,36 @@ func _build_foliage() -> void:
 				r_buckets[rng_r.randi() % 2].append(rxf)
 				total_rocks += 1
 
-			# 3. Bushes & Ferns (independent deterministic stream)
+			for i in 2:
+				if not d_buckets[i].is_empty():
+					_commit_foliage_mm(group, "TD%d_%d_%d" % [i, cx, cz], dec_meshes[i], Array(d_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 620.0)
+					total_mmi += 1
+				if not s_buckets[i].is_empty():
+					_commit_foliage_mm(group, "TS%d_%d_%d" % [i, cx, cz], swamp_meshes[i], Array(s_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 620.0)
+					total_mmi += 1
+				if not r_buckets[i].is_empty() and rock_meshes[i] != null:
+					_commit_foliage_mm(group, "RK%d_%d_%d" % [i, cx, cz], rock_meshes[i], Array(r_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 480.0)
+					total_mmi += 1
+			for i in 3:
+				if not p_buckets[i].is_empty():
+					_commit_foliage_mm(group, "TP%d_%d_%d" % [i, cx, cz], pine_meshes[i], Array(p_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 620.0)
+					total_mmi += 1
+
+	# Chunks (280m) für Gras, Blumen & Büsche -> ~10x weniger Nodes als 100m-Chunks
+	var cx0 := floori(x0 / F_CHUNK)
+	var cz0 := floori(z0 / F_CHUNK)
+	var cx1 := floori(max_x / F_CHUNK)
+	var cz1 := floori(max_z / F_CHUNK)
+	for cz in range(cz0, cz1 + 1):
+		for cx in range(cx0, cx1 + 1):
+			var b_buckets: Array = [[], [], []]
+			var g_buckets: Array = [[], []]
+			var f_buckets: Array = [[], []]
+
 			var rng_b := RandomNumberGenerator.new()
 			rng_b.seed = _layer_seed(LAYER_BUSHES, cx, cz)
-			for _i in 35:
-				if (b_buckets[0].size() + b_buckets[1].size() + b_buckets[2].size()) >= 6:
+			for _i in 220:
+				if (b_buckets[0].size() + b_buckets[1].size() + b_buckets[2].size()) >= 42:
 					break
 				var px := cx * F_CHUNK + rng_b.randf() * F_CHUNK
 				var pz := cz * F_CHUNK + rng_b.randf() * F_CHUNK
@@ -1450,11 +1480,10 @@ func _build_foliage() -> void:
 				b_buckets[rng_b.randi() % 3].append(bxf)
 				total_bushes += 1
 
-			# 4. Grass (independent deterministic stream)
 			var rng_g := RandomNumberGenerator.new()
 			rng_g.seed = _layer_seed(LAYER_GRASS, cx, cz)
-			for _i in 140:
-				if (g_buckets[0].size() + g_buckets[1].size()) >= 75:
+			for _i in 950:
+				if (g_buckets[0].size() + g_buckets[1].size()) >= 550:
 					break
 				var px := cx * F_CHUNK + rng_g.randf() * F_CHUNK
 				var pz := cz * F_CHUNK + rng_g.randf() * F_CHUNK
@@ -1470,11 +1499,10 @@ func _build_foliage() -> void:
 				g_buckets[rng_g.randi() % 2].append(gxf)
 				total_grass += 1
 
-			# 5. Flowers (independent deterministic stream)
 			var rng_f := RandomNumberGenerator.new()
 			rng_f.seed = _layer_seed(LAYER_FLOWERS, cx, cz)
-			for _i in 35:
-				if (f_buckets[0].size() + f_buckets[1].size()) >= 12:
+			for _i in 220:
+				if (f_buckets[0].size() + f_buckets[1].size()) >= 85:
 					break
 				var px := cx * F_CHUNK + rng_f.randf() * F_CHUNK
 				var pz := cz * F_CHUNK + rng_f.randf() * F_CHUNK
@@ -1488,23 +1516,19 @@ func _build_foliage() -> void:
 				var fxf := Transform3D(Basis(Vector3.UP, rng_f.randf() * TAU).scaled(Vector3.ONE * rng_f.randf_range(0.9, 1.3)), Vector3(px, py, pz))
 				f_buckets[rng_f.randi() % 2].append(fxf)
 				total_flowers += 1
+
 			for i in 2:
 				if not g_buckets[i].is_empty():
-					_commit_foliage_mm(group, "G%d_%d_%d" % [i, cx, cz], grass_meshes[i], Array(g_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 150.0)
+					_commit_foliage_mm(group, "G%d_%d_%d" % [i, cx, cz], grass_meshes[i], Array(g_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 280.0)
+					total_mmi += 1
 				if not f_buckets[i].is_empty():
-					_commit_foliage_mm(group, "W%d_%d_%d" % [i, cx, cz], flower_meshes[i], Array(f_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 130.0)
-				if not d_buckets[i].is_empty():
-					_commit_foliage_mm(group, "TD%d_%d_%d" % [i, cx, cz], dec_meshes[i], Array(d_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 450.0)
-				if not s_buckets[i].is_empty():
-					_commit_foliage_mm(group, "TS%d_%d_%d" % [i, cx, cz], swamp_meshes[i], Array(s_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 450.0)
-				if not r_buckets[i].is_empty() and rock_meshes[i] != null:
-					_commit_foliage_mm(group, "RK%d_%d_%d" % [i, cx, cz], rock_meshes[i], Array(r_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 300.0)
+					_commit_foliage_mm(group, "W%d_%d_%d" % [i, cx, cz], flower_meshes[i], Array(f_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 260.0)
+					total_mmi += 1
 			for i in 3:
 				if not b_buckets[i].is_empty() and bush_meshes[i] != null:
-					_commit_foliage_mm(group, "BF%d_%d_%d" % [i, cx, cz], bush_meshes[i], Array(b_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 140.0)
-				if not p_buckets[i].is_empty():
-					_commit_foliage_mm(group, "TP%d_%d_%d" % [i, cx, cz], pine_meshes[i], Array(p_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 450.0)
-	print("DEBUG FOLIAGE TOTALS: trees=%d, grass=%d, flowers=%d, bushes=%d, rocks=%d" % [total_trees, total_grass, total_flowers, total_bushes, total_rocks])
+					_commit_foliage_mm(group, "BF%d_%d_%d" % [i, cx, cz], bush_meshes[i], Array(b_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 270.0)
+					total_mmi += 1
+	print("DEBUG FOLIAGE TOTALS: trees=%d, grass=%d, flowers=%d, bushes=%d, rocks=%d | mmi_nodes=%d" % [total_trees, total_grass, total_flowers, total_bushes, total_rocks, total_mmi])
 
 
 static func _layer_seed(layer_id: int, cx: int, cz: int) -> int:

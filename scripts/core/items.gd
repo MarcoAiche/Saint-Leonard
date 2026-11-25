@@ -14,14 +14,20 @@ const SHOP_NAMES := {
 }
 
 const ITEMS := {
-	# Waffen und Ausrüstung
-	"pistol": {name = "Pistole", kind = "weapon", price = 450, shops = ["gun"]},
-	"assault_rifle": {name = "Sturmgewehr", kind = "weapon", price = 1600, shops = ["gun"]},
-	"sniper": {name = "Scharfschützengewehr", kind = "weapon", price = 2200, shops = ["gun"]},
+	# Waffen und Ausrüstung (Blueprint-Preise)
+	"pistol": {name = "Pistole", kind = "weapon", price = 250, shops = ["gun"]},
+	"shotgun": {name = "Schrotflinte", kind = "weapon", price = 700, shops = ["gun"]},
+	"bolt_action": {name = "Jagdgewehr (Bolt-Action)", kind = "weapon", price = 900, shops = ["gun"]},
+	"assault_rifle": {name = "AK-47 Sturmgewehr", kind = "weapon", price = 1200, shops = ["gun"]},
+	"lmg": {name = "LMG Maschinengewehr", kind = "weapon", price = 1600, shops = ["gun"]},
+	"sniper": {name = "Scharfschützengewehr", kind = "weapon", price = 2000, shops = ["gun"]},
+	"scope8": {name = "Zielfernrohr 8x", kind = "tool", price = 500, shops = ["gun"]},
+	"bazooka": {name = "Bazooka / RPG", kind = "weapon", price = 2500, shops = ["gun"]},
+	"rocket": {name = "RPG-Rakete", kind = "ammo", price = 400, shops = ["gun"], gives = 1},
+	"plasma_blaster": {name = "Alien Plasma Blaster", kind = "weapon", price = 3500, shops = ["gun"]},
 	"ammo": {name = "Patronen (10 Stk.)", kind = "ammo", price = 25, shops = ["gun"], gives = 10},
-	"scope8": {name = "Zielfernrohr 8x", kind = "tool", price = 350, shops = ["gun"]},
 	"flashlight": {name = "Taschenlampe", kind = "tool", price = 35, shops = ["gun", "bauhaus"]},
-	"knife": {name = "Jagdmesser", kind = "tool", price = 45, shops = ["gun"]},
+	"knife": {name = "Machete / Jagdmesser", kind = "tool", price = 45, shops = ["gun"]},
 	# Getränke, Rauchen, Essen
 	"beer": {name = "Bier", kind = "drink", price = 3, shops = ["super", "gas", "pub", "fire"], alcohol = 0.03},
 	"schnaps": {name = "Schnaps", kind = "drink", price = 9, shops = ["super", "pub", "fire"], alcohol = 0.07},

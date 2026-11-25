@@ -10,6 +10,7 @@ var _rain: GPUParticles3D
 var _clouds: MultiMeshInstance3D
 var _rain_sound: AudioStreamPlayer
 var _fog := 0.0
+var _fog_col := Color(0.545098, 0.784314, 1.0)
 var _cloud := 0.0
 
 
@@ -81,25 +82,37 @@ func _process(delta: float) -> void:
 	if cam and world and world.has_method("is_swamp"):
 		in_swamp = world.is_swamp(Vector2(cam.global_position.x, cam.global_position.z))
 
-	# Nebel: an klaren Tagen AUS; nur bei Wetter, Nacht oder Swamp-Biom aktiv
-	var fog_target := 0.0
-	var fog_col := sky_mat.sky_horizon_color
-	match weather:
-		"fog":
-			fog_target = 0.0035
-			fog_col = fog_col.lerp(Color(0.8, 0.82, 0.84), 0.4)
-		"rain":
-			fog_target = 0.0014
-	if in_swamp:
-		fog_target = maxf(fog_target, 0.011)
-		fog_col = Color(0.353, 0.427, 0.290)  # #5A6D4A olive-green swamp mist
-	elif night > 0.5:
-		fog_target = maxf(fog_target, 0.0006)
-	_fog = lerpf(_fog, fog_target, 1.0 - exp(-delta * 1.2))
-	env.fog_enabled = _fog > 0.00008
-	env.fog_density = _fog
-	env.fog_light_color = fog_col
-	env.fog_light_energy = lerpf(0.15, 1.0, daylight)
+	# Dezenter Fern-Nebel für ferne Berge (0-420m klar, 420-1850m sanfter Dunst, ~58% max), Sumpf bleibt lokal dicht (#5A6D4A)
+	var use_exp := in_swamp or weather == "fog" or weather == "rain"
+	if use_exp:
+		env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
+		var fog_target := 0.0014 if weather == "rain" else 0.0035
+		var fog_col := sky_mat.sky_horizon_color.lerp(Color(0.8, 0.82, 0.84), 0.4 if weather == "fog" else 0.0)
+		if in_swamp:
+			fog_target = 0.011
+			fog_col = Color(0.353, 0.427, 0.290)  # #5A6D4A olive-green swamp mist
+		_fog = lerpf(_fog, fog_target, 1.0 - exp(-delta * 1.4))
+		_fog_col = _fog_col.lerp(fog_col, 1.0 - exp(-delta * 1.6))
+		env.fog_enabled = true
+		env.fog_density = _fog
+		env.fog_light_color = _fog_col
+		env.fog_aerial_perspective = 0.5
+		env.fog_sky_affect = 0.0
+	else:
+		env.fog_mode = Environment.FOG_MODE_DEPTH
+		var depth_density := 0.58 if daylight > 0.2 else 0.65
+		var depth_col := sky_mat.sky_horizon_color.lerp(Color(0.68, 0.82, 0.96), 0.25 * daylight)
+		_fog = lerpf(_fog, depth_density, 1.0 - exp(-delta * 1.4))
+		_fog_col = _fog_col.lerp(depth_col, 1.0 - exp(-delta * 1.6))
+		env.fog_enabled = true
+		env.fog_depth_begin = 420.0
+		env.fog_depth_end = 1850.0
+		env.fog_depth_curve = 1.1
+		env.fog_density = _fog
+		env.fog_aerial_perspective = 0.75
+		env.fog_light_color = _fog_col
+		env.fog_sky_affect = 0.0
+	env.fog_light_energy = lerpf(0.18, 1.0, daylight)
 
 	# Regen & Wolken folgen der Kamera
 	var raining := weather == "rain"

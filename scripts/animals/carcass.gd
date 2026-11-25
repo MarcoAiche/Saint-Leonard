@@ -8,6 +8,7 @@ var male := false
 var net_id := 0
 var carried := false
 var model: Node3D
+var world: WorldBuilder = null
 
 
 func _ready() -> void:
@@ -50,14 +51,33 @@ func loot() -> Dictionary:
 	return out
 
 
-## Wert beim Verkauf des ganzen Tiers bei der Fleischerei
+const BLUEPRINT_PRICES := {
+	deer = 300,
+	legend = 650,
+	boar = 220,
+	rabbit = 25,
+	mutant_rabbit = 120,
+	bear = 450,
+	bigfoot = 1000,
+	fox = 120,
+}
+
+
+func _physics_process(_delta: float) -> void:
+	if carried or freeze or world == null:
+		return
+	var gy := world.height_at(global_position.x, global_position.z)
+	if global_position.y < gy:
+		global_position.y = gy
+		if linear_velocity.y < 0.0:
+			linear_velocity.y = 0.0
+
+
+## Wert beim Verkauf des ganzen Tiers bei der Fleischerei / Lucky Buck
 func sell_value() -> int:
-	var v := 0
-	var l := loot()
-	for id in l:
-		var s: Dictionary = Items.info(id).get("sell", {})
-		v += int(s.get("butcher", 30)) * int(l[id])
-	return int(v * 0.85)
+	if BLUEPRINT_PRICES.has(species):
+		return int(BLUEPRINT_PRICES[species])
+	return 100
 
 
 func set_carried(on: bool) -> void:

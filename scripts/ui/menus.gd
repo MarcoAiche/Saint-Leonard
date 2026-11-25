@@ -95,20 +95,23 @@ static func shop(game: Node, id: String) -> void:
 			row(body, story_line, "Reden", func():
 				close_all(hud)
 				game.missions.talk_to_pub())
-	heading(body, "Kaufen")
-	for item in Items.stock(id):
-		var it := Items.info(item)
-		var have := GameState.count(item)
-		var label := "%s  (%d €)" % [it.name, it.price]
-		if have > 0:
-			label += "   hast: %d" % have
-		row(body, label, "Kaufen", func():
-			var err := GameState.buy(item)
-			if err.is_empty():
-				game.on_bought(item, id)
-			else:
-				hud.toast(err)
-			reopen.call(), GameState.can_pay(it.price))
+	if id == "butcher":
+		_butcher_sell_ui(game, body, hud, reopen)
+	else:
+		heading(body, "Kaufen")
+		for item in Items.stock(id):
+			var it := Items.info(item)
+			var have := GameState.count(item)
+			var label := "%s  (%d €)" % [it.name, it.price]
+			if have > 0:
+				label += "   hast: %d" % have
+			row(body, label, "Kaufen", func():
+				var err := GameState.buy(item)
+				if err.is_empty():
+					game.on_bought(item, id)
+				else:
+					hud.toast(err)
+				reopen.call(), GameState.can_pay(it.price))
 	var buys := Items.buys(id)
 	var any := false
 	for b in buys:
@@ -364,3 +367,43 @@ static func settings_ui(body: Control) -> void:
 	slider.call("Auflösung (Skalierung)", "render_scale", 0.5, 1.0, 0.05, "%.2f")
 	slider.call("Schatten (0 aus, 2 hoch)", "shadows", 0.0, 2.0, 1.0, "%d")
 	slider.call("Sichtweite Bäume", "view_distance", 0.4, 1.5, 0.05, "%.2f")
+
+
+static func _butcher_sell_ui(game: Node, body: VBoxContainer, _hud: Hud, reopen: Callable) -> void:
+	text(body, "GASTON: \"You bring me something to cook, oui?\"")
+	text(body, "Tipp: Wild einfach in den roten Kreis legen oder hier vom Pickup/Anhänger verkaufen!")
+	heading(body, "Wild-Verkauf (Hand, Pickup & Anhänger)")
+	var entries: Array = []
+	var ppos: Vector3 = game.player.global_position
+	if game.player.carrying is Carcass:
+		entries.append({c = game.player.carrying, holder = game.player, src = "In der Hand"})
+	if game.car and game.car.global_position.distance_to(ppos) < 25.0:
+		for n in game.car.cargo:
+			if n is Carcass:
+				entries.append({c = n, holder = game.car, src = "Pickup"})
+	if game.trailer and game.trailer.global_position.distance_to(ppos) < 25.0:
+		for n in game.trailer.cargo:
+			if n is Carcass:
+				entries.append({c = n, holder = game.trailer, src = "Anhänger"})
+
+	if entries.is_empty():
+		text(body, "Bring erlegte Tiere her! (Per Hand tragen oder auf Pickup/Anhänger laden)")
+		heading(body, "GASTON Preisliste")
+		for pair in [
+			["Reh / Hirsch", 300], ["Wildschwein", 220], ["Mutanten-Hase", 120],
+			["Hase", 25], ["Braunbär", 450], ["Riesenhirsch", 650], ["Bigfoot", 1000]
+		]:
+			text(body, "  • %s: $%d" % [pair[0], pair[1]])
+	else:
+		var total := 0
+		for e in entries:
+			var c: Carcass = e.c
+			var val := c.sell_value()
+			total += val
+			var label := "%s (%.0f kg, %s)  —  $%d" % [c.display_name(), c.mass, e.src, val]
+			row(body, label, "Einzeln verkaufen", func():
+				game.sell_single_carcass(c, e.holder)
+				reopen.call())
+		row(body, "Gesamte Ladung (%d Stück)" % entries.size(), "Alle verkaufen (+$%d)" % total, func():
+			game.sell_truck_cargo()
+			reopen.call())

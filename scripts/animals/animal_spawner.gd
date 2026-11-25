@@ -29,10 +29,11 @@ func _targets() -> Dictionary:
 	var dawn_dusk := (GameState.time > 5.0 and GameState.time < 9.0) or (GameState.time > 18.0 and GameState.time < 21.5)
 	return {
 		deer = 14 if dawn_dusk else 9,
-		boar = 5 if GameState.is_night() else 3,
+		boar = 5 if GameState.is_night() else 4,
 		fox = 4,
 		rabbit = 6,
-		bear = 1,
+		bear = 2,
+		bigfoot = 1,
 		legend = 1 if legend_wanted else 0,
 	}
 
@@ -82,9 +83,9 @@ func _try_spawn(sp: String) -> bool:
 		var a := _rng.randf() * TAU
 		var d := _rng.randf_range(SPAWN_MIN, SPAWN_MAX)
 		var p := Vector2(center.global_position.x, center.global_position.z) + Vector2(cos(a), sin(a)) * d
-		if sp == "legend":
-			# Riesenhirsch: tief in den Südbergen
-			p = Vector2(_rng.randf_range(-600, 900), _rng.randf_range(1900, 2500))
+		if sp in ["legend", "bigfoot"]:
+			# Riesenhirsch & Bigfoot: in den grünen Südbergen (z > 700, Höhe > 90m)
+			p = Vector2(_rng.randf_range(-600, 900), _rng.randf_range(1200, 2400))
 		if not _ok(sp, p):
 			continue
 		if _min_dist(Vector3(p.x, world.height_at(p.x, p.y), p.y)) < SPAWN_MIN * 0.8 and sp != "legend":
@@ -109,11 +110,11 @@ func _ok(sp: String, p: Vector2) -> bool:
 		return false
 	match sp:
 		"boar":
-			return kind in ["forest", "scrub"]
+			return kind in ["forest", "scrub"] or world.is_swamp(p)
 		"rabbit":
 			return kind in ["meadow", "farmland", "grass", "scrub"]
-		"bear", "legend":
-			return kind == "forest" and landmarks.in_mountains(p)
+		"bear", "bigfoot", "legend":
+			return (kind == "forest" or kind == "scrub") and landmarks.in_mountains(p)
 		_:
 			return kind in ["forest", "meadow", "farmland", "scrub", "grass"]
 

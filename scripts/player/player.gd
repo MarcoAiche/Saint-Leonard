@@ -87,6 +87,11 @@ func _physics_process(delta: float) -> void:
 		model.animate(delta, 0.0)
 		if passed_out <= 0.0:
 			model.set_lying(false)
+			var world_node := get_parent().get_node_or_null("World")
+			if world_node and world_node.has_method("height_at"):
+				var gy: float = world_node.height_at(global_position.x, global_position.z)
+				global_position.y = maxf(global_position.y, gy + 0.15)
+			velocity.y = maxf(velocity.y, 0.0)
 			input_enabled = true
 			if _restore_fp and camera_rig and not camera_rig.first_person:
 				camera_rig.toggle_view()

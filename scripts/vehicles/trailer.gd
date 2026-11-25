@@ -197,23 +197,22 @@ func _drop_cargo(n: Node3D) -> void:
 	cargo_lost.emit(n)
 
 
-## Ungesicherte Ladung fliegt bei schneller Fahrt über holprigen Untergrund herunter
+var _last_vel := Vector3.ZERO
+
+
+## Ungesicherte Ladung fällt NUR bei extremen G-Kräften, Crash, starkem Drift oder Überschlag herunter
 func _check_cargo(delta: float) -> void:
 	if cargo.is_empty() or strapped:
+		_last_vel = linear_velocity
 		return
-	if global_basis.y.y < 0.5:
+	if global_basis.y.y < 0.45:
 		_drop_cargo(cargo.back())
+		_last_vel = linear_velocity
 		return
+	var g_accel := (linear_velocity - _last_vel).length() / maxf(delta, 0.005)
+	_last_vel = linear_velocity
 	var spd := linear_velocity.length() * 3.6
-	if spd < 35.0 or world == null:
-		return
-	_bump_t -= delta
-	if _bump_t > 0.0:
-		return
-	_bump_t = 0.4
-	var tier: int = world.road_info(Vector2(global_position.x, global_position.z), 1.5).tier
-	var rough := tier == 0 or tier >= WorldBuilder.TIER_DIRT
-	if rough and randf() < (spd - 35.0) * 0.01:
+	if g_accel > 28.0 or (spd > 65.0 and angular_velocity.length() > 3.2):
 		_drop_cargo(cargo.back())
 
 
