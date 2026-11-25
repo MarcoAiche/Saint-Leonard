@@ -143,6 +143,12 @@ func find_spot(center: Vector2, r_min: float, r_max: float, half: float, max_tie
 
 # ------------------------------------------------------------------ Orte suchen
 
+func _get_marker(marker_name: String) -> Marker3D:
+	if game != null and game.has_method("get_map_marker"):
+		return game.get_map_marker(marker_name)
+	return null
+
+
 func _find_pub() -> void:
 	var p := world.poi_position(PUB_NAME)
 	var road := world.nearest_road(p, ["residential", "unclassified", "tertiary", "primary", "service"])
@@ -150,12 +156,29 @@ func _find_pub() -> void:
 	for e in buildings_near(p, 2.0):
 		door = _door_point(e[2], road.pos)
 	pub = {pos = v3(p), door = v3(door)}
+	var gasthaus_m := _get_marker("Gasthaus")
+	if gasthaus_m != null:
+		pub.door = gasthaus_m.global_position
 	var side := Vector2(-road.dir.y, road.dir.x)
 	if side.dot(p - road.pos) < 0:
 		side = -side
 	var pp: Vector2 = road.pos + side * 1.5
 	var cp: Vector2 = road.pos + road.dir * 7.0 - side * 1.2
 	spawn = {pos = v3(pp, 0.5), car_pos = Vector3(cp.x, 0, cp.y), car_dir = Vector3(road.dir.x, 0, road.dir.y), look = (cp - pp).normalized()}
+	var player_m := _get_marker("PlayerSpawn")
+	if player_m != null:
+		spawn.pos = player_m.global_position
+	var car_m := _get_marker("CarSpawn")
+	if car_m == null:
+		car_m = _get_marker("TruckSpawn")
+	if car_m != null:
+		spawn.car_pos = car_m.global_position
+		var cyaw := car_m.global_rotation.y
+		spawn.car_dir = Vector3(sin(cyaw), 0.0, cos(cyaw))
+	if player_m != null or car_m != null:
+		var look2 := Vector2(spawn.car_pos.x - spawn.pos.x, spawn.car_pos.z - spawn.pos.z)
+		if look2.length_squared() > 0.01:
+			spawn.look = look2.normalized()
 
 
 ## Punkt am Gebäuderand, der einer Straße am nächsten ist (dort ist die Tür)
@@ -210,6 +233,12 @@ func _find_city_shops() -> void:
 		city_center = sum / used.size()
 	if shops.size() < SHOP_ORDER.size():
 		_find_city_shops_generic(used)
+	var shop_markers := {"super": "Supermarkt", "bauhaus": "Baumarkt"}
+	for sid in shop_markers:
+		var sm := _get_marker(shop_markers[sid])
+		if sm != null and shops.has(sid):
+			shops[sid].door = sm.global_position
+			shops[sid].yaw = sm.global_rotation.y
 
 
 func _find_city_shops_generic(used: Array[Vector2]) -> void:
@@ -259,19 +288,30 @@ func _find_gas_station() -> void:
 	var road := world.nearest_road(p, ["primary", "secondary", "tertiary", "trunk"])
 	var side: Vector2 = (p - road.pos).normalized()
 	var base: Vector2 = road.pos + side * 9.0
+	var dir2: Vector2 = road.dir
+	var gas_m := _get_marker("Tankstelle")
+	if gas_m != null:
+		base = Vector2(gas_m.global_position.x, gas_m.global_position.z)
+		var gyaw := gas_m.global_rotation.y
+		dir2 = Vector2(sin(gyaw), cos(gyaw))
+		side = Vector2(-dir2.y, dir2.x)
 	var pumps := []
 	for k in [-1, 1]:
-		var q: Vector2 = base + road.dir * 4.0 * k
+		var q: Vector2 = base + dir2 * 4.0 * k
 		pumps.append(v3(q))
-	gas = {pos = v3(base), pumps = pumps, shop = v3(base + side * 9.0), dir = road.dir, side = side}
+	gas = {pos = gas_m.global_position if gas_m != null else v3(base), pumps = pumps, shop = v3(base + side * 9.0), dir = dir2, side = side}
 
 
 func _find_garage() -> void:
 	var s := find_spot(home_center, 40.0, 450.0, 8.0, 2)
 	if s.is_empty():
 		s = {pos = home_center + Vector2(30, 30), yaw = 0.0}
-	var dir := Vector2(sin(s.yaw), cos(s.yaw))
-	garage = {pos = v3(s.pos), yaw = s.yaw, door = v3(s.pos + dir * 7.0), bay = v3(s.pos + dir * 11.0)}
+	var garage_m := _get_marker("Werkstatt")
+	var gpos: Vector3 = garage_m.global_position if garage_m != null else v3(s.pos)
+	var gyaw: float = garage_m.global_rotation.y if garage_m != null else s.yaw
+	var g2 := Vector2(gpos.x, gpos.z)
+	var dir := Vector2(sin(gyaw), cos(gyaw))
+	garage = {pos = gpos, yaw = gyaw, door = v3(g2 + dir * 7.0), bay = v3(g2 + dir * 11.0)}
 
 
 func _find_plots() -> void:
@@ -813,11 +853,16 @@ func _build_hub_landmarks(I: Interactions) -> void:
 		_log_hub_pos("Wildlife Field Office 07", fp2)
 
 	# 7. Green 4x4 ATV / Quad Bike am Camp Hub
-	var aspot := _find_hub_spot(pub_2d, 10.0, 38.0, 2.2, avoid)
-	if not aspot.is_empty():
-		var ap2: Vector2 = aspot.pos
-		atv_spawn = {pos = Vector3(ap2.x, world.height_at(ap2.x, ap2.y) + 0.6, ap2.y), yaw = aspot.yaw}
-		_log_hub_pos("Green 4x4 ATV", ap2)
+	var atv_m := _get_marker("AtvSpawn")
+	if atv_m != null:
+		atv_spawn = {pos = atv_m.global_position, yaw = atv_m.global_rotation.y}
+		_log_hub_pos("Green 4x4 ATV", Vector2(atv_m.global_position.x, atv_m.global_position.z))
+	else:
+		var aspot := _find_hub_spot(pub_2d, 10.0, 38.0, 2.2, avoid)
+		if not aspot.is_empty():
+			var ap2: Vector2 = aspot.pos
+			atv_spawn = {pos = Vector3(ap2.x, world.height_at(ap2.x, ap2.y) + 0.6, ap2.y), yaw = aspot.yaw}
+			_log_hub_pos("Green 4x4 ATV", ap2)
 	_log_hub_pos("Swamp Biome (West/NW Gail)", Vector2(-220.0, -180.0))
 	_log_hub_pos("Southern Mountains (Bear/Bigfoot)", Vector2(200.0, 1400.0))
 

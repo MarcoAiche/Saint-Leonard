@@ -1,7 +1,11 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/world_builder.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/game.gd" id="2_game"]
+[ext_resource type="Script" path="res://scripts/world/editor_world_preview.gd" id="3_preview"]
+[ext_resource type="PackedScene" path="res://scenes/world_overlays/map_markers.tscn" id="4_markers"]
+[ext_resource type="PackedScene" path="res://scenes/world_overlays/st_leonhard_props.tscn" id="5_stleonhard"]
+[ext_resource type="PackedScene" path="res://scenes/world_overlays/kleinstadt_props.tscn" id="6_kleinstadt"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 sky_top_color = Color(0.231373, 0.556863, 0.952941, 1)
@@ -44,3 +48,14 @@ directional_shadow_max_distance = 250.0
 
 [node name="World" type="Node3D" parent="."]
 script = ExtResource("1_world")
+
+[node name="EditorWorldPreview" type="Node3D" parent="."]
+script = ExtResource("3_preview")
+
+[node name="WorldOverlays" type="Node3D" parent="."]
+
+[node name="MapMarkers" parent="WorldOverlays" instance=ExtResource("4_markers")]
+
+[node name="StLeonhardProps" parent="WorldOverlays" instance=ExtResource("5_stleonhard")]
+
+[node name="KleinstadtProps" parent="WorldOverlays" instance=ExtResource("6_kleinstadt")]

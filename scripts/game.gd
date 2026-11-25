@@ -436,6 +436,16 @@ func stand_up() -> void:
 	player.global_position += player.facing * 0.6 + Vector3.UP * 0.3
 
 
+func get_map_marker(marker_name: String) -> Marker3D:
+	var overlays := get_node_or_null("WorldOverlays/MapMarkers")
+	if overlays == null:
+		return null
+	var found := overlays.find_child(marker_name, true, false)
+	if found is Marker3D and (found as Marker3D).visible:
+		return found as Marker3D
+	return null
+
+
 func _start_game() -> void:
 	started = true
 	if Net.is_client():
@@ -443,13 +453,18 @@ func _start_game() -> void:
 	hud.visible = true
 	var sp: Dictionary = landmarks.spawn
 	var look: Vector2 = sp.look
+	var fb_player_pos: Vector3 = sp.pos
 	var fb_player_yaw := atan2(-look.x, -look.y)
+	var player_marker := get_map_marker("PlayerSpawn")
+	if player_marker != null:
+		fb_player_pos = player_marker.global_position
+		fb_player_yaw = player_marker.global_rotation.y
 	player = Player.new()
 	player.name = "Spieler"
 	player.process_mode = Node.PROCESS_MODE_PAUSABLE
 	player.add_to_group("player_body")
 	add_child(player)
-	var p_xf := world.find_safe_spawn_transform(GameState.player_pos, GameState.player_rot_y, sp.pos, fb_player_yaw, 0.25)
+	var p_xf := world.find_safe_spawn_transform(GameState.player_pos, GameState.player_rot_y, fb_player_pos, fb_player_yaw, 0.25)
 	player.global_position = p_xf.origin
 	player.rotation.y = p_xf.basis.get_euler().y
 	player.reset_physics_interpolation()
@@ -466,20 +481,33 @@ func _start_game() -> void:
 		atv.name = "ATV"
 		atv.world = world
 		add_child(atv)
+		var fb_atv_pos: Vector3 = landmarks.atv_spawn.pos
+		var fb_atv_yaw: float = landmarks.atv_spawn.yaw
+		var atv_marker := get_map_marker("AtvSpawn")
+		if atv_marker != null:
+			fb_atv_pos = atv_marker.global_position
+			fb_atv_yaw = atv_marker.global_rotation.y
 		var atv_saved: Dictionary = GameState.vehicles_state.get("atv", {})
 		var atv_pos := GameState._v3_from_arr(atv_saved.get("pos", null))
-		var atv_yaw := float(atv_saved.get("rot", landmarks.atv_spawn.yaw))
-		atv.global_transform = world.find_safe_spawn_transform(atv_pos, atv_yaw, landmarks.atv_spawn.pos, landmarks.atv_spawn.yaw, 1.0, [atv.get_rid()])
+		var atv_yaw := float(atv_saved.get("rot", fb_atv_yaw))
+		atv.global_transform = world.find_safe_spawn_transform(atv_pos, atv_yaw, fb_atv_pos, fb_atv_yaw, 1.0, [atv.get_rid()])
 		atv.reset_physics_interpolation()
 		Animal.threats.append(atv)
 	car.process_mode = Node.PROCESS_MODE_PAUSABLE
 	car.add_to_group("vehicle")
 	add_child(car)
+	var fb_car_pos: Vector3 = sp.car_pos
 	var fb_car_yaw := atan2(sp.car_dir.x, sp.car_dir.z)
+	var car_marker := get_map_marker("CarSpawn")
+	if car_marker == null:
+		car_marker = get_map_marker("TruckSpawn")
+	if car_marker != null:
+		fb_car_pos = car_marker.global_position
+		fb_car_yaw = car_marker.global_rotation.y
 	var tr_saved: Dictionary = GameState.vehicles_state.get("truck", {})
 	var tr_pos := GameState._v3_from_arr(tr_saved.get("pos", null))
 	var tr_yaw := float(tr_saved.get("rot", fb_car_yaw))
-	car.global_transform = world.find_safe_spawn_transform(tr_pos, tr_yaw, sp.car_pos, fb_car_yaw, 1.2, [car.get_rid()])
+	car.global_transform = world.find_safe_spawn_transform(tr_pos, tr_yaw, fb_car_pos, fb_car_yaw, 1.2, [car.get_rid()])
 	car.reset_physics_interpolation()
 	car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
 	interactions.add(Truck.BED_SLOTS[0] + Vector3(0.45, 0.6, -0.4), 2.6, func(): return "Ladung lösen" if car.strapped else "Ladung festzurren", func(): _toggle_straps(car), func(): GameState.has("straps") and seat == "", car)

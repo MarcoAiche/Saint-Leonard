@@ -1,0 +1,52 @@
+[gd_scene format=3]
+
+[node name="MapMarkers" type="Node3D"]
+
+[node name="Spawns" type="Node3D" parent="."]
+
+[node name="PlayerSpawn" type="Marker3D" parent="Spawns"]
+position = Vector3(-15.398, 57.95, 113.25)
+rotation = Vector3(0, -2.073, 0)
+gizmo_extents = 2.0
+
+[node name="CarSpawn" type="Marker3D" parent="Spawns"]
+position = Vector3(-8.822, 58.166, 116.861)
+rotation = Vector3(0, 1.437, 0)
+gizmo_extents = 2.0
+
+[node name="AtvSpawn" type="Marker3D" parent="Spawns"]
+position = Vector3(-10.51, 58.108, 126.152)
+rotation = Vector3(0, 3.007, 0)
+gizmo_extents = 2.0
+
+[node name="TruckSpawn" type="Marker3D" parent="Spawns"]
+position = Vector3(-3, 58.166, 117.6)
+rotation = Vector3(0, 1.437, 0)
+gizmo_extents = 2.0
+
+[node name="POIs" type="Node3D" parent="."]
+
+[node name="Supermarkt" type="Marker3D" parent="POIs"]
+position = Vector3(7076.654, 11.631, -8237.305)
+rotation = Vector3(0, 1.272, 0)
+gizmo_extents = 2.0
+
+[node name="Baumarkt" type="Marker3D" parent="POIs"]
+position = Vector3(7193.7, 13.368, -8117.216)
+rotation = Vector3(0, -1.099, 0)
+gizmo_extents = 2.0
+
+[node name="Gasthaus" type="Marker3D" parent="POIs"]
+position = Vector3(-12.509, 56.994, 102.287)
+rotation = Vector3(0, -0.258, 0)
+gizmo_extents = 2.0
+
+[node name="Tankstelle" type="Marker3D" parent="POIs"]
+position = Vector3(1347.579, 43.424, -1209.698)
+rotation = Vector3(0, 2.029, 0)
+gizmo_extents = 2.0
+
+[node name="Werkstatt" type="Marker3D" parent="POIs"]
+position = Vector3(1566.283, 70.371, 114.871)
+rotation = Vector3(0, 0.02, 0)
+gizmo_extents = 2.0
