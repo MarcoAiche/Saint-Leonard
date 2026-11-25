@@ -273,3 +273,7 @@ Offene Issues auf GitHub, Stand 2026-11-25:
 Ideen von Simon:
 - **Benutzer-System:** Spieler können mit ihrer Google-E-Mail-Adresse einen Benutzer-Account erstellen, auf dem ihr Spielstand und Fortschritt gespeichert werden.
 - **Private Spieler-Häuser (Zutrittskontrolle):** Nicht-öffentliche Häuser von Spielern können nur vom jeweiligen Besitzer betreten werden – oder in Begleitung des Besitzers (der Besitzer kann die Tür für Besuch öffnen).
+
+### Phase 2: Fahrzeuge, Tiere & Physik
+- **Roadkill-System (Tiere anfahren):** Fahrzeuge (Pickup/ATV) richten bei Kollision mit Tieren geschwindigkeitsabhängigen Aufprallschaden an → ab entsprechender Geschwindigkeit sofortiger Tod, Kadaver-Spawn & Wegschleuder-Impuls (inkl. Co-op-Sync).
+- **Ragdoll-Physik für getötete/angefahrene Tiere & Menschen:** Physikbasiertes Ragdoll-Verhalten (`PhysicalBoneSimulator3D` bzw. Physik-Impuls) für erlegte oder angefahrene Tiere und Charaktere — erst einbauen, sobald die finalen 3D-Modelle/Skelette stehen.
