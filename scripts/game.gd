@@ -839,6 +839,8 @@ func refresh_plot(pl: Dictionary) -> void:
 			var bed: Node3D = house.get_meta("bed")
 			interactions.add(Vector3(0, 1, 0.8), 2.2, "Werkbank", func(): Menus.inventory(self), null, bench)
 			interactions.add(Vector3(0, 0.6, 0), 2.2, "Schlafen bis zum Morgen", func(): _sleep(), null, bed)
+			var chest: Node3D = house.get_meta("chest")
+			interactions.add(Vector3(0, 0.5, 0), 1.8, "Truhe öffnen", func(): ChestMenu.open(self, "Truhe", GameState.house_chest, func(): pass), null, chest)
 	else:
 		house_nodes.erase(pl.idx)
 		landmarks.plot_sign(pl)
@@ -1028,7 +1030,7 @@ func _confirm_place() -> void:
 		_stop_placing()
 		return
 	var data := {}
-	if _placing == "frame" and not GameState.photos.is_empty():
+	if _placing in ["frame", "frame_big"] and not GameState.photos.is_empty():
 		data.photo = GameState.photos[-1]
 	var e := {uid = GameState.new_uid(), type = _placing, pos = [xf.origin.x, xf.origin.y, xf.origin.z],
 		rot = xf.basis.get_euler().y, wall = Placeables.is_wall_item(_placing), owner = GameState.player_name, data = data}
@@ -1114,23 +1116,54 @@ func _spawn_placed(e: Dictionary) -> Node3D:
 			var seen := {}
 			cam_timer.timeout.connect(func(): _trailcam_check(n, seen))
 			interactions.add(Vector3(0, 1, 0), 2.0, "Wildkamera abbauen", func(): pick_up_placed(entry), null, n)
-		"frame":
-			if e.data.has("photo"):
-				var img := Image.load_from_file(e.data.photo)
-				if img:
-					var q := MeshInstance3D.new()
-					var qm := QuadMesh.new()
-					qm.size = Vector2(0.52, 0.37)
-					q.mesh = qm
-					var m := StandardMaterial3D.new()
-					m.albedo_texture = ImageTexture.create_from_image(img)
-					m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-					q.material_override = m
-					q.position.z = 0.025
-					n.add_child(q)
-	if e.type in ["table", "chair", "bed", "sofa", "shelf", "lamp", "rug", "stove", "frame", "trophy"] and e.owner == GameState.player_name:
+		"frame", "frame_big":
+			_show_photo(n, e)
+	if Items.info(e.type).kind == "furniture" and e.owner == GameState.player_name:
 		interactions.add(Vector3(0, 0.5, 0), 1.6, "%s einpacken" % Items.display(e.type), func(): pick_up_placed(entry), null, n)
+		interactions.add(Vector3(0, 0.8, 0), 1.6, "%s verschieben" % Items.display(e.type), func():
+			pick_up_placed(entry)
+			start_placing(entry.type), null, n)
+	if e.type == "chest" and e.owner == GameState.player_name:
+		if not e.data.has("items"):
+			e.data.items = {}
+		interactions.add(Vector3(0, 0.6, 0.3), 1.6, "Truhe öffnen", func(): ChestMenu.open(self, "Truhe", entry.data.items, func(): placed_changed(entry)), null, n)
+	if e.type in ["frame", "frame_big"] and e.owner == GameState.player_name and GameState.photos.size() > 1:
+		interactions.add(Vector3(0, 0, 0.2), 1.6, "Anderes Foto", func(): _next_photo(entry, n), null, n)
 	return n
+
+
+## Foto im Bilderrahmen anzeigen (klein oder groß)
+func _show_photo(n: Node3D, e: Dictionary) -> void:
+	for c in n.get_children():
+		if c.has_meta("photo"):
+			c.queue_free()
+	if not e.data.has("photo"):
+		return
+	var img := Image.load_from_file(e.data.photo)
+	if img == null:
+		return
+	var q := MeshInstance3D.new()
+	var qm := QuadMesh.new()
+	qm.size = Vector2(0.52, 0.37) if e.type == "frame" else Vector2(1.0, 0.7)
+	q.mesh = qm
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = ImageTexture.create_from_image(img)
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	q.material_override = m
+	q.position.z = 0.03
+	q.set_meta("photo", true)
+	n.add_child(q)
+
+
+## Nächstes eigenes Foto in den Rahmen
+func _next_photo(entry: Dictionary, n: Node3D) -> void:
+	var list: Array = GameState.photos
+	if list.is_empty():
+		return
+	var i: int = list.find(entry.data.get("photo", ""))
+	entry.data.photo = list[(i + 1) % list.size()]
+	_show_photo(n, entry)
+	placed_changed(entry)
 
 
 func _fire_fx() -> Node3D:

@@ -134,6 +134,39 @@ static func model(type: String) -> Node3D:
 			box(n, Vector3(0.5, 0.25, 1.4), Vector3(0, 0.15, 0.95), Color(0.30, 0.45, 0.35))  # Ofenbank
 		"frame":
 			box(n, Vector3(0.6, 0.45, 0.04), Vector3(0, 0, 0), DARK_WOOD)
+		"frame_big":
+			box(n, Vector3(1.1, 0.8, 0.05), Vector3(0, 0, 0), Color(0.75, 0.6, 0.25))
+		"chest":
+			box(n, Vector3(1.0, 0.5, 0.55), Vector3(0, 0.25, 0), WOOD, Vector3.ZERO, true)
+			box(n, Vector3(1.04, 0.14, 0.59), Vector3(0, 0.55, 0), DARK_WOOD)
+			for x in [-0.42, 0.42]:
+				box(n, Vector3(0.05, 0.66, 0.6), Vector3(x, 0.32, 0), Color(0.3, 0.3, 0.32))
+			box(n, Vector3(0.12, 0.12, 0.03), Vector3(0, 0.45, 0.29), Color(0.85, 0.7, 0.25))
+		"plant":
+			cyl(n, 0.2, 0.35, Vector3(0, 0.17, 0), Color(0.7, 0.4, 0.25), 0.25)
+			for k in 5:
+				var a := TAU * k / 5.0
+				var leaf := box(n, Vector3(0.08, 0.5, 0.2), Vector3(cos(a) * 0.12, 0.6, sin(a) * 0.12), Color(0.2, 0.55, 0.25), Vector3(0, -a, 0.4))
+				leaf.rotation_order = EULER_ORDER_YXZ
+		"trophy_boar":
+			box(n, Vector3(0.55, 0.65, 0.05), Vector3(0, 0, 0), DARK_WOOD)
+			var snout := MeshInstance3D.new()
+			var sm := SphereMesh.new()
+			sm.radius = 0.2
+			sm.height = 0.36
+			snout.mesh = sm
+			snout.position = Vector3(0, 0, 0.18)
+			snout.scale = Vector3(1, 0.9, 1.5)
+			snout.material_override = Toon.solid(Color(0.28, 0.22, 0.18))
+			n.add_child(snout)
+			for s in [-1, 1]:
+				box(n, Vector3(0.03, 0.12, 0.03), Vector3(0.08 * s, -0.05, 0.42), Color(0.95, 0.93, 0.85), Vector3(0.6, 0, 0))
+		"pelt_rug":
+			for k in 10:
+				var a := TAU * k / 10.0
+				var r := 0.9 if k % 2 == 0 else 0.65
+				box(n, Vector3(0.5, 0.02, 0.35), Vector3(cos(a) * r * 0.6, 0.01, sin(a) * r * 0.45), Color(0.48, 0.34, 0.22), Vector3(0, -a, 0))
+			box(n, Vector3(1.3, 0.025, 0.9), Vector3(0, 0.012, 0), Color(0.52, 0.37, 0.24))
 		"trophy":
 			box(n, Vector3(0.5, 0.6, 0.05), Vector3(0, 0, 0), DARK_WOOD)
 			var head := SphereMesh.new()
@@ -160,7 +193,7 @@ static func model(type: String) -> Node3D:
 
 
 static func is_wall_item(type: String) -> bool:
-	return type in ["frame", "trophy"]
+	return type in ["frame", "frame_big", "trophy", "trophy_boar"]
 
 
 ## Darf hier aufgestellt werden? Gibt Fehlermeldung oder "" zurück.
@@ -175,7 +208,7 @@ static func check(type: String, pos: Vector3, game: Node) -> String:
 			for c in [Vector2.ZERO, lm.home_center, lm.city_center, Vector2(lm.gas.pos.x, lm.gas.pos.z)]:
 				if c.distance_to(p2) < STILL_MIN_DIST:
 					return "Zu nah am Ort, die Polizei würde es merken (mind. %d m)" % STILL_MIN_DIST
-		"table", "chair", "bed", "sofa", "shelf", "lamp", "rug", "stove", "frame", "trophy":
+		"table", "chair", "bed", "sofa", "shelf", "lamp", "rug", "stove", "frame", "frame_big", "trophy", "trophy_boar", "pelt_rug", "chest", "plant":
 			if not game.inside_own_house(pos):
 				return "Möbel nur im eigenen Haus"
 	return ""
