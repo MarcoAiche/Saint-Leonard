@@ -50,15 +50,15 @@ const NZ = Math.ceil((Math.max(...bz) + MARGIN - Z0) / STEP) + 1;
 const NEAR_CELL = 25;
 const NNX = Math.ceil((NX * STEP) / NEAR_CELL) + 1, NNZ = Math.ceil((NZ * STEP) / NEAR_CELL) + 1;
 const nearMask = new Uint8Array(NNX * NNZ);
+const inside = (x, z) => {
+  let c = false;
+  for (let a = 0, b = border.length - 1; a < border.length; b = a++) {
+    const [xa, za] = border[a], [xb, zb] = border[b];
+    if ((za > z) !== (zb > z) && x < ((xb - xa) * (z - za)) / (zb - za) + xa) c = !c;
+  }
+  return c;
+};
 {
-  const inside = (x, z) => {
-    let c = false;
-    for (let a = 0, b = border.length - 1; a < border.length; b = a++) {
-      const [xa, za] = border[a], [xb, zb] = border[b];
-      if ((za > z) !== (zb > z) && x < ((xb - xa) * (z - za)) / (zb - za) + xa) c = !c;
-    }
-    return c;
-  };
   const segDist = (x, z) => {
     let best = Infinity;
     for (let a = 0, b = border.length - 1; a < border.length; b = a++) {
@@ -297,7 +297,7 @@ function convertOsm(osm) {
     if (!t) continue;
     const pos = toLocal(nd.lat, nd.lon);
     if (t.natural === "tree") out.lone_trees.push(pos);
-    if (t.place && t.name && ["village", "hamlet", "town", "suburb", "neighbourhood", "isolated_dwelling", "locality"].includes(t.place))
+    if (t.place && t.name && ["city", "village", "hamlet", "town", "suburb", "neighbourhood", "isolated_dwelling", "locality"].includes(t.place))
       out.places.push({ name: t.name, kind: t.place, pos });
     if (t.name && (t.amenity || t.railway === "halt" || t.railway === "station" || t.shop || t.tourism)) {
       out.pois.push({ name: t.name, kind: t.amenity || t.railway || t.shop || t.tourism, housenumber: t["addr:housenumber"] || null, pos });
@@ -342,6 +342,54 @@ const smoothstep = (a, b, x) => {
 // ---------------------------------------------------------------- main
 const osm = await loadOsm();
 const world = convertOsm(osm);
+
+// Dächer: Satteldach, Walmdach usw. nur auf annähernd rechteckigen Grundrissen. Bei L-, U- oder
+// schrägen Formen würde das Dach über das umschließende Rechteck ragen und über leerem Boden
+// schweben (in Villach häufig). Solche Gebäude bekommen ein Flachdach.
+{
+  const polyArea = (P) => { let a = 0; for (let i = 0; i < P.length; i++) { const q = P[(i + 1) % P.length]; a += P[i][0] * q[1] - q[0] * P[i][1]; } return Math.abs(a / 2); };
+  const obbArea = (P) => {
+    let best = Infinity;
+    for (let i = 0; i < P.length; i++) {
+      const q = P[(i + 1) % P.length], ex = q[0] - P[i][0], ez = q[1] - P[i][1], l = Math.hypot(ex, ez);
+      if (l < 1e-3) continue;
+      const ux = ex / l, uz = ez / l;
+      let a0 = Infinity, a1 = -Infinity, b0 = Infinity, b1 = -Infinity;
+      for (const [x, z] of P) { const a = x * ux + z * uz, b = -x * uz + z * ux; a0 = Math.min(a0, a); a1 = Math.max(a1, a); b0 = Math.min(b0, b); b1 = Math.max(b1, b); }
+      best = Math.min(best, (a1 - a0) * (b1 - b0));
+    }
+    return best;
+  };
+  const SLOPED = ["gabled", "hipped", "half-hipped", "gambrel", "mansard", "skillion", "saltbox", "pyramidal"];
+  let flat = 0;
+  for (const b of world.buildings) {
+    if (!SLOPED.includes(b.roof) || b.pts.length <= 4) continue;
+    if (polyArea(b.pts) / Math.max(obbArea(b.pts), 0.01) < 0.88) { b.roof = "flat"; flat++; }
+  }
+  console.log(`${flat} Gebäude mit verwinkeltem Grundriss bekommen ein Flachdach`);
+}
+
+// Beschriftungen: nur wichtige Orte im Spielbereich (sonst stehen in Villach über tausend Namen
+// übereinander). Behalten werden Gasthäuser, Polizei, Feuerwehr, Tankstellen, Rathaus, Bahnhof,
+// Krankenhaus und alles, was das Spiel per Name sucht (Landmarks).
+{
+  const NEEDED = new Set(["Gasthaus Pirtscher", "Eni Austria GmbH", "Bauhaus", "Interspar", "Alpen Adria Jagd & Sportwaffen", "Ilgenfritz", "Polizeiinspektion Auen"]);
+  const KINDS = new Set(["police", "fire_station", "fuel", "townhall", "hospital", "station", "halt"]);
+  const INN = /^(Gasthaus|Gasthof|Buschenschank|Wirtshaus|Landgasthof)\b/i;
+  const near = (x, z) => inside(x, z) || border.some(([bx, bz]) => Math.hypot(bx - x, bz - z) < 150);
+  const before = world.pois.length;
+  const seen = new Set();
+  world.pois = world.pois.filter((q) => {
+    if (NEEDED.has(q.name)) return true;
+    if (!(KINDS.has(q.kind) || INN.test(q.name)) || !near(q.pos[0], q.pos[1])) return false;
+    if (seen.has(q.name)) return false;
+    seen.add(q.name);
+    return true;
+  });
+  const pb = world.places.length;
+  world.places = world.places.filter((q) => ["city", "town", "village", "suburb", "hamlet"].includes(q.kind) && near(q.pos[0], q.pos[1]));
+  console.log(`Beschriftungen: ${world.pois.length} von ${before} Orten, ${world.places.length} von ${pb} Ortsnamen`);
+}
 console.log(`Raster ${NX} x ${NZ} (${((NX * NZ) / 1e6).toFixed(2)} Mio Punkte)`);
 
 const sample = await heightSampler(ZOOM, S, W, N, E);
