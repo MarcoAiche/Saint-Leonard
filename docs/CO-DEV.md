@@ -150,13 +150,15 @@ The console executable is `Godot_v4.7.2-stable_win64_console.exe` (shown as `<go
   Plays shopping, shooting, reloading, hunting, gutting, selling, garage, house, placing, still and explosion, police control and chase, phone, inventory, jobs, driving, radio, winch, drinking, festival, save/load and server start.
 - **Syntax check:** `<godot> --headless --path . --script tools/check_scripts.gd` (missing autoloads are reported in this mode; ignore those). After adding a new `class_name`, run `<godot> --headless --path . --import` once.
 - **Screenshots without playing:** for example `<godot> --path . -- --player=300,900 --animal=deer+boar --freeze --tp --time=12 --shot=test.png --wait=1`. All parameters are listed at the top of `scripts/debug_tools.gd`.
-- **Multiplayer test (run before pushing network changes):** start `<godot> --headless --path . -- --server --mptest --quit_after=290`, wait ~8 s, then start both clients at the same time: `<godot> --headless --path . -- --join=127.0.0.1 --name=Anna --mptest=a` and `... --name=Bert --mptest=b`. Both must end with `MPTEST a FERTIG: 0 Fehler` / `MPTEST b FERTIG: 0 Fehler` (57 checks: presence, positions, trucks, chat, placing, house race, animal kill and carcass, passenger seat and GPS rule, effects, voice, police, roulette, poker with hidden cards, raid, profile after reconnect). See `scripts/mp_test.gd`.
+- **Multiplayer test (run before pushing network changes):** start `<godot> --headless --path . -- --server --mptest --quit_after=320`, wait ~8 s, then start both clients at the same time: `<godot> --headless --path . -- --join=127.0.0.1 --name=Anna --mptest=a` and `... --name=Bert --mptest=b`. Both must end with `MPTEST a FERTIG: 0 Fehler` / `MPTEST b FERTIG: 0 Fehler` (57 checks: presence, positions, trucks, chat, placing, house race, animal kill and carcass, passenger seat and GPS rule, effects, voice, police, roulette, poker with hidden cards, raid, profile after reconnect). See `scripts/mp_test.gd`.
 - **Manual multiplayer on one PC:** `tools/start_server.bat`, then start the game twice and connect to `127.0.0.1` with different names.
 - **Logs:** `%APPDATA%\Godot\app_userdata\Saint-Leonard\logs\godot.log`.
 
+**Feature tests** (all after `--`, with a window): `--trailertest`, `--housetest`, `--gasthaustest`, `--trophytest`, `--wardrobetest`. Menu screenshots: `--showmenu=figure|lobby|multi --menuwait=2 --shot=file.png`. Lobby flow with a running server: two clients with `--showmenu=lobbyjoin --join=127.0.0.1 --name=Anna`. Before the multiplayer test, make sure no other server holds port 24680, otherwise the test server cannot start and every check fails.
+
 ---
 
-## 8. Status against the brief (2026-11-24)
+## 8. Status against the brief (2026-11-25)
 
 **Stage 1: done (first version)**
 - Real map with forests, paved roads, dirt and mountain trails; southern mountains added.
@@ -175,13 +177,22 @@ The console executable is `Godot_v4.7.2-stable_win64_console.exe` (shown as `<go
 **Stage 3: done (first version)**
 - Host, join and dedicated server with persistent world and profiles; synced players, trucks, animals, placed objects and houses; passenger seats and truck bed; passenger-only GPS; proximity voice chat and group radio.
 
+**Added after the first version (2026-11-25)**
+- Trailer for the pickup with hitch, cargo and straps (`scripts/vehicles/trailer.gd`).
+- House interiors with upper floor, stairs, built-in chest and more furniture (`scripts/build/house_builder.gd`, `scripts/ui/chest_menu.gd`).
+- Enterable Gasthaus Pirtscher with bar, tables and regulars (`scripts/world/gasthaus.gd`) and a trophy wall for big antlers and rare animals (`scripts/world/trophy_board.gd`).
+- New title screen (your character on a rock above the village at sunset), logo and game icon (`assets/ui`, drawn by `tools/make_logo.tscn`).
+- Character editor (categories left, mirror in the middle, Done and Cancel bottom right) and an outfit system: a recolor shader on the 3D model plus hats, hair, beards, glasses, jackets, vests and backpacks that follow the head and body bones (`scripts/player/outfit.gd`). Work clothes at the Bauhaus, casual clothes at the supermarket, hide and leather gear at the workbench.
+- Multiplayer lobby in front of the Gasthaus: players stand in a row, Ready button, big Play button, shared countdown once everyone is ready.
+- Release builds for itch.io and a Raspberry Pi server service (`docs/RELEASE.md`).
+- Debug launch options only work in the editor and in debug builds, so release builds have no cheats.
+
 **Not done or limited**
-- Police AI runs on each player's client (it only chases that player); everyone sees the cars.
-- No trailer; cargo straps are only an inventory item.
-- Spotify is not possible (no allowed API for games). The radio streams real Austrian stations from radio-browser.info instead.
-- House interiors are simple; Gasthaus Pirtscher is not enterable yet.
-- Character customisation is colours and hats only.
-- No itch.io build yet (needs export templates).
+- Police is paused on main (`PoliceManager.ENABLED = false`); the overhaul lives on `feature/police-overhaul` (#23).
+- Police AI runs on each player's client; everyone sees the cars (#6).
+- Spotify is not possible (no allowed API for games). The radio streams real Austrian stations instead.
+- The female model has her hair baked into the mesh, so only the hair colour changes.
+- The itch.io upload needs Marco's itch.io account; only the Windows export templates are installed.
 
 ---
 

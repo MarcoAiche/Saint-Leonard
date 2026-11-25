@@ -47,10 +47,7 @@ func setup(g: Node, w: WorldBuilder) -> void:
 	hero_root.name = "Figur"
 	add_child(hero_root)
 	# Ortsschilder der Karte stören im Titelbild
-	for l in world.find_children("*", "Label3D", true, false):
-		if (l as Label3D).fixed_size and (l as Label3D).visible:
-			l.visible = false
-			_hidden_labels.append(l)
+	hide_world_labels()
 	_find_spots()
 	_build_rock()
 	_build_mirror()
@@ -60,6 +57,19 @@ func setup(g: Node, w: WorldBuilder) -> void:
 
 
 ## Menü verlassen: Tageszeit und Wetter zurück (falls kein Spielstand sie neu setzt)
+## Ortsschilder der Karte und Namen von Figuren (Wirt, Stammgäste, Kellnerin) im Menü ausblenden.
+## Schilder an Gebäuden (nicht zur Kamera gedreht) bleiben. Später erzeugte Figuren erwischt
+## der nächste Aufruf (show_shot).
+func hide_world_labels() -> void:
+	for l in game.find_children("*", "Label3D", true, false):
+		var lbl := l as Label3D
+		if not lbl.visible or is_ancestor_of(lbl):
+			continue
+		if lbl.fixed_size or lbl.billboard != BaseMaterial3D.BILLBOARD_DISABLED:
+			lbl.visible = false
+			_hidden_labels.append(lbl)
+
+
 func _exit_tree() -> void:
 	for l in _hidden_labels:
 		if is_instance_valid(l):
@@ -251,6 +261,7 @@ func _place_hero() -> void:
 
 func show_shot(name: String, instant := false) -> void:
 	shot = name
+	hide_world_labels()
 	_place_hero()
 	if _truck:
 		_truck.visible = name == "lobby"
