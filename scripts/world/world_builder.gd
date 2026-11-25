@@ -11,10 +11,10 @@ extends Node3D
 @export var baked_path := "res://data/world_baked.scn"
 @export var show_labels := true
 
-const BUILD_VERSION := 8
+const BUILD_VERSION := 9
 const MAP_SCALE := 1.7
 ## Gebäude, die das Spiel selbst (begehbar) nachbaut: Feuerwehrhaus Korpitsch
-const SKIP_BUILDINGS := [424764105]
+const SKIP_BUILDINGS := [424764105, 282883314]  # Feuerwehrhaus, Gasthaus Pirtscher (eigene Modelle)
 const CHUNK := 250.0
 const C_GRASS := Color(0.40, 0.58, 0.26)
 const KIND_COLORS := {

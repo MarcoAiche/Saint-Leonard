@@ -202,6 +202,8 @@ func _ready() -> void:
 			Input.parse_input_event(up)
 			await get_tree().process_frame
 			print("Taste %s -> Hand: %s, Zigaretten: %d, Rauchzeit %.0f, Menüs offen: %s" % [OS.get_keycode_string(k), game.player.hand.slot, GameState.count("cigarettes"), GameState.smoke_time, game.hud.menus_open()])
+	if args.has("gasthaustest"):
+		await _gasthaus_test(game)
 	if args.has("selftest"):
 		await _selftest(game)
 	if args.has("aim"):
@@ -225,6 +227,26 @@ func _ready() -> void:
 
 
 ## Sucht Knoten mit ungültiger Position (NaN) und meldet sie einmal
+## Gasthaus Pirtscher: von der Straße durch die Tür in die Gaststube gehen
+func _gasthaus_test(game: Game) -> void:
+	var g: Gasthaus = game.gasthaus
+	if g == null:
+		push_error("Gasthaus fehlt")
+		return
+	var hz := g.size.y * 0.5
+	var outside := g.global_transform * Vector3(0, 0, hz + 3.0)
+	print("Gasthaus bei %s, Größe %s, Boden Tür %.2f / Haus %.2f" % [g.global_position, g.size, game.world.height_at(outside.x, outside.z), g.global_position.y])
+	game.player.global_position = Vector3(outside.x, game.world.height_at(outside.x, outside.z) + 0.5, outside.z)
+	game.player.reset_physics_interpolation()
+	game.rig.yaw = g.rotation.y
+	await get_tree().create_timer(0.5).timeout
+	Input.action_press("move_forward")
+	await get_tree().create_timer(3.5).timeout
+	Input.action_release("move_forward")
+	await get_tree().create_timer(0.3).timeout
+	var local := g.global_transform.affine_inverse() * game.player.global_position
+	print("Spieler lokal im Gasthaus: %s -> %s" % [local, "drinnen" if absf(local.z) < hz - 0.3 and absf(local.x) < g.size.x * 0.5 else "DRAUSSEN"])
+
 func _nan_watch(game: Node) -> void:
 	var seen := {}
 	while is_instance_valid(game):
