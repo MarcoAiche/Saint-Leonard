@@ -87,6 +87,40 @@ func _ready() -> void:
 	if "--server" in OS.get_cmdline_user_args() or OS.has_feature("dedicated_server"):
 		mode = "server"
 		_load_server_config()
+	# Fenster schließen: erst speichern und vom Server trennen (sonst stürzt Godot beim
+	# Beenden mit offener ENet-Verbindung ab)
+	get_tree().set_auto_accept_quit(false)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		quit_game()
+
+
+## Spiel beenden: Einzelspieler speichern, Mehrspieler Profil an den Server schicken und trennen
+func quit_game() -> void:
+	if game and game.get("started") and not is_client():
+		GameState.save_game()
+	await leave_gracefully()
+	# Alles anhalten und die große Welt (Gelände, Bäume, Kollisionen) selbst abbauen, bevor
+	# Godot herunterfährt; sonst stürzt Godot ohne Fenster beim Beenden oft ab (Issue #2)
+	await get_tree().process_frame
+	if game and is_instance_valid(game):
+		game.process_mode = Node.PROCESS_MODE_DISABLED
+		for n in game.find_children("*", "Node", true, false):
+			n.process_mode = Node.PROCESS_MODE_DISABLED
+		var w: Node = game.get("world")
+		if w and is_instance_valid(w):
+			w.free()
+	for i in 3:
+		await get_tree().process_frame
+	if DisplayServer.get_name() == "headless":
+		# Ohne Fenster (Server, Test-Clients): alles ist gespeichert und getrennt. Godots eigener
+		# Abbau stürzt dort trotzdem manchmal ab, deshalb den Prozess direkt beenden (Issue #2).
+		print("Beendet.")
+		OS.kill(OS.get_process_id())
+		return
+	get_tree().quit()
 
 
 ## Server-Einstellungen: user://server.cfg, Startparameter überschreiben sie

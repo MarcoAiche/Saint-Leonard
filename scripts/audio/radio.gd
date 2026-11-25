@@ -55,7 +55,6 @@ func _ready() -> void:
 	add_child(_second)
 	finished.connect(_on_chunk_done)
 	_second.finished.connect(_on_chunk_done)
-	_fetch_stations()
 
 
 func _total() -> int:
@@ -64,6 +63,8 @@ func _total() -> int:
 
 ## Nächster Sender; gibt den Namen für die Anzeige zurück
 func next_station() -> String:
+	# Senderliste erst beim ersten Einschalten laden (nicht bei jedem Pickup, der erscheint)
+	_fetch_stations()
 	station = (station + 1) % _total()
 	_stop_all()
 	if station == 0:
@@ -106,11 +107,23 @@ func _stop_all() -> void:
 
 # ------------------------------------------------------------------ Senderliste
 
+var _req: HTTPRequest
+
+
+## Beim Entfernen offene Verbindungen schließen (laufende TLS-Anfragen ließen Godot beim Beenden abstürzen)
+func _exit_tree() -> void:
+	if is_instance_valid(_req):
+		_req.cancel_request()
+		_fetching = false
+	_http = null
+
+
 func _fetch_stations() -> void:
-	if _fetching or not online.is_empty():
+	if _fetching or not online.is_empty() or DisplayServer.get_name() == "headless":
 		return
 	_fetching = true
 	var req := HTTPRequest.new()
+	_req = req
 	req.timeout = 10.0
 	add_child(req)
 	var hosts := API_HOSTS.duplicate()

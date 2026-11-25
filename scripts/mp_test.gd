@@ -216,7 +216,10 @@ func run() -> void:
 	var pol := 0
 	for id in game.remote_police:
 		pol += game.remote_police[id].size()
-	check(pol > 0, "sieht Polizeiautos des anderen (%d)" % pol)
+	if PoliceManager.ENABLED:
+		check(pol > 0, "sieht Polizeiautos des anderen (%d)" % pol)
+	else:
+		print("MPTEST %s: Polizei ist abgeschaltet (PoliceManager.ENABLED), Prüfung übersprungen" % role)
 
 	# 8. Roulette: gemeinsame Runde, gleiches Ergebnis
 	game.player.global_position = game.hall.door + Vector3.UP * 0.5
@@ -241,7 +244,7 @@ func run() -> void:
 	check(GameState.player_name in names and other in names, "beide am Pokertisch: %s" % [names])
 	var seen_cards := []
 	var t3 := 0.0
-	while t3 < 45.0 and seen_cards.is_empty() or t3 < 8.0:
+	while t3 < 50.0:  # beide spielen die ganze Zeit mit, sonst wartet der Tisch auf einen
 		var v: Dictionary = game.casino.poker_view
 		var ps: Array = v.get("players", [])
 		var me := -1
@@ -264,12 +267,12 @@ func run() -> void:
 	check(seen_cards.size() == 2, "eigene Karten sichtbar: %s" % [seen_cards.map(func(c): return PokerGame.card_name(c))])
 	var street := int(game.casino.poker_view.get("street", -1))
 	check(street == 4 or their_cards.is_empty() or their_cards[0] < 0, "Karten von %s verdeckt (außer beim Showdown)" % other)
-	await at(140.0)
+	await at(155.0)
 	if role == "a":
 		Net.send_chat("!razzia")
-	await at(144.0)
+	await at(159.0)
 	check(game.casino.raid_t > 0.0, "Razzia beim Spieler angekommen (noch %.0f s)" % game.casino.raid_t)
-	while game.casino.raid_t > 0.0 and _now() - _t0 < 175.0:
+	while game.casino.raid_t > 0.0 and _now() - _t0 < 190.0:
 		await tree.process_frame
 	await tree.create_timer(0.5).timeout
 	print("MPTEST %s: nach Razzia bei %s, im Feuerwehrhaus: %s, Zeit %.0f s" % [role, game.player.global_position.round(), game.hall.inside(game.player.global_position), _now() - _t0])
