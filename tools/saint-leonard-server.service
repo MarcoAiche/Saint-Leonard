@@ -1,0 +1,18 @@
+# systemd-Dienst für den Saint-Leonard-Server (Raspberry Pi oder anderer Linux-Rechner).
+# Wird von install_pi_server.sh nach /etc/systemd/system/ kopiert.
+[Unit]
+Description=Saint Leonard Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=saintleonard
+WorkingDirectory=/opt/saint-leonard
+# Optionen: --port=24680 --password=geheim --name="Mein Server" --max=16
+ExecStart=/opt/saint-leonard/saint_leonard_server --headless -- --server
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
