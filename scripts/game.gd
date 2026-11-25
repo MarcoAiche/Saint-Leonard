@@ -146,9 +146,13 @@ func _on_net_disconnected_menu(reason: String) -> void:
 
 func _open_menu() -> void:
 	if menu_stage and is_instance_valid(menu_stage):
+		remove_child(menu_stage)
 		menu_stage.queue_free()
+		menu_stage = null
 	if menu and is_instance_valid(menu):
+		remove_child(menu)
 		menu.queue_free()
+		menu = null
 	# Hintergrund fürs Menü: 3D-Bühne (Figur auf dem Felsen, Spiegel, Lobby vor dem Gasthaus)
 	menu_stage = MenuStage.new()
 	menu_stage.name = "Menuebuehne"
@@ -201,7 +205,15 @@ func _return_to_menu() -> void:
 	for node in get_tree().get_nodes_in_group("carcass"):
 		if is_instance_valid(node):
 			node.queue_free()
+	for uid in placed_nodes.keys():
+		var pn: Node3D = placed_nodes[uid]
+		if is_instance_valid(pn):
+			interactions.remove_node(pn)
+			pn.queue_free()
+	placed_nodes.clear()
 	if spawner:
+		spawner.animals.clear()
+		spawner.legend_wanted = false
 		for ch in spawner.get_children():
 			ch.queue_free()
 		spawner.players.clear()
@@ -220,7 +232,7 @@ func _on_menu_start(mode: String, address: String, slot: String, new_game: bool,
 			if new_game or not GameState.load_game():
 				GameState.reset_new_game()
 				GameState.slot_title = title if new_game else "Einzelspieler"
-				GameState.save_game()
+				GameState.save_game(true)
 		"localserver", "client":
 			if mode == "localserver":
 				var started_err := start_local_server()

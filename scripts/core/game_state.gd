@@ -13,6 +13,7 @@ signal about_to_save
 
 const SAVE_DIR := "user://saves"
 const SAVE_SCHEMA := 2
+static var save_dir := SAVE_DIR
 const DAY_MINUTES := 24.0  # ein Spieltag dauert 24 echte Minuten
 const MAG_SIZE := 5
 
@@ -301,7 +302,7 @@ func _debug_active() -> bool:
 
 
 func _slot_dir(s := slot) -> String:
-	return SAVE_DIR.path_join(s)
+	return save_dir.path_join(s)
 
 
 static func _write_json_atomic(path: String, data: Dictionary) -> bool:
@@ -341,8 +342,12 @@ static func _v3_from_arr(v) -> Vector3:
 	return Vector3.INF
 
 
-func save_game() -> void:
+func save_game(force := false) -> void:
 	if (_debug_active() and not Net.is_dedicated()) or Net.is_client():
+		return
+	if slot.is_empty():
+		return
+	if not force and not Net.is_dedicated() and (Net.game == null or Net.game.get("started") != true):
 		return
 	about_to_save.emit()
 	DirAccess.make_dir_recursive_absolute(_slot_dir())
@@ -370,43 +375,52 @@ func save_game() -> void:
 	_write_json_atomic(_slot_dir().path_join("player_save.json"), p_data)
 	_write_json_atomic(_slot_dir().path_join("world_save.json"), w_data)
 	# Meta-Index für bestehende Spielstand-Liste
-	_write_json_atomic("%s/%s.json" % [SAVE_DIR, slot], {schema = SAVE_SCHEMA, meta = meta})
+	_write_json_atomic("%s/%s.json" % [save_dir, slot], {schema = SAVE_SCHEMA, meta = meta})
 
 
 func load_game() -> bool:
+	if slot.is_empty():
+		return false
 	var p_save := _read_json_safe(_slot_dir().path_join("player_save.json"))
 	var w_save := _read_json_safe(_slot_dir().path_join("world_save.json"))
 	if not p_save.is_empty() or not w_save.is_empty():
 		if not p_save.is_empty():
-			apply_profile(p_save.get("profile", {}))
+			var prof = p_save.get("profile", {})
+			if typeof(prof) == TYPE_DICTIONARY:
+				apply_profile(prof)
 			player_pos = _v3_from_arr(p_save.get("player_pos", null))
 			player_rot_y = float(p_save.get("player_rot_y", 0.0))
 		if not w_save.is_empty():
-			apply_world(w_save.get("world", {}))
+			var wr = w_save.get("world", {})
+			if typeof(wr) == TYPE_DICTIONARY:
+				apply_world(wr)
 			var v = w_save.get("vehicles", {})
 			vehicles_state = v if typeof(v) == TYPE_DICTIONARY else {}
 			var da = w_save.get("dead_animals", [])
 			dead_animals = da if typeof(da) == TYPE_ARRAY else []
 			police_heat = float(w_save.get("police_heat", 0.0))
-			if w_save.has("profiles"):
+			if w_save.has("profiles") and typeof(w_save.profiles) == TYPE_DICTIONARY:
 				Net.profiles = w_save.profiles
-		var m: Dictionary = p_save.get("meta", w_save.get("meta", {}))
+		var pm = p_save.get("meta", {})
+		var wm = w_save.get("meta", {})
+		var m: Dictionary = pm if (typeof(pm) == TYPE_DICTIONARY and not pm.is_empty()) else (wm if typeof(wm) == TYPE_DICTIONARY else {})
 		slot_title = str(m.get("title", slot))
 		playtime = float(m.get("playtime", 0.0))
 		return true
 	# Fallback auf älteres Einzel-Save
-	var p := "%s/%s.json" % [SAVE_DIR, slot]
+	var p := "%s/%s.json" % [save_dir, slot]
 	var d := _read_json_safe(p)
 	if d.is_empty():
 		return false
-	if d.has("profile"):
-		apply_profile(d.get("profile", {}))
-	if d.has("world"):
-		apply_world(d.get("world", {}))
-	var m_leg: Dictionary = d.get("meta", {})
-	slot_title = str(m_leg.get("title", slot))
-	playtime = float(m_leg.get("playtime", 0.0))
-	if d.has("profiles"):
+	if d.has("profile") and typeof(d.profile) == TYPE_DICTIONARY:
+		apply_profile(d.profile)
+	if d.has("world") and typeof(d.world) == TYPE_DICTIONARY:
+		apply_world(d.world)
+	var m_leg = d.get("meta", {})
+	if typeof(m_leg) == TYPE_DICTIONARY:
+		slot_title = str(m_leg.get("title", slot))
+		playtime = float(m_leg.get("playtime", 0.0))
+	if d.has("profiles") and typeof(d.profiles) == TYPE_DICTIONARY:
 		Net.profiles = d.profiles
 	return true
 
@@ -415,7 +429,7 @@ func load_game() -> bool:
 static func list_saves() -> Array:
 	var out := []
 	var seen := {}
-	var dir := DirAccess.open(SAVE_DIR)
+	var dir := DirAccess.open(save_dir)
 	if dir == null:
 		return out
 	for f in dir.get_files():
@@ -424,26 +438,36 @@ static func list_saves() -> Array:
 		var sname := f.get_basename()
 		if seen.has(sname):
 			continue
-		var d = JSON.parse_string(FileAccess.get_file_as_string(SAVE_DIR.path_join(f)))
+		var d = JSON.parse_string(FileAccess.get_file_as_string(save_dir.path_join(f)))
 		if typeof(d) != TYPE_DICTIONARY:
 			continue
 		seen[sname] = true
-		var m: Dictionary = d.get("meta", {})
+		var m = d.get("meta", {})
+		if typeof(m) != TYPE_DICTIONARY:
+			m = {}
 		out.append({slot = sname, title = m.get("title", sname), player = m.get("player", "?"),
 			day = int(m.get("day", 1)), money = int(m.get("money", 0)), chapter = int(m.get("chapter", 1)), saved = str(m.get("saved", "")),
-			time = FileAccess.get_modified_time(SAVE_DIR.path_join(f))})
+			time = FileAccess.get_modified_time(save_dir.path_join(f))})
 	out.sort_custom(func(a, b): return a.time > b.time)
 	return out
 
 
+static func _remove_dir_recursive(path: String) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		return
+	for sub in d.get_directories():
+		_remove_dir_recursive(path.path_join(sub))
+	for f in d.get_files():
+		DirAccess.remove_absolute(path.path_join(f))
+	DirAccess.remove_absolute(path)
+
+
 static func delete_save(s: String) -> void:
-	DirAccess.remove_absolute("%s/%s.json" % [SAVE_DIR, s])
-	var sdir := SAVE_DIR.path_join(s)
-	var d := DirAccess.open(sdir)
-	if d:
-		for f in d.get_files():
-			DirAccess.remove_absolute(sdir.path_join(f))
-		DirAccess.remove_absolute(sdir)
+	if s.is_empty():
+		return
+	DirAccess.remove_absolute("%s/%s.json" % [save_dir, s])
+	_remove_dir_recursive(save_dir.path_join(s))
 
 
 static func new_slot_name(title: String) -> String:
