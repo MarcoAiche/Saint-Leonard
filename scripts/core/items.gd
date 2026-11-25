@@ -41,6 +41,7 @@ const ITEMS := {
 	"trailcam": {name = "Wildkamera", kind = "placeable", price = 90, shops = ["bauhaus"]},
 	"campfire": {name = "Feuerstelle", kind = "placeable", price = 15, shops = ["bauhaus", "gas"]},
 	"straps": {name = "Spanngurte", kind = "tool", price = 20, shops = ["bauhaus"]},
+	"trailer": {name = "Pickup-Anhänger", kind = "vehicle", price = 1500, shops = ["bauhaus"]},
 	"crate": {name = "Festkiste (Bier)", kind = "cargo", price = 30, shops = ["super"]},
 	# Möbel
 	"table": {name = "Tisch", kind = "furniture", price = 60, shops = ["bauhaus"]},

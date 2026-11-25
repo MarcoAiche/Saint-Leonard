@@ -357,7 +357,7 @@ func reset_new_game() -> void:
 	health = 100.0
 	stamina = 100.0
 	bac = 0.0
-	truck = {paint = 0, upgrades = {}, fuel = 70.0, damage = 0.0, cargo = []}
+	truck = {paint = 0, upgrades = {}, fuel = 70.0, damage = 0.0, cargo = [], trailer = false}
 	house = -1
 	furniture = []
 	story = {chapter = 1, step = 0, done = false}

@@ -36,6 +36,8 @@ var house_nodes := {}  # Bauplatz -> Node3D
 var remote_players := {}  # peer id -> RemotePlayer
 var remote_trucks := {}  # peer id -> Truck
 var remote_police := {}  # peer id -> Array[PoliceCar]
+var trailer: Trailer  # eigener Anhänger (falls gekauft)
+var remote_trailers := {}  # peer id -> Trailer
 var net_stats := {}  # Zähler für Tests: empfangene Effekte, Stimme
 var _placing := ""
 var _ghost: Node3D
@@ -289,6 +291,9 @@ func _start_game() -> void:
 	add_child(car)
 	car.place_at(sp.car_pos, sp.car_dir)
 	car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
+	interactions.add(Truck.BED_SLOTS[0] + Vector3(0.45, 0.6, -0.4), 2.6, func(): return "Ladung lösen" if car.strapped else "Ladung festzurren", func(): _toggle_straps(car), func(): GameState.has("straps") and seat == "", car)
+	if GameState.truck.get("trailer", false):
+		_spawn_trailer()
 
 	rig = CameraRig.new()
 	rig.name = "Kamera"
@@ -564,6 +569,24 @@ func _nearest_carcass(r: float) -> Carcass:
 
 
 func _cargo_action() -> void:
+	if trailer and player.carrying and trailer.global_position.distance_to(player.global_position) < 3.5 and trailer.has_space():
+		var tn := player.carrying
+		player.carrying = null
+		trailer.load_cargo(tn)
+		if tn is Carcass:
+			Net.carcass_removed((tn as Carcass).net_id)
+		hud.toast("Auf den Anhänger geladen")
+		return
+	if trailer and not player.carrying and _nearest_carcass(2.8) == null and trailer.global_position.distance_to(player.global_position) < 3.5 and not trailer.cargo.is_empty():
+		var un := trailer.unload_last()
+		trailer.remove_child(un)
+		add_child(un)
+		un.scale = Vector3.ONE
+		if un is Carcass:
+			player.carrying = un
+		else:
+			un.global_position = player.global_position + player.facing * 1.5
+		return
 	if player.carrying:
 		if car.global_position.distance_to(player.global_position) < 5.0 and car.has_space():
 			var n := player.carrying
@@ -687,6 +710,10 @@ func truck_near(p: Vector3, r: float) -> bool:
 
 
 func truck_has_game_near(p: Vector3, r: float) -> bool:
+	if trailer and trailer.global_position.distance_to(p) < r:
+		for n in trailer.cargo:
+			if n is Carcass:
+				return true
 	if not truck_near(p, r):
 		return false
 	for n in car.cargo:
@@ -698,13 +725,17 @@ func truck_has_game_near(p: Vector3, r: float) -> bool:
 func sell_truck_cargo() -> void:
 	var total := 0
 	var count := 0
-	for n in car.cargo.duplicate():
-		if n is Carcass:
-			total += (n as Carcass).sell_value()
-			count += 1
-			car.cargo.erase(n)
-			Net.carcass_removed(n.net_id)
-			n.queue_free()
+	var holders: Array = [car]
+	if trailer:
+		holders.append(trailer)
+	for h in holders:
+		for n in h.cargo.duplicate():
+			if n is Carcass:
+				total += (n as Carcass).sell_value()
+				count += 1
+				h.cargo.erase(n)
+				Net.carcass_removed(n.net_id)
+				n.queue_free()
 	GameState.add_money(total)
 	hud.toast("%d Stück Wild verkauft: +%d €" % [count, total], 3.5)
 	missions.event("sold_carcass")
@@ -760,7 +791,53 @@ func open_shop(id: String) -> void:
 	Menus.shop(self, id)
 
 
+## Eigenen Anhänger hinter den Pickup stellen
+func _spawn_trailer() -> void:
+	if trailer:
+		return
+	trailer = Trailer.new()
+	trailer.name = "Anhaenger"
+	trailer.world = world
+	trailer.process_mode = Node.PROCESS_MODE_PAUSABLE
+	add_child(trailer)
+	var back: Vector3 = car.global_position - car.global_basis.z * 7.0
+	back.y = world.height_at(back.x, back.z) + 0.8
+	trailer.global_transform = Transform3D(car.global_basis.orthonormalized(), back)
+	trailer.reset_physics_interpolation()
+	trailer.cargo_lost.connect(func(_n): hud.toast("Ladung vom Anhänger gefallen! (Spanngurte)", 3.0))
+	interactions.add(Trailer.HITCH + Vector3(0, 0.4, 0), 3.0, func(): return "Anhänger abkuppeln" if trailer.towed_by else "Anhänger ankuppeln",
+		func(): _toggle_hitch(), func(): seat == "" and (trailer.towed_by != null or trailer.can_couple(car)), trailer)
+	interactions.add(Vector3(0, 1.0, -0.4), 2.4, func(): return "Ladung lösen" if trailer.strapped else "Ladung festzurren", func(): _toggle_straps(trailer), func(): GameState.has("straps") and seat == "", trailer)
+
+
+func _toggle_hitch() -> void:
+	if trailer.towed_by:
+		trailer.uncouple()
+		hud.toast("Anhänger abgekuppelt", 1.5)
+	elif trailer.can_couple(car):
+		trailer.couple(car)
+		Sfx.play_3d(trailer, Sfx.door(), -2.0, 1.4)
+		hud.toast("Anhänger angekuppelt", 1.5)
+
+
+func _toggle_straps(v: Node3D) -> void:
+	v.set_strapped(not v.strapped)
+	Sfx.play_3d(v, Sfx.click(), -4.0, 0.7)
+	hud.toast("Ladung festgezurrt" if v.strapped else "Gurte gelöst", 1.5)
+
+
 func on_bought(item: String, _shop: String) -> void:
+	if item == "trailer":
+		GameState.take("trailer")
+		if GameState.truck.get("trailer", false):
+			GameState.add_money(int(Items.info("trailer").price))
+			hud.toast("Du hast schon einen Anhänger")
+			return
+		GameState.truck.trailer = true
+		_spawn_trailer()
+		set_waypoint(Vector2(trailer.global_position.x, trailer.global_position.z))
+		hud.toast("Der Anhänger steht hinter deinem Pickup", 3.0)
+		return
 	missions.event("bought", {id = item})
 	if item in ["sniper", "pistol", "assault_rifle"]:
 		player.hand.select(item)
@@ -1458,7 +1535,13 @@ func send_net_state() -> void:
 	var cargo := []
 	for n in car.cargo:
 		cargo.append(n.species if n is Carcass else str(n.get_meta("kind", "crate")))
-	Net.vstate.rpc(car.global_transform, car.linear_velocity, {paint = GameState.truck.paint, up = GameState.truck.upgrades.keys(), lights = car.lights_on, cargo = cargo})
+	var look := {paint = GameState.truck.paint, up = GameState.truck.upgrades.keys(), lights = car.lights_on, cargo = cargo}
+	if trailer:
+		var tcargo := []
+		for n in trailer.cargo:
+			tcargo.append(n.species if n is Carcass else str(n.get_meta("kind", "crate")))
+		look.trailer = [trailer.global_transform, tcargo, trailer.strapped]
+	Net.vstate.rpc(car.global_transform, car.linear_velocity, look)
 
 
 ## Eigene Polizeiautos an die anderen (sie sehen Streifen und Verfolgungen)
@@ -1576,13 +1659,39 @@ func on_remote_truck(id: int, xf: Transform3D, vel: Vector3, look: Dictionary) -
 		tr.rebuild()
 		GameState.truck = mine
 	tr.set_lights(look.get("lights", false))
+	_remote_trailer(id, look.get("trailer", []))
 	var cargo_key := str(look.get("cargo", []))
 	if tr.get_meta("cargo", "") != cargo_key:
 		tr.set_meta("cargo", cargo_key)
 		tr.show_remote_cargo(look.get("cargo", []))
 
 
+## Anhänger eines anderen Spielers anzeigen
+func _remote_trailer(id: int, info: Array) -> void:
+	if info.is_empty():
+		if remote_trailers.has(id):
+			remote_trailers[id].queue_free()
+			remote_trailers.erase(id)
+		return
+	if not remote_trailers.has(id):
+		var t := Trailer.new()
+		t.puppet = true
+		t.world = world
+		add_child(t)
+		remote_trailers[id] = t
+	var tr: Trailer = remote_trailers[id]
+	tr.puppet_to(info[0])
+	if tr.get_meta("cargo", "") != str(info[1]):
+		tr.set_meta("cargo", str(info[1]))
+		tr.show_remote_cargo(info[1])
+	if tr.strapped != bool(info[2]):
+		tr.set_strapped(bool(info[2]))
+
+
 func _on_player_left(id: int) -> void:
+	if remote_trailers.has(id):
+		remote_trailers[id].queue_free()
+		remote_trailers.erase(id)
 	if remote_players.has(id):
 		Animal.threats.erase(remote_players[id])
 		spawner.players.erase(remote_players[id])
