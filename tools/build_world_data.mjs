@@ -45,6 +45,37 @@ const X0 = Math.floor((Math.min(...bx) - MARGIN) / STEP) * STEP;
 const Z0 = Math.floor((Math.min(...bz) - MARGIN) / STEP) * STEP;
 const NX = Math.ceil((Math.max(...bx) + MARGIN - X0) / STEP) + 1;
 const NZ = Math.ceil((Math.max(...bz) + MARGIN - Z0) / STEP) + 1;
+// Spielbereich + sichtbarer Rand: nur hier wachsen Bäume (das Raster ist ein Rechteck und reicht
+// bei der Villach-Erweiterung weit über die Grenze hinaus, z. B. in den Dobratsch-Wald)
+const NEAR_CELL = 25;
+const NNX = Math.ceil((NX * STEP) / NEAR_CELL) + 1, NNZ = Math.ceil((NZ * STEP) / NEAR_CELL) + 1;
+const nearMask = new Uint8Array(NNX * NNZ);
+{
+  const inside = (x, z) => {
+    let c = false;
+    for (let a = 0, b = border.length - 1; a < border.length; b = a++) {
+      const [xa, za] = border[a], [xb, zb] = border[b];
+      if ((za > z) !== (zb > z) && x < ((xb - xa) * (z - za)) / (zb - za) + xa) c = !c;
+    }
+    return c;
+  };
+  const segDist = (x, z) => {
+    let best = Infinity;
+    for (let a = 0, b = border.length - 1; a < border.length; b = a++) {
+      const [xa, za] = border[a], [xb, zb] = border[b];
+      const dx = xb - xa, dz = zb - za, l2 = dx * dx + dz * dz;
+      const t = l2 > 0 ? Math.min(1, Math.max(0, ((x - xa) * dx + (z - za) * dz) / l2)) : 0;
+      best = Math.min(best, Math.hypot(x - xa - t * dx, z - za - t * dz));
+    }
+    return best;
+  };
+  for (let j = 0; j < NNZ; j++)
+    for (let i = 0; i < NNX; i++) {
+      const x = X0 + i * NEAR_CELL, z = Z0 + j * NEAR_CELL;
+      nearMask[j * NNX + i] = inside(x, z) || segDist(x, z) < MARGIN + NEAR_CELL ? 1 : 0;
+    }
+}
+const nearPlay = (i, j) => nearMask[Math.floor((j * STEP) / NEAR_CELL) * NNX + Math.floor((i * STEP) / NEAR_CELL)] === 1;
 const [S, W] = toLatLon(X0, Z0 + (NZ - 1) * STEP);
 const [N, E] = toLatLon(X0 + (NX - 1) * STEP, Z0);
 
@@ -429,7 +460,7 @@ const sparse = new Set(["residential", "meadow", "grass", "cemetery"].map((k) =>
 for (let j = 0; j < NZ; j++)
   for (let i = 0; i < NX; i++) {
     const o = j * NX + i;
-    if (clear[o]) continue;
+    if (clear[o] || !nearPlay(i, j)) continue;
     const c = CLS[o];
     const p = c === forest ? 0.5 : c === scrub ? 0.18 : sparse.has(c) ? 0.012 : 0;
     if (rnd() >= p) continue;
