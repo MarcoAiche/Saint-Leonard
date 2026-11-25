@@ -27,6 +27,8 @@ var atv: ATV
 var rig: CameraRig
 var hud: Hud
 var menu: MainMenu
+var menu_stage: MenuStage
+var _wardrobe_cam: Camera3D
 var driving := false
 var seat := ""  # "" zu Fuß, sonst Sitz im eigenen oder fremden Fahrzeug
 var seat_truck: Vehicle = null
@@ -123,18 +125,26 @@ func _ready() -> void:
 		GameState.slot = saves[0].slot
 		GameState.load_game()
 	Settings.apply(get_tree())
+	MainMenu.load_figure()
+	# Hintergrund fürs Menü: 3D-Bühne (Figur auf dem Felsen, Spiegel, Lobby vor dem Gasthaus)
+	menu_stage = MenuStage.new()
+	menu_stage.name = "Menuebuehne"
+	add_child(menu_stage)
+	menu_stage.setup(self, world)
 	menu = MainMenu.new()
+	menu.stage = menu_stage
 	add_child(menu)
 	menu.start.connect(_on_menu_start)
 	menu.quit.connect(func(): Net.quit_game())
-	# Hintergrund fürs Menü: Kamera über dem Dorf
-	var cam := Camera3D.new()
-	cam.name = "Menuekamera"
-	add_child(cam)
-	cam.global_position = Vector3(-60, world.height_at(0, 0) + 45.0, 140)
-	cam.look_at(Vector3(150, world.height_at(150, -50), -80))
-	cam.far = 6000.0
-	cam.make_current()
+	menu.play_from_lobby.connect(_play_from_lobby)
+	menu.leave_lobby.connect(_leave_lobby)
+	Net.peers_changed.connect(func():
+		if menu and is_instance_valid(menu):
+			menu.refresh_lobby())
+	Net.disconnected.connect(func(reason):
+		if menu and is_instance_valid(menu) and not started:
+			menu.page_home()
+			menu.show_error("Verbindung getrennt: %s" % reason))
 
 
 func _on_menu_start(mode: String, address: String, slot: String, new_game: bool, keep_outfit := true) -> void:
@@ -176,12 +186,86 @@ func _on_menu_start(mode: String, address: String, slot: String, new_game: bool,
 		return
 	if keep_outfit:
 		GameState.outfit = outfit
+	# nur Kleidung, die man in diesem Spielstand auch besitzt
+	GameState.outfit = Outfit.sanitize(GameState.outfit)
+	if mode != "single" and menu:
+		# Mehrspieler: erst in die Lobby vor dem Gasthaus
+		Net.send_outfit()
+		Net.send_lobby_state("lobby", false)
+		menu.show_lobby()
+		return
+	_close_menu()
+	_start_game()
+
+
+func _close_menu() -> void:
 	if menu:
 		menu.queue_free()
-	if has_node("Menuekamera"):
-		$Menuekamera.queue_free()
+		menu = null
+	if menu_stage:
+		menu_stage.queue_free()
+		menu_stage = null
 	Settings.apply(get_tree())
+
+
+## Lobby: "Spielen" gedrückt oder alle bereit
+func _play_from_lobby() -> void:
+	if not Net.connected_ok():
+		menu.page_home()
+		menu.show_error("Keine Verbindung mehr zum Server")
+		return
+	_close_menu()
 	_start_game()
+
+
+func _leave_lobby() -> void:
+	Net.leave()
+	MainMenu.load_figure()
+	menu.page_home()
+
+
+## Kleiderschrank im Spiel: Kamera schaut die eigene Figur von vorne an, daneben der Figur-Editor
+func open_wardrobe() -> void:
+	if _wardrobe_cam or not player:
+		return
+	Menus.close_all(hud)
+	hud.visible = false
+	player.input_enabled = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var fwd := Vector3(player.facing.x, 0, player.facing.z).normalized()
+	if fwd.length() < 0.1:
+		fwd = Vector3(0, 0, 1)
+	var side := fwd.cross(Vector3.UP)
+	_wardrobe_cam = Camera3D.new()
+	add_child(_wardrobe_cam)
+	var eye := player.global_position + fwd * 5.0 + side * 0.9 + Vector3.UP * 1.6
+	_wardrobe_cam.look_at_from_position(eye, player.global_position + side * 0.9 + Vector3.UP * 1.1)
+	_wardrobe_cam.make_current()
+	player.model.rotation.y = atan2(fwd.x, fwd.z)
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	var ed := FigureEditor.new()
+	layer.add_child(ed)
+	ed.open(GameState.outfit)
+	ed.changed.connect(func(o):
+		GameState.outfit = o.duplicate()
+		player.rebuild_model()
+		player.model.rotation.y = atan2(fwd.x, fwd.z))
+	ed.rotate.connect(func(d): player.model.rotate_y(d))
+	ed.finished.connect(func(o, accepted):
+		GameState.outfit = o.duplicate()
+		player.rebuild_model()
+		if accepted:
+			Net.send_outfit()
+			hud.toast("Neu eingekleidet", 1.5)
+		layer.queue_free()
+		_wardrobe_cam.queue_free()
+		_wardrobe_cam = null
+		rig.camera.make_current()
+		hud.visible = true
+		player.input_enabled = true
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
 
 
 ## Startet einen Server auf diesem PC (eigener Prozess ohne Fenster)
@@ -279,6 +363,8 @@ func stand_up() -> void:
 
 func _start_game() -> void:
 	started = true
+	if Net.is_client():
+		Net.send_lobby_state("game", false)
 	hud.visible = true
 	var sp: Dictionary = landmarks.spawn
 	player = Player.new()
@@ -1077,10 +1163,11 @@ func _sleep() -> void:
 
 
 func wear(id: String) -> void:
-	match id:
-		"jacket": GameState.outfit.jacket = not GameState.outfit.get("jacket", false)
-		"hunter_hat": GameState.outfit.hat = "hunter_gams"
+	var msg := Outfit.wear(id)
 	player.rebuild_model()
+	Net.send_outfit()
+	if msg != "":
+		hud.toast(msg, 1.5)
 
 
 func decorate_pub_trophy() -> void:
@@ -1877,6 +1964,12 @@ func on_fx(kind: String, pos: Vector3) -> void:
 				GameState.damage(30.0)
 				player.knockdown(2.0, "BUMM!")
 	get_tree().create_timer(4.0).timeout.connect(n.queue_free)
+
+
+## Mitspieler hat sich umgezogen
+func on_peer_outfit(id: int) -> void:
+	if remote_players.has(id):
+		(remote_players[id] as RemotePlayer).set_outfit(Net.peers[id].outfit)
 
 
 func on_remote_player(id: int, pos: Vector3, yaw: float, pitch: float, flags: int, owner_id: int, s: String) -> void:

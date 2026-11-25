@@ -27,6 +27,9 @@ var _aiming_glb := false
 var hand_anchor: Node3D
 var _held_node: Node3D
 var _held_slot := ""
+## Kleidung am 3D-Modell: folgt Kopf- und Rumpfknochen (relativ zur Ruhelage)
+var _acc := {}  # Knochenname -> [Anker-Node, Knochenindex, Ruhelage (Modellraum)]
+const PALETTE_SHADER := preload("res://scripts/player/char_palette.gdshader")
 
 
 const REDNECK_PRESETS := {
@@ -68,6 +71,8 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	if _glb_root and _skeleton and is_inside_tree():
+		_update_acc()
 	if _glb_root and _skeleton and _hand_bone_idx >= 0 and is_inside_tree():
 		if _aiming_glb:
 			var rest_q := _skeleton.get_bone_rest(_hand_bone_idx).basis.get_rotation_quaternion()
@@ -106,6 +111,9 @@ func _build() -> void:
 			return
 	var shirt: Color = outfit.shirt
 	var skin: Color = outfit.skin
+	# Spielerfigur mit Kleiderschrank (Outfit): Hüte, Brillen, Bärte, Jacken kommen aus Outfit
+	var dressed: bool = outfit.has("top") and not outfit.get("uniform", false)
+	var o: Dictionary = Outfit.normalize(outfit) if dressed else {}
 	if outfit.uniform:
 		shirt = Color(0.20, 0.30, 0.50)
 	var body := CapsuleMesh.new()
@@ -115,14 +123,14 @@ func _build() -> void:
 	var gut := float(outfit.get("gut_belly", 0.35))
 	body_mesh.scale = Vector3(1.0 + gut * 0.28, 1.0, 1.0 + gut * 0.48)
 	body_mesh.position.z = gut * 0.05
-	if str(outfit.get("preset", "")) == "overalls":
+	if not dressed and str(outfit.get("preset", "")) == "overalls":
 		var bib := BoxMesh.new()
 		bib.size = Vector3(0.40, 0.46, 0.14)
 		_part(self, bib, outfit.pants, Vector3(0, 1.05, 0.20 + gut * 0.09))
 		var strap := BoxMesh.new()
 		strap.size = Vector3(0.08, 0.38, 0.08)
 		_part(self, strap, outfit.pants, Vector3(-0.14, 1.38, 0.18 + gut * 0.05))
-	if outfit.jacket:
+	if outfit.jacket and not dressed:
 		var jk := CapsuleMesh.new()
 		jk.radius = 0.32
 		jk.height = 0.8
@@ -171,16 +179,17 @@ func _build() -> void:
 	for x in [-0.1, 0.1]:
 		_eyes.append(_part(head, eye, Color(1, 1, 1), Vector3(x, 0.06, 0.22), false))
 		_part(head, pupil, Color(0.06, 0.06, 0.08), Vector3(x, 0.06, 0.28), false)
-	var moustache := BoxMesh.new()
-	moustache.size = Vector3(0.2, 0.04, 0.04)
-	_part(head, moustache, Color(0.35, 0.25, 0.15), Vector3(0, -0.12, 0.25), false)
+	if not dressed:
+		var moustache := BoxMesh.new()
+		moustache.size = Vector3(0.2, 0.04, 0.04)
+		_part(head, moustache, Color(0.35, 0.25, 0.15), Vector3(0, -0.12, 0.25), false)
 
 	var hc: Color = outfit.hat_color
-	if outfit.get("glasses", false):
+	if not dressed and outfit.get("glasses", false) is bool and outfit.get("glasses", false):
 		var sh := BoxMesh.new()
 		sh.size = Vector3(0.30, 0.07, 0.06)
 		_part(head, sh, Color(0.078, 0.078, 0.078), Vector3(0, 0.06, 0.27))  # #141414 Sunglasses
-	match str(outfit.hat):
+	match "" if dressed else str(outfit.hat):
 		"floppy":
 			var fbrim := CylinderMesh.new()
 			fbrim.top_radius = 0.45
@@ -238,17 +247,20 @@ func _build() -> void:
 			pb.size = Vector3(0.34, 0.03, 0.2)
 			_part(head, pb, Color(0.05, 0.05, 0.08), Vector3(0, 0.17, 0.28))
 
+	if dressed:
+		_dress_primitive(o, gut)
 	var leg := BoxMesh.new()
 	leg.size = Vector3(0.18, 0.72, 0.2)
 	var shoe := BoxMesh.new()
 	shoe.size = Vector3(0.2, 0.12, 0.3)
-	var pants: Color = Color(0.15, 0.18, 0.28) if outfit.uniform else outfit.pants
+	var pants: Color = Color(0.15, 0.18, 0.28) if outfit.uniform else (Outfit.pants_color(o) if dressed else outfit.pants)
+	var shoe_c: Color = o.shoes if dressed else Color(0.22, 0.16, 0.12)
 	for x in [-0.14, 0.14]:
 		var hip := Node3D.new()
 		hip.position = Vector3(x, 0.78, 0)
 		add_child(hip)
 		_part(hip, leg, pants, Vector3(0, -0.36, 0))
-		_part(hip, shoe, Color(0.22, 0.16, 0.12), Vector3(0, -0.72, 0.05))
+		_part(hip, shoe, shoe_c, Vector3(0, -0.72, 0.05))
 		legs.append(hip)
 
 	var arm := BoxMesh.new()
@@ -260,13 +272,34 @@ func _build() -> void:
 		var shoulder := Node3D.new()
 		shoulder.position = Vector3(x, 1.5, 0)
 		add_child(shoulder)
-		_part(shoulder, arm, shirt if not outfit.jacket else Color(0.45, 0.30, 0.18), Vector3(0, -0.3, 0))
+		var sleeve = Outfit.sleeve_color(o) if dressed else null
+		var arm_c: Color = sleeve if sleeve != null else (shirt if not outfit.jacket or dressed else Color(0.45, 0.30, 0.18))
+		_part(shoulder, arm, arm_c, Vector3(0, -0.3, 0))
 		_part(shoulder, hand, skin, Vector3(0, -0.64, 0))
 		arms.append(shoulder)
 	if arms.size() >= 2:
 		hand_anchor = Node3D.new()
 		hand_anchor.position = Vector3(0, -0.64, 0.06)
 		arms[1].add_child(hand_anchor)
+
+
+## Kleidung auf Simons Figur: Kopfteile sitzen im (skalierten) Kopf, Rumpfteile werden auf den
+## Rumpf (Kapsel, Bauch-Regler) gestreckt. Outfit rechnet in Maßen eines 0,54-m-Kopfes und eines
+## 0,34 x 0,30 m großen Rumpfes, daher die Umrechnung.
+func _dress_primitive(o: Dictionary, gut: float) -> void:
+	var hh := Node3D.new()
+	hh.name = "Kleidung_Kopf"
+	hh.position = Vector3(0, -0.275, -0.02)
+	head.add_child(hh)
+	Outfit.build_head(hh, o, false, render_layer, Outfit.SPHERE_FIT)
+	var bh := Node3D.new()
+	bh.name = "Kleidung_Rumpf"
+	var sx := 1.78 * (1.0 + gut * 0.28)
+	var sz := 1.78 * (1.0 + gut * 0.48)
+	bh.scale = Vector3(sx, 3.15, sz)
+	bh.position = Vector3(0, 0.675, gut * 0.05 - 0.02 * sz)
+	add_child(bh)
+	Outfit.build_body(bh, o, false, render_layer)
 
 
 func _build_glb(scene: PackedScene) -> void:
@@ -304,6 +337,74 @@ func _build_glb(scene: PackedScene) -> void:
 	head = Node3D.new()
 	head.position = Vector3(0, 1.08, 0)
 	add_child(head)
+	_dress_glb()
+
+
+## Farben (Haut, Oberteil, Hose, Haare, Schuhe) und Kleidungsteile für das 3D-Modell
+func _dress_glb() -> void:
+	var o := Outfit.normalize(outfit)
+	var female := str(o.get("gender", "male")) == "female"
+	for mi in _glb_root.find_children("*", "MeshInstance3D", true, false):
+		var mesh_inst := mi as MeshInstance3D
+		if mesh_inst.name != "Cube_003" or mesh_inst.mesh == null:
+			continue
+		var old := mesh_inst.mesh.surface_get_material(0) as StandardMaterial3D
+		var m := ShaderMaterial.new()
+		m.shader = PALETTE_SHADER
+		if old and old.albedo_texture:
+			m.set_shader_parameter("atlas", old.albedo_texture)
+		m.set_shader_parameter("col_skin", o.skin)
+		m.set_shader_parameter("col_shirt", o.shirt)
+		m.set_shader_parameter("col_pants", Color(0.42, 0.28, 0.16) if o.legs == "lederhose" else (Color(0.3, 0.3, 0.28) if o.legs == "work_pants" else o.pants))
+		m.set_shader_parameter("col_hair", o.hair_color)
+		m.set_shader_parameter("col_shoes", o.shoes)
+		m.set_shader_parameter("cell_hair", 7 if female else -1)
+		m.set_shader_parameter("cell_shoes", 1)
+		# Hose: unterer Teil des Rumpfes (Höhe im Modellraum -> Meshraum)
+		var to_mesh := (global_transform.affine_inverse() * mesh_inst.global_transform).affine_inverse() if is_inside_tree() else (_glb_root.transform * _rel_xf(mesh_inst)).affine_inverse()
+		m.set_shader_parameter("pants_y", (to_mesh * Vector3(0, 0.5 if female else 0.58, 0)).y)
+		mesh_inst.material_override = m
+	if _skeleton == null:
+		return
+	for bone in ["Head", "Body"]:
+		var idx := _skeleton.find_bone(bone)
+		if idx < 0:
+			continue
+		var anchor := Node3D.new()
+		anchor.name = "Kleidung_" + bone
+		add_child(anchor)
+		var holder := Node3D.new()
+		anchor.add_child(holder)
+		if bone == "Head":
+			Outfit.build_head(holder, o, female, render_layer)
+		else:
+			Outfit.build_body(holder, o, female, render_layer)
+		var rest := _bone_model_xf(_skeleton.get_bone_global_rest(idx))
+		_acc[bone] = [anchor, idx, rest]
+	_update_acc()
+
+
+## Transform eines Knotens relativ zum GLB-Wurzelknoten (vor dem Einfügen in den Baum)
+func _rel_xf(n: Node3D) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	var cur: Node = n
+	while cur and cur != _glb_root:
+		xf = (cur as Node3D).transform * xf if cur is Node3D else xf
+		cur = cur.get_parent()
+	return xf
+
+
+## Knochen-Transform (Skelettraum) -> Modellraum dieser Figur
+func _bone_model_xf(pose: Transform3D) -> Transform3D:
+	return _glb_root.transform * _rel_xf(_skeleton) * pose
+
+
+func _update_acc() -> void:
+	for bone in _acc:
+		var e: Array = _acc[bone]
+		var cur := _bone_model_xf(_skeleton.get_bone_global_pose(e[1]))
+		var rest: Transform3D = e[2]
+		(e[0] as Node3D).transform = Transform3D((cur.basis * rest.basis.inverse()).orthonormalized(), cur.origin)
 
 
 ## Hält ein Item/eine Waffe direkt an der rechten Hand (3rd-Person, NPCs, Mitspieler)

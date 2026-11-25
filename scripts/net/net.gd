@@ -15,6 +15,7 @@ signal disconnected(reason: String)
 signal player_joined(id: int, pname: String)
 signal player_left(id: int)
 signal chat(from: String, text: String)
+signal peers_changed  # Name, Kleidung oder Lobby-Status eines Mitspielers geändert
 
 const VERSION := "0.5"
 const PORT := 24680
@@ -24,7 +25,7 @@ const SERVER_CFG := "user://server.cfg"
 
 var mode := "single"  # single, client, server
 var profiles := {}  # Spielername -> Profil (nur Server)
-var peers := {}  # peer id -> {name, outfit}
+var peers := {}  # peer id -> {name, outfit, state ("lobby"/"game"), ready}
 var game: Node
 var server_name := "Saint Leonard"
 var password := ""
@@ -237,6 +238,7 @@ func _on_peer_disconnected(id: int) -> void:
 			GameState.notify("Mehrspieler", "%s hat das Spiel verlassen" % n)
 	peers.erase(id)
 	player_left.emit(id)
+	peers_changed.emit()
 	if is_server():
 		GameState.save_game()
 		if game and game.casino and game.casino.poker:
@@ -268,7 +270,7 @@ func _register(pname: String, outfit: Dictionary, version: String, pw: String) -
 			if multiplayer.multiplayer_peer:
 				(multiplayer.multiplayer_peer as ENetMultiplayerPeer).disconnect_peer(id))
 		return
-	peers[id] = {name = pname, outfit = outfit}
+	peers[id] = {name = pname, outfit = outfit, state = "lobby", ready = false}
 	var prof: Dictionary = profiles.get(pname, {})
 	var animals := []
 	if game and game.spawner:
@@ -301,6 +303,7 @@ func _welcome(pname: String, prof: Dictionary, world: Dictionary, all_peers: Dic
 	server_name = extra.get("server_name", "Saint Leonard")
 	peers = all_peers
 	connected.emit()
+	peers_changed.emit()
 	for id in peers:
 		if id != my_id():
 			player_joined.emit(id, peers[id].name)
@@ -315,8 +318,53 @@ func _welcome(pname: String, prof: Dictionary, world: Dictionary, all_peers: Dic
 func _peer_info(id: int, pname: String, outfit: Dictionary) -> void:
 	if id == my_id():
 		return
-	peers[id] = {name = pname, outfit = outfit}
+	peers[id] = {name = pname, outfit = outfit, state = "lobby", ready = false}
 	player_joined.emit(id, pname)
+	peers_changed.emit()
+
+
+# ------------------------------------------------------------------ Lobby und Kleidung
+
+## Eigene Kleidung geändert: Server und alle Mitspieler bekommen sie
+func send_outfit() -> void:
+	if is_client() and connected_ok():
+		_set_outfit.rpc_id(1, GameState._colors_out(GameState.outfit))
+
+
+## Lobby-Status: "lobby" (wartet, ready = bereit) oder "game" (spielt schon)
+func send_lobby_state(state: String, ready: bool) -> void:
+	if is_client() and connected_ok():
+		_set_state.rpc_id(1, state, ready)
+
+
+@rpc("any_peer", "reliable")
+func _set_outfit(outfit: Dictionary) -> void:
+	var id := multiplayer.get_remote_sender_id()
+	if not is_server() or not peers.has(id):
+		return
+	peers[id].outfit = outfit
+	_peer_update.rpc(id, peers[id])
+
+
+@rpc("any_peer", "reliable")
+func _set_state(state: String, ready: bool) -> void:
+	var id := multiplayer.get_remote_sender_id()
+	if not is_server() or not peers.has(id) or not state in ["lobby", "game"]:
+		return
+	peers[id].state = state
+	peers[id].ready = ready
+	if state == "game":
+		print("[Server] %s ist aus der Lobby ins Spiel gegangen" % peers[id].name)
+	_peer_update.rpc(id, peers[id])
+
+
+@rpc("authority", "reliable", "call_remote")
+func _peer_update(id: int, info: Dictionary) -> void:
+	var outfit_changed := not peers.has(id) or str(peers[id].get("outfit", {})) != str(info.get("outfit", {}))
+	peers[id] = info
+	if outfit_changed and game and game.has_method("on_peer_outfit"):
+		game.on_peer_outfit(id)
+	peers_changed.emit()
 
 
 # ------------------------------------------------------------------ laufender Abgleich

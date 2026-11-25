@@ -1,5 +1,5 @@
 extends Node
-## Entwickler-Helfer (Autoload). Nur aktiv mit Startparametern nach "--":
+## Entwickler-Helfer (Autoload). Nur im Editor bzw. in Debug-Builds aktiv, mit Startparametern nach "--":
 ##   --player=x,z           Spielfigur dorthin setzen
 ##   --drive                ins Auto einsteigen
 ##   --hold=aktion:sek,...  Tasten (Input-Aktionen) nacheinander gedrückt halten
@@ -20,6 +20,10 @@ var args := {}
 
 
 func _init() -> void:
+	# Test- und Debug-Startparameter (--money, --tp, --selftest ...) nur im Editor bzw. in
+	# Debug-Builds. Das ausgelieferte Spiel (Release-Export) ignoriert sie, damit niemand schummelt.
+	if not OS.is_debug_build():
+		return
 	for a in OS.get_cmdline_user_args():
 		var kv := a.trim_prefix("--").split("=", true, 1)
 		args[kv[0]] = kv[1] if kv.size() > 1 else ""
@@ -35,13 +39,25 @@ func _ready() -> void:
 	var game := get_tree().current_scene as Game
 	if game == null:
 		return
+	if args.get("showmenu") == "lobbyjoin":
+		await _lobby_test(game)
+		return
 	if args.has("showmenu"):
 		await get_tree().create_timer(1.5).timeout
-		if args.get("showmenu") == "saves":
-			game.menu.page_saves()
-		elif args.get("showmenu") == "settings":
-			game.menu.page_settings()
-		await get_tree().create_timer(0.5).timeout
+		match args.get("showmenu"):
+			"saves": game.menu.page_saves()
+			"settings": game.menu.page_settings()
+			"multi": game.menu.page_multi()
+			"figure": game.menu.page_figure("title")
+			"lobby":
+				# Lobby ohne Server: zwei erfundene Mitspieler
+				Net.peers = {
+					5: {name = "Anna", outfit = GameState._colors_out(Outfit.normalize({preset = "female", top = "hoodie", hat = "beanie", shirt = Color(0.78, 0.18, 0.14)})), state = "lobby", ready = true},
+					6: {name = "Bert", outfit = GameState._colors_out(Outfit.normalize({top = "hi_vis", hat = "work_helmet", beard = "full"})), state = "lobby", ready = false},
+					7: {name = "Sepp", outfit = GameState._colors_out(Outfit.normalize({top = "trachten", legs = "lederhose"})), state = "game", ready = false},
+				}
+				game.menu.show_lobby()
+		await get_tree().create_timer(float(args.get("menuwait", "0.5"))).timeout
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(args.shot)
 		get_tree().quit()
@@ -208,6 +224,8 @@ func _ready() -> void:
 		await _house_test(game)
 	if args.has("gasthaustest"):
 		await _gasthaus_test(game)
+	if args.has("wardrobetest"):
+		await _wardrobe_test(game)
 	if args.has("trophytest"):
 		await _trophy_test(game)
 	if args.has("selftest"):
@@ -283,6 +301,65 @@ func _trophy_test(game: Game) -> void:
 
 
 ## Sucht Knoten mit ungültiger Position (NaN) und meldet sie einmal
+## Lobby-Test: über das Menü verbinden, in der Lobby "Bereit" drücken; sind alle bereit, geht es
+## gemeinsam los (-- --showmenu=lobbyjoin --join=127.0.0.1 --name=Anna [--shot=lobby.png])
+func _lobby_test(game: Game) -> void:
+	await get_tree().create_timer(1.0).timeout
+	game.menu._name = args.get("name", "Tester")
+	game.menu._go("client", args.get("join", "127.0.0.1"), "", false)
+	var t := 0.0
+	while not game.menu._in_lobby and t < 15.0:
+		await get_tree().create_timer(0.25).timeout
+		t += 0.25
+	print("LOBBY verbunden: %s" % game.menu._in_lobby)
+	await get_tree().create_timer(float(args.get("readydelay", "4"))).timeout
+	print("LOBBY Spieler: %s" % str(game.menu.lobby_players().map(func(p): return "%s/%s/%s" % [p.name, p.state, p.ready])))
+	if args.has("shot"):
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(args.shot)
+	if not game.menu._in_lobby:
+		print("LOBBY nicht verbunden, Test abgebrochen")
+		await _quit()
+		return
+	game.menu._ready_btn.pressed.emit()
+	t = 0.0
+	while not game.started and t < 30.0:
+		await get_tree().create_timer(0.25).timeout
+		t += 0.25
+	print("LOBBY gestartet: %s nach %.1f s, Figur: %s/%s" % [game.started, t, GameState.outfit.get("hat"), GameState.outfit.get("top")])
+	await get_tree().create_timer(3.0).timeout
+	print("LOBBY Mitspieler im Spiel sichtbar: %d" % game.remote_players.size())
+	await _quit()
+
+
+## Kleidung: freischalten, anziehen, Kleiderschrank im Spiel (-- --wardrobetest [--shot=bild.png])
+func _wardrobe_test(game: Game) -> void:
+	print("KLEIDUNG Warnweste vorher frei: %s" % Outfit.unlocked("top", "hi_vis"))
+	GameState.give("hi_vis")
+	game.wear("hi_vis")
+	print("KLEIDUNG nach Anziehen: top=%s, frei=%s" % [GameState.outfit.top, Outfit.unlocked("top", "hi_vis")])
+	GameState.take("hi_vis")
+	print("KLEIDUNG nach Weglegen noch frei (Kleiderschrank): %s" % Outfit.unlocked("top", "hi_vis"))
+	var san := Outfit.sanitize({top = "fur_coat", hat = "fur_cap", legs = "lederhose"})
+	print("KLEIDUNG gesperrtes wird ersetzt: %s/%s/%s" % [san.top, san.hat, san.legs])
+	game.open_wardrobe()
+	await get_tree().create_timer(0.5).timeout
+	var ed: FigureEditor = game.find_children("*", "FigureEditor", true, false)[0]
+	var o := ed.outfit.duplicate()
+	o.hat = "cap"
+	o.beard = "full"
+	o.shirt = Outfit.PALETTES.shirt[2]
+	ed.outfit = o
+	ed.changed.emit(o)
+	ed._select("hat")
+	await get_tree().create_timer(1.0).timeout
+	if args.has("shot"):
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(args.shot.get_basename() + "_schrank.png")
+	ed.finished.emit(ed.outfit, true)
+	await get_tree().process_frame
+	print("KLEIDUNG übernommen: hat=%s beard=%s, Kamera zurück: %s" % [GameState.outfit.hat, GameState.outfit.beard, game.rig.camera.current])
+
 func _nan_watch(game: Node) -> void:
 	var seen := {}
 	while is_instance_valid(game):

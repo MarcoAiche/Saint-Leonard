@@ -209,6 +209,8 @@ static func inventory(game: Node) -> void:
 				GameState.give(out_id)
 				hud.toast("%s hergestellt" % Items.display(out_id))
 				reopen.call(), ok)
+	var at_home: bool = game.inside_own_house(game.player.global_position)
+	row(body, "Kleiderschrank: Figur und Kleidung" + ("" if at_home else "  (nur zu Hause)"), "Öffnen", func(): game.open_wardrobe(), at_home)
 	var s: Dictionary = GameState.stats
 	text(body, "Strecke: Rehe %d, Wildschweine %d, Hasen %d, Bären %d   Gebrannt: %d Flaschen   Strafen: $%d" % [s.deer, s.boar, s.rabbit, s.bear, s.bottles, s.fines], 14)
 
