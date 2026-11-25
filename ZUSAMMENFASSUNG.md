@@ -284,3 +284,4 @@ Ideen von Simon:
   - Terrain direkt unter der Straße beim Welt-Bau plan auf Straßenhöhe abflachen (0° Querneigung) und mit einer 3–6 m breiten, weichen Böschung (Smoothstep-Blend) ins umliegende Gelände überführen.
   - Feinere Straßen-Segmente an Steigungen/Kurven + dezente seitliche Ränder (Skirts) gegen schwebende Kanten und Z-Fighting.
   - *Hinweis:* Erfordert Änderung an `world_builder.gd` und einmaliges Neu-Backen von `data/world_baked.scn` — erst nach Marcos Push in Phase 2 umsetzen.
+- **Felder & Äcker hinzufügen:** Offene landwirtschaftliche Felder/Äcker (z. B. Mais-/Getreidefelder mit typischen Furchen, Textur/Farbvariation und passenden Props) in die Welt einbauen.
