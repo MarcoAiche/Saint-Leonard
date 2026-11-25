@@ -204,6 +204,8 @@ func _ready() -> void:
 			print("Taste %s -> Hand: %s, Zigaretten: %d, Rauchzeit %.0f, Menüs offen: %s" % [OS.get_keycode_string(k), game.player.hand.slot, GameState.count("cigarettes"), GameState.smoke_time, game.hud.menus_open()])
 	if args.has("trailertest"):
 		await _trailer_test(game)
+	if args.has("housetest"):
+		await _house_test(game)
 	if args.has("selftest"):
 		await _selftest(game)
 	if args.has("aim"):
@@ -485,6 +487,51 @@ func _trailer_test(game: Game) -> void:
 		game.rig.yaw = atan2(-dv.x, -dv.z) + 0.5
 		game.rig.pitch = -0.35
 		game.rig.distance = 10.0
+
+
+## Hausinnenraum: Treppe, Truhe, neue Möbel (-- --housetest)
+func _house_test(game: Game) -> void:
+	GameState.money = 100000
+	game.buy_house(4)  # Kärntner Bauernhaus, zwei Stockwerke
+	game.hud.close_dialog()
+	await get_tree().create_timer(0.5).timeout
+	var h: Node3D = game.house_nodes[GameState.house]
+	print("HAUS gebaut, Stockwerke: %d" % h.get_meta("levels"))
+	# zur Treppe und hinauf laufen
+	var bottom: Vector3 = h.global_transform * Vector3(-h.get_meta("half").x + 0.15 + HouseBuilder.STAIR_W * 0.5, 0.5, HouseBuilder.STAIR_FRONT + 0.6)
+	game.player.global_position = bottom
+	game.player.reset_physics_interpolation()
+	var back: Vector3 = -h.global_basis.z
+	game.rig.yaw = atan2(-back.x, -back.z)
+	await get_tree().create_timer(0.3).timeout
+	var y0 := game.player.global_position.y
+	Input.action_press("move_forward")
+	await get_tree().create_timer(2.6).timeout
+	Input.action_release("move_forward")
+	await get_tree().create_timer(0.5).timeout
+	var climbed := game.player.global_position.y - y0
+	print("HAUS Treppe: %.1f m hochgestiegen (Ziel %.1f), im Haus: %s" % [climbed, HouseBuilder.WALL_H, game.inside_own_house(game.player.global_position)])
+	# Truhe: einlagern und herausnehmen
+	GameState.give("meat", 5)
+	ChestMenu.open(game, "Truhe", GameState.house_chest, func(): pass)
+	GameState.take("meat", 5)
+	GameState.house_chest["meat"] = 5
+	Menus.close_all(game.hud)
+	print("HAUS Truhe: %s" % [GameState.house_chest])
+	# neue Möbel aufstellen
+	var inside: Vector3 = h.global_transform * Vector3(1.0, 0.2, 0.5)
+	for t in ["chest", "plant", "pelt_rug"]:
+		print("  %s erlaubt: %s" % [t, Placeables.check(t, inside, game).is_empty()])
+		Net.request_place({uid = GameState.new_uid(), type = t, pos = [inside.x, inside.y, inside.z], rot = 0.0, owner = GameState.player_name, data = {}})
+		inside += h.global_basis.x * 1.3
+	await get_tree().process_frame
+	print("HAUS aufgestellt: %d Dinge" % GameState.placed.size())
+	if args.has("shot"):
+		game.player.global_position = h.global_transform * Vector3(0.5, 0.5, 2.5)
+		game.player.reset_physics_interpolation()
+		var look: Vector3 = -h.global_basis.z
+		game.rig.yaw = atan2(-look.x, -look.z) + 0.35
+		game.rig.pitch = -0.15
 		await get_tree().create_timer(1.0).timeout
 
 

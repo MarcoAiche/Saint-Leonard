@@ -29,6 +29,7 @@ var outfit := {gender = "male", shirt = Color(0.35, 0.42, 0.25), pants = Color(0
 var truck := {paint = 0, upgrades = {}, fuel = 70.0, damage = 0.0, cargo = []}
 var house := -1  # Bauplatz-Nummer des eigenen Hauses
 var furniture: Array = []  # [{id, pos:[x,y,z], rot}]
+var house_chest := {}  # Inhalt der eingebauten Truhe im eigenen Haus: id -> Anzahl
 var photos: Array = []  # Pfade unter user://photos
 var story := {chapter = 1, step = 0, done = false}
 var side_jobs: Array = []
@@ -247,7 +248,7 @@ func find_placed(uid: int) -> Dictionary:
 func profile_dict() -> Dictionary:
 	return {
 		player_name = player_name, money = money, inv = inv, inv_layout = inv_layout, loaded = loaded, health = health, bac = bac,
-		outfit = _colors_out(outfit), truck = truck, house = house, furniture = furniture, photos = photos,
+		outfit = _colors_out(outfit), truck = truck, house = house, furniture = furniture, house_chest = house_chest, photos = photos,
 		story = story, side_jobs = side_jobs, stats = stats, minimap_on = minimap_on,
 	}
 

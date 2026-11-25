@@ -53,6 +53,9 @@ const ITEMS := {
 	"rug": {name = "Teppich", kind = "furniture", price = 30, shops = ["bauhaus"]},
 	"stove": {name = "Kachelofen", kind = "furniture", price = 320, shops = ["bauhaus"]},
 	"frame": {name = "Fotorahmen", kind = "furniture", price = 8, shops = ["bauhaus"]},
+	"frame_big": {name = "Großer Bilderrahmen", kind = "furniture", price = 25, shops = ["bauhaus"]},
+	"chest": {name = "Holztruhe", kind = "furniture", price = 80, shops = ["bauhaus"]},
+	"plant": {name = "Zimmerpflanze", kind = "furniture", price = 20, shops = ["bauhaus"]},
 	# Beute
 	"meat": {name = "Wildfleisch (roh)", kind = "loot", price = 0, shops = [], sell = {butcher = 55}},
 	"hide": {name = "Fell", kind = "loot", price = 0, shops = [], sell = {butcher = 20}},
@@ -61,6 +64,8 @@ const ITEMS := {
 	"legend_antlers": {name = "Geweih des Riesenhirschs", kind = "loot", price = 0, shops = []},
 	# Handwerk (zu Hause an der Werkbank)
 	"trophy": {name = "Trophäe (Wandschild)", kind = "furniture", price = 0, shops = []},
+	"trophy_boar": {name = "Keilerkopf (Wandschild)", kind = "furniture", price = 0, shops = []},
+	"pelt_rug": {name = "Fellteppich", kind = "furniture", price = 0, shops = []},
 	"jacket": {name = "Lederjacke", kind = "outfit", price = 0, shops = []},
 	"hunter_hat": {name = "Jägerhut mit Gamsbart", kind = "outfit", price = 0, shops = []},
 }
@@ -68,6 +73,8 @@ const ITEMS := {
 ## Rezepte für die Werkbank zu Hause: Ergebnis -> benötigte Teile
 const RECIPES := {
 	"trophy": {antlers = 1},
+	"trophy_boar": {tusks = 1, hide = 1},
+	"pelt_rug": {hide = 2},
 	"jacket": {hide = 3},
 	"hunter_hat": {hide = 1, tusks = 1},
 	"meat_cooked": {meat = 1},
