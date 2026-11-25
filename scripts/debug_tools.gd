@@ -232,7 +232,6 @@ func _ready() -> void:
 	await _quit()
 
 
-## Sucht Knoten mit ungültiger Position (NaN) und meldet sie einmal
 ## Gasthaus Pirtscher: von der Straße durch die Tür in die Gaststube gehen
 func _gasthaus_test(game: Game) -> void:
 	var g: Gasthaus = game.gasthaus
@@ -252,6 +251,7 @@ func _gasthaus_test(game: Game) -> void:
 	await get_tree().create_timer(0.3).timeout
 	var local := g.global_transform.affine_inverse() * game.player.global_position
 	print("Spieler lokal im Gasthaus: %s -> %s" % [local, "drinnen" if absf(local.z) < hz - 0.3 and absf(local.x) < g.size.x * 0.5 else "DRAUSSEN"])
+
 
 ## Trophäenwand: Stücke vermessen, aufhängen, Wand ansehen
 func _trophy_test(game: Game) -> void:
@@ -281,6 +281,8 @@ func _trophy_test(game: Game) -> void:
 	game.rig.pitch = 0.05
 	await get_tree().create_timer(0.6).timeout
 
+
+## Sucht Knoten mit ungültiger Position (NaN) und meldet sie einmal
 func _nan_watch(game: Node) -> void:
 	var seen := {}
 	while is_instance_valid(game):
