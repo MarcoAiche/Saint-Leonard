@@ -782,6 +782,8 @@ func _process_butcher_dropzones(dt: float) -> void:
 		if not (n is Carcass):
 			continue
 		var c := n as Carcass
+		if c.sold or c.is_queued_for_deletion():
+			continue
 		if c.carried or c == player.carrying:
 			c.set_meta("dropzone_t", 0.0)
 			continue
@@ -797,6 +799,8 @@ func _process_butcher_dropzones(dt: float) -> void:
 		var t: float = float(c.get_meta("dropzone_t", 0.0)) + dt
 		c.set_meta("dropzone_t", t)
 		if t >= 0.3:
+			c.sold = true
+			c.remove_from_group("carcass")
 			var val := c.sell_value()
 			var cname := c.display_name()
 			TrophyBoard.record(c.species, c.male, c.net_id)
@@ -810,8 +814,10 @@ func _process_butcher_dropzones(dt: float) -> void:
 
 
 func sell_single_carcass(c: Carcass, holder: Node) -> void:
-	if not is_instance_valid(c):
+	if not is_instance_valid(c) or c.sold or c.is_queued_for_deletion():
 		return
+	c.sold = true
+	c.remove_from_group("carcass")
 	var val := c.sell_value()
 	if holder == player and player.carrying == c:
 		player.carrying = null
@@ -829,22 +835,31 @@ func sell_truck_cargo() -> void:
 	var count := 0
 	if player.carrying is Carcass:
 		var c := player.carrying as Carcass
-		player.carrying = null
-		total += c.sell_value()
-		count += 1
-		Net.carcass_removed(c.net_id)
-		c.queue_free()
+		if not c.sold and not c.is_queued_for_deletion():
+			c.sold = true
+			c.remove_from_group("carcass")
+			player.carrying = null
+			total += c.sell_value()
+			count += 1
+			Net.carcass_removed(c.net_id)
+			c.queue_free()
 	var holders: Array = [car]
 	if trailer:
 		holders.append(trailer)
 	for h in holders:
 		for n in h.cargo.duplicate():
 			if n is Carcass:
-				total += (n as Carcass).sell_value()
+				var cc := n as Carcass
+				if cc.sold or cc.is_queued_for_deletion():
+					h.cargo.erase(n)
+					continue
+				cc.sold = true
+				cc.remove_from_group("carcass")
+				total += cc.sell_value()
 				count += 1
 				h.cargo.erase(n)
-				Net.carcass_removed(n.net_id)
-				n.queue_free()
+				Net.carcass_removed(cc.net_id)
+				cc.queue_free()
 	if count == 0:
 		open_shop("butcher")
 		return
@@ -1973,8 +1988,17 @@ func on_remote_animal_died(id: int, dir: Vector3) -> void:
 
 func on_carcass_gone(id: int) -> void:
 	for c in get_tree().get_nodes_in_group("carcass"):
-		if c.net_id == id and not c.get_parent() is Truck:
-			c.queue_free()
+		if c is Carcass and c.net_id == id:
+			c.sold = true
+			c.remove_from_group("carcass")
+			if player and player.carrying == c:
+				player.carrying = null
+			if not c.get_parent() is Truck:
+				c.queue_free()
+
+
+func _exit_tree() -> void:
+	Animal.threats.clear()
 
 
 func on_voice(id: int, samples: PackedFloat32Array, radio: bool) -> void:

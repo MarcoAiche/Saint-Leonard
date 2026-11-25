@@ -1,10 +1,36 @@
-# Redneck Redemption (Saint-Leonard) — 3D Asset Checklist (`.glb`)
+# Redneck Redemption (Saint-Leonard) — 3D Asset Checklist
 
-Drop `.glb` models into `res://assets/models/...`. `AssetLoader` automatically measures each `.glb`'s visual `AABB`, uniformly scales it to `target_height` (in meters), and aligns its bottom cleanly at `y = 0.0` while preserving original materials/textures. If a `.glb` is not present yet, the game falls back to procedural placeholder geometry with zero errors.
+Dieses Dokument trennt klar zwischen **(a) bereits eingebundenen echten 3D-Assets** und **(b) prozeduralen Blueprint-Modellen**, die über `AssetLoader.load_model()` bei Bedarf per Drop-in `.glb` in `res://assets/models/...` ersetzt werden können.
 
 **Global Conventions:**
 - **Orientation:** `-Z` forward in Godot (`+Y` up).
 - **Art Style:** Clean Stylized Low-Poly 3D without heavy black comic outlines; matte-to-satin materials.
+
+---
+
+## (a) Bereits eingebundene echte Assets (`.gltf` / `.glb`)
+
+### Nature & Foliage (`assets/packs/nature_megakit/` & `assets/nature/`)
+- **Stylized Nature MegaKit (68 `.gltf`-Dateien)** in `res://assets/packs/nature_megakit/`:
+  - Bäume: `CommonTree_1..5.gltf`, `Pine_1..5.gltf`, `TwistedTree_1..5.gltf`, `DeadTree_1..5.gltf`
+  - Büsche & Pflanzen: `Bush_Common.gltf`, `Bush_Common_Flowers.gltf`, `Fern_1.gltf`, `Plant_1.gltf`, `Plant_1_Big.gltf`, `Plant_7.gltf`, `Plant_7_Big.gltf`, `Clover_1..2.gltf`, `Grass_Common_Short/Tall.gltf`, `Grass_Wispy_Short/Tall.gltf`, `Flower_3/4_Single/Group.gltf`, `Petal_1..5.gltf`, `Mushroom_Common.gltf`, `Mushroom_Laetiporus.gltf`
+  - Felsen & Pfade: `Rock_Medium_1..3.gltf`, `Pebble_Round_1..5.gltf`, `Pebble_Square_1..6.gltf`, `RockPath_Round_*.gltf`, `RockPath_Square_*.gltf`
+- Zusätzliche Natur-Meshes in `res://assets/nature/`: `CommonTree_1.gltf`, `Pine_2.gltf`
+
+### Animals (`res://assets/animals/`)
+- `bear.glb`, `deer.glb`, `fox.glb`, `stag.glb`
+
+### Characters (`res://assets/characters/`)
+- `male.glb`, `female.glb`
+
+### Weapons (`res://assets/weapons/`)
+- `pistol.glb`, `assault_rifle.glb`, `sniper_rifle.glb`
+
+---
+
+## (b) Aktuell prozedurale Blueprint-Modelle (optionale Drop-in `.glb`-Upgrades in `res://assets/models/...`)
+
+Drop `.glb` models into `res://assets/models/...`. `AssetLoader` automatically measures each `.glb`'s visual `AABB`, uniformly scales it to `target_height` (in meters), and aligns its bottom cleanly at `y = 0.0` while preserving original materials/textures. Aktuell sind in `res://assets/models/` noch keine `.glb`-Dateien hinterlegt — alle folgenden Objekte laufen fehlerfrei über den prozeduralen Blueprint-Fallback.
 
 ---
 

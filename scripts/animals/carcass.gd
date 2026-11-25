@@ -7,6 +7,7 @@ var species := "deer"
 var male := false
 var net_id := 0
 var carried := false
+var sold := false
 var model: Node3D
 var world: WorldBuilder = null
 

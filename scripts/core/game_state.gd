@@ -261,7 +261,9 @@ func world_dict() -> Dictionary:
 func apply_profile(d: Dictionary) -> void:
 	for k in d:
 		if k == "outfit":
-			outfit = _colors_in(d.outfit)
+			var merged := outfit.duplicate(true)
+			merged.merge(_colors_in(d.outfit), true)
+			outfit = merged
 		elif k in self:
 			set(k, d[k])
 	# JSON liefert Zahlen als float
