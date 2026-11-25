@@ -35,7 +35,7 @@ func _ready() -> void:
 	mass = 1900.0
 	center_of_mass = Vector3(0, -0.35, 0.2)
 	max_engine_force = 7500.0
-	top_speed_kmh = 135.0
+	top_speed_kmh = 150.0
 	_body = Node3D.new()
 	_body.name = "Karosserie"
 	add_child(_body)
@@ -211,6 +211,7 @@ func _load_pickup_glb(glb_path: String) -> Node3D:
 				parent.add_child(pivot)
 				parent.move_child(pivot, idx)
 				parent.remove_child(wn)
+				(wn as Node).owner = null
 				pivot.add_child(wn)
 				(wn as Node3D).transform = Transform3D(Basis.IDENTITY, -center)
 				_glb_wheels.append(pivot)
@@ -431,6 +432,17 @@ func _make_smoke() -> GPUParticles3D:
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	m.vertex_color_use_as_albedo = true
+	var grad := Gradient.new()
+	grad.set_color(0, Color(1.0, 1.0, 1.0, 0.85))
+	grad.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	var tex := GradientTexture2D.new()
+	tex.width = 64
+	tex.height = 64
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	tex.gradient = grad
+	m.albedo_texture = tex
 	q.material = m
 	p.draw_pass_1 = q
 	p.emitting = false

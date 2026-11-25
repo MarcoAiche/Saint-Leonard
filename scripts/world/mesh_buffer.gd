@@ -6,6 +6,7 @@ extends RefCounted
 var verts := PackedVector3Array()
 var normals := PackedVector3Array()
 var colors := PackedColorArray()
+var uvs := PackedVector2Array()
 
 
 func add_tri(a: Vector3, b: Vector3, c: Vector3, color: Color, n := Vector3.ZERO) -> void:
@@ -36,6 +37,27 @@ func add_quad_2s(a: Vector3, b: Vector3, c: Vector3, d: Vector3, color: Color, n
 	add_quad(a, b, c, d, back, -n)
 
 
+func add_tri_uv(a: Vector3, b: Vector3, c: Vector3, uva: Vector2, uvb: Vector2, uvc: Vector2, color: Color, n := Vector3.ZERO) -> void:
+	var face := (b - a).cross(c - a)
+	if face.length_squared() < 1e-10:
+		return
+	if n == Vector3.ZERO:
+		n = -face.normalized()
+	elif face.dot(n) > 0.0:
+		var t := b; b = c; c = t
+		var tu := uvb; uvb = uvc; uvc = tu
+	n = n.normalized()
+	verts.append_array([a, b, c])
+	normals.append_array([n, n, n])
+	colors.append_array([color, color, color])
+	uvs.append_array([uva, uvb, uvc])
+
+
+func add_quad_uv(a: Vector3, b: Vector3, c: Vector3, d: Vector3, uva: Vector2, uvb: Vector2, uvc: Vector2, uvd: Vector2, color: Color, n: Vector3) -> void:
+	add_tri_uv(a, b, c, uva, uvb, uvc, color, n)
+	add_tri_uv(a, c, d, uva, uvc, uvd, color, n)
+
+
 func is_empty() -> bool:
 	return verts.is_empty()
 
@@ -48,6 +70,8 @@ func commit(mesh: ArrayMesh, material: Material) -> void:
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colors
+	if uvs.size() == verts.size():
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 

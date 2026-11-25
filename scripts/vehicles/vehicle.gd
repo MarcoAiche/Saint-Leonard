@@ -7,7 +7,7 @@ extends VehicleBody3D
 @export var max_engine_force := 6500.0
 @export var max_brake := 50.0
 @export var max_steer := 0.55
-@export var top_speed_kmh := 140.0
+@export var top_speed_kmh := 150.0
 @export var reverse_speed_kmh := 25.0
 
 var world: WorldBuilder

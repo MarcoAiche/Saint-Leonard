@@ -11,7 +11,7 @@ extends Node3D
 @export var baked_path := "res://data/world_baked.scn"
 @export var show_labels := true
 
-const BUILD_VERSION := 18
+const BUILD_VERSION := 26
 const WORLD_SEED := 20261125
 const LAYER_TREES := 1
 const LAYER_ROCKS := 2
@@ -26,7 +26,7 @@ const C_GRASS := Color(0.388, 0.722, 0.106)  # #63B81B Meadow Grass Base
 const KIND_COLORS := {
 	"grass": Color(0.388, 0.722, 0.106),     # #63B81B
 	"meadow": Color(0.431, 0.784, 0.118),    # #6EC81E
-	"farmland": Color(0.66, 0.62, 0.36),
+	"farmland": Color(0.28, 0.20, 0.13),
 	"scrub": Color(0.290, 0.365, 0.247),     # #4A5D3F
 	"residential": Color(0.43, 0.66, 0.18),
 	"industrial": Color(0.60, 0.58, 0.48),
@@ -251,8 +251,210 @@ func load_data() -> bool:
 	kinds = g.kinds
 	border = to_v2_array(data.border)
 	_index_roads()
+	_smooth_and_carve_roads()
 	_index_trees()
 	return true
+
+
+## Glättet Straßen-Höhenprofile entlang der Mittellinie und ebnet das Terrain unter Straßen
+## (0° Querneigung) mit einem 4,5 m breiten Smoothstep-Übergang ins umliegende Gelände ein.
+func _smooth_and_carve_roads() -> void:
+	var t0 := Time.get_ticks_msec()
+	var total := nx * nz
+	var sum_w := PackedFloat32Array()
+	var sum_wh := PackedFloat32Array()
+	var max_w := PackedFloat32Array()
+	sum_w.resize(total)
+	sum_wh.resize(total)
+	max_w.resize(total)
+
+	for pass_idx in 4:
+		sum_w.fill(0.0)
+		sum_wh.fill(0.0)
+		max_w.fill(0.0)
+		for r in data.roads:
+			if r.bridge or not ROAD_STYLE.has(r.kind):
+				continue
+			var is_tun: bool = bool(r.get("tunnel", false)) or bool(r.get("covered", false)) or int(r.get("layer", 0)) < 0
+			var road_pass := 3 if is_tun else (0 if int(r.get("tier", TIER_DIRT)) >= TIER_DIRT else (1 if int(r.get("tier", TIER_VILLAGE)) == TIER_VILLAGE else 2))
+			if road_pass != pass_idx:
+				continue
+			var line := _resample(r.pts, 2.5 if is_tun else 4.0)
+			if line.size() < 2:
+				continue
+			var ys := PackedFloat32Array()
+			if is_tun:
+				# +12m Portal-Vorlauf vorne und hinten, ungestörte Ein-/Ausfahrt bei 25m
+				var dir_in := (line[0] - line[1]).normalized()
+				var dir_out := (line[-1] - line[-2]).normalized()
+				var p_in := line[0] + dir_in * 12.0
+				var p_out := line[-1] + dir_out * 12.0
+				var p_start := line[0] + dir_in * 25.0
+				var p_end := line[-1] + dir_out * 25.0
+				var h_start := minf(height_at(p_start.x, p_start.y), height_at(line[0].x, line[0].y))
+				var h_end := minf(height_at(p_end.x, p_end.y), height_at(line[-1].x, line[-1].y))
+				var tun_line := PackedVector2Array()
+				for s in range(5, 0, -1):
+					tun_line.append(line[0].lerp(p_in, float(s) / 5.0))
+				tun_line.append_array(line)
+				for s in range(1, 6):
+					tun_line.append(line[-1].lerp(p_out, float(s) / 5.0))
+				var tun_ys := PackedFloat32Array()
+				var deck_ys := PackedFloat32Array()
+				tun_ys.resize(tun_line.size())
+				deck_ys.resize(tun_line.size())
+				for k in tun_line.size():
+					var tk := float(k + 5) / float(tun_line.size() + 9)
+					var fy := lerpf(h_start, h_end, tk)
+					var dy := fy + 6.0 + 0.55
+					var pt := tun_line[k]
+					for rl in data.rails:
+						if rl.tunnel or rl.bridge or rl.kind == "platform":
+							continue
+						var rpts: Array = rl.pts
+						for m in range(1, rpts.size()):
+							var ra := Vector2(rpts[m - 1][0], rpts[m - 1][1])
+							var rb := Vector2(rpts[m][0], rpts[m][1])
+							if Geometry2D.get_closest_point_to_segment(pt, ra, rb).distance_to(pt) <= 10.0:
+								var rail_h := height_at(pt.x, pt.y)
+								dy = maxf(dy, rail_h)
+								fy = minf(fy, dy - 6.55)
+								break
+					tun_ys[k] = fy
+					deck_ys[k] = dy
+				r["_tunnel_line"] = tun_line
+				r["_tunnel_ys"] = tun_ys
+				r["_tunnel_deck_ys"] = deck_ys
+				# Terrain außerhalb p_in/p_out bündig an Bodenplatte (-0.05m), innerhalb auf (floor_y - 1.5m) ausfräsen
+				var ext := PackedVector2Array([p_start])
+				ys.append(h_start)
+				for s in range(1, 5):
+					var p_r := p_start.lerp(p_in, float(s) / 5.0)
+					var fy_r := lerpf(h_start, tun_ys[0], float(s) / 5.0)
+					ext.append(p_r)
+					ys.append(fy_r - 0.05 * (float(s) / 5.0))
+				ext.append_array(tun_line)
+				for k in tun_ys.size():
+					var t_in := clampf(float(k) / 5.0, 0.0, 1.0)
+					var t_out := clampf(float(tun_ys.size() - 1 - k) / 5.0, 0.0, 1.0)
+					var carve_depth := 0.05 + 1.45 * minf(t_in, t_out)
+					ys.append(tun_ys[k] - carve_depth)
+				for s in range(1, 5):
+					var p_r := p_out.lerp(p_end, float(s) / 5.0)
+					var fy_r := lerpf(tun_ys[-1], h_end, float(s) / 5.0)
+					ext.append(p_r)
+					ys.append(fy_r - 0.05 * (1.0 - float(s) / 5.0))
+				ext.append(p_end)
+				ys.append(h_end)
+				line = ext
+			else:
+				ys.resize(line.size())
+				var s_dist := PackedFloat32Array()
+				s_dist.resize(line.size())
+				for k in line.size():
+					ys[k] = height_at(line[k].x, line[k].y)
+					s_dist[k] = 0.0 if k == 0 else s_dist[k - 1] + line[k].distance_to(line[k - 1])
+				# Longitudinale Glättung (+/- 20 m Hauptstraßen, +/- 18 m Nebenstraßen) gegen Mulden an Kreuzungen
+				var win_r := 20.0 if int(r.get("tier", TIER_DIRT)) == TIER_MAIN else 18.0
+				for _pass in 2:
+					var next_ys := ys.duplicate()
+					for k in range(1, line.size() - 1):
+						var w_sum := 0.0
+						var wh_sum := 0.0
+						var sk := s_dist[k]
+						var m := k
+						while m >= 0 and sk - s_dist[m] <= win_r:
+							var d := sk - s_dist[m]
+							var wt := 1.0 - (d / (win_r + 0.5))
+							w_sum += wt
+							wh_sum += wt * ys[m]
+							m -= 1
+						m = k + 1
+						while m < line.size() and s_dist[m] - sk <= win_r:
+							var d := s_dist[m] - sk
+							var wt := 1.0 - (d / (win_r + 0.5))
+							w_sum += wt
+							wh_sum += wt * ys[m]
+							m += 1
+						if w_sum > 0.0:
+							next_ys[k] = wh_sum / w_sum
+					ys = next_ys
+				# Lokal begrenzte Sehnen-Auffüllung (Valley-Fill) nur für kurze Senken <= 25.0 m
+				var is_valley_fill_road: bool = r.kind in ["motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential"]
+				if is_valley_fill_road:
+					var filled_ys := ys.duplicate()
+					for k in range(1, line.size() - 1):
+						var sk := s_dist[k]
+						var best_y := ys[k]
+						var ka := k - 1
+						while ka >= 0 and sk - s_dist[ka] <= 25.0:
+							var sa := s_dist[ka]
+							var kb := k + 1
+							while kb < line.size() and s_dist[kb] - sa <= 25.0:
+								var span := s_dist[kb] - sa
+								if span > 0.1:
+									var t_c := (sk - sa) / span
+									var h_chord := lerpf(ys[ka], ys[kb], t_c)
+									if h_chord > best_y:
+										best_y = h_chord
+								kb += 1
+							ka -= 1
+						filled_ys[k] = best_y
+					ys = filled_ys
+
+			var wall_hw_tun := float(r.width) * 0.5 + 0.95 + 0.55
+			var is_vf_road: bool = (not is_tun) and (r.kind in ["motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential"])
+			var half_w := (wall_hw_tun + 4.5) if is_tun else (float(r.width) * 0.5 + (1.0 if is_vf_road else 1.6))
+			var outer_w := half_w + (2.5 if is_tun else (1.0 if is_vf_road else 4.5))
+			var rank_w := 1.0 + float(ROAD_STYLE[r.kind][0]) * 1.5
+			var outer_w2 := outer_w * outer_w
+			for k in range(1, line.size()):
+				var a := line[k - 1]
+				var b := line[k]
+				var ab := b - a
+				var ab_len2 := ab.length_squared()
+				if ab_len2 < 0.0001:
+					continue
+				var h_a := ys[k - 1]
+				var h_b := ys[k]
+				var i0 := clampi(floori((minf(a.x, b.x) - outer_w - x0) / step), 0, nx - 1)
+				var i1 := clampi(ceili((maxf(a.x, b.x) + outer_w - x0) / step), 0, nx - 1)
+				var j0 := clampi(floori((minf(a.y, b.y) - outer_w - z0) / step), 0, nz - 1)
+				var j1 := clampi(ceili((maxf(a.y, b.y) + outer_w - z0) / step), 0, nz - 1)
+				for j in range(j0, j1 + 1):
+					var pz := z0 + j * step
+					var row := j * nx
+					for i in range(i0, i1 + 1):
+						var px := x0 + i * step
+						var apx := px - a.x
+						var apz := pz - a.y
+						var t := clampf((apx * ab.x + apz * ab.y) / ab_len2, 0.0, 1.0)
+						var dx := apx - ab.x * t
+						var dz := apz - ab.y * t
+						var d2 := dx * dx + dz * dz
+						if d2 > outer_w2:
+							continue
+						var d := sqrt(d2)
+						var w := 1.0 if d <= half_w else 1.0 - smoothstep(half_w, outer_w, d)
+						var idx := row + i
+						var th := lerpf(h_a, h_b, t)
+						if is_tun:
+							# Schmaler Tunnel-Einschnitt dominiert lokal, damit der Bahndamm seitlich stehen bleibt
+							sum_w[idx] = maxf(sum_w[idx], 1.0) + w * 200.0
+							sum_wh[idx] += w * 200.0 * th
+							if w > max_w[idx]:
+								max_w[idx] = w
+						else:
+							sum_w[idx] += w * rank_w
+							sum_wh[idx] += w * rank_w * th
+							if w > max_w[idx]:
+								max_w[idx] = w
+
+		for idx in total:
+			var sw := sum_w[idx]
+			if sw > 0.001:
+				heights[idx] = lerpf(heights[idx], sum_wh[idx] / sw, clampf(max_w[idx], 0.0, 1.0))
+	print("  Straßen-Glättung & Carving: %d ms" % (Time.get_ticks_msec() - t0))
 
 
 func _apply_map_scale(s: float) -> void:
@@ -332,8 +534,6 @@ func _index_roads() -> void:
 	for ri in data.roads.size():
 		var r: Dictionary = data.roads[ri]
 		r.tier = _road_tier(r)
-		if r.tunnel:
-			continue
 		var pts: Array = r.pts
 		for k in range(1, pts.size()):
 			var a := Vector2(pts[k - 1][0], pts[k - 1][1])
@@ -488,7 +688,7 @@ func border_distance(p: Vector2) -> float:
 func nearest_road(p: Vector2, kinds_filter: Array = [], max_dist := 200.0) -> Dictionary:
 	var best := {dist = INF, name = ""}
 	for r in data.roads:
-		if r.tunnel or (not kinds_filter.is_empty() and not r.kind in kinds_filter):
+		if not kinds_filter.is_empty() and not r.kind in kinds_filter:
 			continue
 		var pts: Array = r.pts
 		var first: Array = pts[0]
@@ -586,7 +786,7 @@ func build() -> void:
 	var steps := [
 		["Gelände", _build_terrain], ["Berge", _build_far_terrain], ["Wasser", _build_water],
 		["Straßen", _build_lines], ["Häuser", _build_buildings], ["Bäume", _build_trees],
-		["Gras & Blumen", _build_foliage], ["Grenze", _build_border], ["Schilder", _build_labels],
+		["Gras & Blumen", _build_foliage], ["Felder", _build_fields], ["Grenze", _build_border], ["Schilder", _build_labels],
 	]
 	for s in steps:
 		var t := Time.get_ticks_msec()
@@ -615,10 +815,10 @@ func _terrain_color(i: int, j: int) -> Color:
 	elif x < -120.0 and z < -80.0 and y < 16.0 and kind != "water":
 		c = Color(0.290, 0.365, 0.247)  # #4A5D3F Swamp Olive
 	elif kind == "farmland":
-		# Ackerstreifen, Richtung je Feld leicht anders
+		# Satte Ackererde mit Pflugfurchen-Struktur
 		var a := hash01(floorf(x / 120.0), floorf(z / 120.0)) * PI
-		if int(floor((x * cos(a) + z * sin(a)) / 7.0)) % 2 == 0:
-			c = c.darkened(0.08)
+		var furrow := sin((x * cos(a) + z * sin(a)) * 1.4)
+		c = c.darkened(0.22) if furrow > 0.0 else c.lightened(0.06)
 	var n := hash01(x * 0.37, z * 0.21)
 	return c.lightened(n * 0.06) if n > 0.5 else c.darkened((0.5 - n) * 0.08)
 
@@ -764,7 +964,7 @@ func _build_water() -> void:
 
 # ------------------------------------------------------------------ Straßen, Bahn, Bäche
 
-func _resample(pts: Array, max_seg := 2.5) -> PackedVector2Array:
+func _resample(pts: Array, max_seg := 1.8) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	for k in range(pts.size()):
 		var p := Vector2(pts[k][0], pts[k][1])
@@ -780,11 +980,10 @@ func _resample(pts: Array, max_seg := 2.5) -> PackedVector2Array:
 ## Band entlang einer Linie, dem Gelände folgend, aufgeteilt auf Kacheln.
 ## dash > 0 ergibt eine Strichlinie, caps rundet die Enden ab (saubere Kreuzungen).
 func _ribbon(bufs: Dictionary, line: PackedVector2Array, width: float, yoff: float, color: Color,
-		offset := 0.0, dash := 0.0, bridge := false, caps := false, sample_width := -1.0) -> void:
+		offset := 0.0, dash := 0.0, bridge := false, caps := false, sample_width := -1.0, skirt_drop := 0.0, tunnel_zones: Array = [], use_edge_max := true, suppress_on_asphalt := false) -> void:
 	if line.size() < 2:
 		return
 	var hw := width * 0.5
-	# Höhe wird über diese Breite bestimmt (Rand und Belag gleich, sonst schaut der Rand durch)
 	var sw := (sample_width if sample_width > 0.0 else width) * 0.5
 	var h_start := height_at(line[0].x, line[0].y)
 	var h_end := height_at(line[line.size() - 1].x, line[line.size() - 1].y)
@@ -812,8 +1011,29 @@ func _ribbon(bufs: Dictionary, line: PackedVector2Array, width: float, yoff: flo
 			var t := lens[k] / maxf(total, 0.01)
 			y = lerpf(h_start, h_end, t) + sin(t * PI) * minf(total * 0.02, 1.5) + yoff
 		else:
-			y = maxf(height_at(p.x - side.x * sw, p.y - side.y * sw), height_at(p.x + side.x * sw, p.y + side.y * sw))
-			y = maxf(y, height_at(p.x, p.y)) + yoff
+			var in_tunnel := false
+			var tun_y := 0.0
+			for tz: Dictionary in tunnel_zones:
+				var q := Geometry2D.get_closest_point_to_segment(p, tz.a, tz.b)
+				if q.distance_to(p) <= float(tz.hw):
+					var seg_l: float = maxf(0.001, (tz.b - tz.a).length())
+					var t_seg := clampf((q - tz.a).length() / seg_l, 0.0, 1.0)
+					tun_y = lerpf(float(tz.y0), float(tz.y1), t_seg)
+					in_tunnel = true
+					break
+			if in_tunnel:
+				y = tun_y + yoff
+			elif suppress_on_asphalt:
+				var ri := road_info(p, 0.6)
+				if ri.tier > 0 and ri.tier <= TIER_VILLAGE and ri.dist <= 0.4:
+					y = height_at(p.x, p.y) - 0.046
+				else:
+					y = height_at(p.x, p.y) + yoff
+			elif not use_edge_max:
+				y = height_at(p.x, p.y) + yoff
+			else:
+				y = maxf(height_at(p.x - side.x * sw, p.y - side.y * sw), height_at(p.x + side.x * sw, p.y + side.y * sw))
+				y = maxf(y, height_at(p.x, p.y)) + yoff
 		ys.append(y)
 		var l := p - side * hw
 		var r := p + side * hw
@@ -823,7 +1043,31 @@ func _ribbon(bufs: Dictionary, line: PackedVector2Array, width: float, yoff: flo
 		if dash > 0.0 and int(floor((lens[k - 1] + lens[k]) * 0.5 / dash)) % 2 == 1:
 			continue
 		var m := (line[k] + line[k - 1]) * 0.5
-		_buf(bufs, m.x, m.y).add_quad(left[k - 1], right[k - 1], right[k], left[k], color, Vector3.UP)
+		var buf := _buf(bufs, m.x, m.y)
+		if bridge or dash > 0.0:
+			buf.add_quad(left[k - 1], right[k - 1], right[k], left[k], color, Vector3.UP)
+		else:
+			# Volle Kern-Fahrbahn (+0.038m) + 0.9m Außen-Bankett (+0.012m) je Seite
+			var c0 := (left[k - 1] + right[k - 1]) * 0.5
+			var c1 := (left[k] + right[k]) * 0.5
+			var s0 := (right[k - 1] - left[k - 1]).normalized()
+			var s1 := (right[k] - left[k]).normalized()
+			var lc0 := left[k - 1] + Vector3(0, 0.026, 0)
+			var lc1 := left[k] + Vector3(0, 0.026, 0)
+			var rc0 := right[k - 1] + Vector3(0, 0.026, 0)
+			var rc1 := right[k] + Vector3(0, 0.026, 0)
+			var lo0 := left[k - 1] - s0 * 0.9
+			var lo1 := left[k] - s1 * 0.9
+			var ro0 := right[k - 1] + s0 * 0.9
+			var ro1 := right[k] + s1 * 0.9
+			var cc0 := c0 + Vector3(0, 0.026, 0)
+			var cc1 := c1 + Vector3(0, 0.026, 0)
+			var v0 := lens[k - 1]
+			var v1 := lens[k]
+			buf.add_quad_uv(lo0, lc0, lc1, lo1, Vector2(0.0, v0), Vector2(0.15, v0), Vector2(0.15, v1), Vector2(0.0, v1), color, Vector3.UP)
+			buf.add_quad_uv(lc0, cc0, cc1, lc1, Vector2(0.15, v0), Vector2(0.5, v0), Vector2(0.5, v1), Vector2(0.15, v1), color, Vector3.UP)
+			buf.add_quad_uv(cc0, rc0, rc1, cc1, Vector2(0.5, v0), Vector2(0.85, v0), Vector2(0.85, v1), Vector2(0.5, v1), color, Vector3.UP)
+			buf.add_quad_uv(rc0, ro0, ro1, rc1, Vector2(0.85, v0), Vector2(1.0, v0), Vector2(1.0, v1), Vector2(0.85, v1), color, Vector3.UP)
 	if caps and not bridge:
 		for e in [0, line.size() - 1]:
 			var c := Vector3(line[e].x, ys[e], line[e].y)
@@ -844,46 +1088,230 @@ func _commit_chunks(bufs: Dictionary, parent: Node3D, prefix: String, material: 
 
 func _build_lines() -> void:
 	var group := _group("Strassen")
-	var roads := {}
-	var bridges := MeshBuffer.new()
+	var roads_asphalt := {}
+	var roads_dirt := {}
 	var bridge_bufs := {}
-	var sorted: Array = data.roads.filter(func(r): return not r.tunnel and ROAD_STYLE.has(r.kind))
+	var sorted: Array = data.roads.filter(func(r): return ROAD_STYLE.has(r.kind))
 	sorted.sort_custom(func(a, b): return ROAD_STYLE[a.kind][0] < ROAD_STYLE[b.kind][0])
-	# Erst alle Ränder, dann die Beläge nach Rang: so überdecken sich Kreuzungen sauber
+	var tunnel_zones: Array = []  # [{a: Vector2, b: Vector2, hw: float, clear_hw: float, wall_hw: float, y0: float, y1: float, deck_y: float}]
 	for r in sorted:
+		if r.bridge or r.kind in ["footway", "steps", "cycleway", "path"]:
+			continue
+		var is_tun: bool = bool(r.get("tunnel", false)) or bool(r.get("covered", false)) or int(r.get("layer", 0)) < 0
+		if not is_tun:
+			continue
+		var tline: PackedVector2Array = r.get("_tunnel_line", _resample(r.pts, 2.5))
+		var tys: PackedFloat32Array = r.get("_tunnel_ys", PackedFloat32Array())
+		var tdys: PackedFloat32Array = r.get("_tunnel_deck_ys", PackedFloat32Array())
+		if tline.size() < 2:
+			continue
+		_build_tunnel_tube(bridge_bufs, tline, float(r.width), tunnel_zones, tys, tdys)
+
+	# Brücken behalten ihren Rand, normale Straßen liegen flächenbündig mit weichem Shader-Rand
+	for r in sorted:
+		if not r.bridge:
+			continue
 		var style: Array = ROAD_STYLE[r.kind]
 		if style[2] == null:
 			continue
-		var line := _resample(r.pts)
-		var target := bridge_bufs if r.bridge else roads
-		_ribbon(target, line, r.width + 1.0, 0.04, style[2], 0.0, 0.0, r.bridge, true, r.width)
+		_ribbon(bridge_bufs, _resample(r.pts), r.width + 1.0, 0.04, style[2], 0.0, 0.0, true, true, r.width)
 	for r in sorted:
 		var style: Array = ROAD_STYLE["extreme"] if r.tier == TIER_EXTREME else ROAD_STYLE[r.kind]
 		if r.kind == "service" and r.tier == TIER_DIRT:
 			style = ROAD_STYLE["track"]
 		var line := _resample(r.pts)
-		var target := bridge_bufs if r.bridge else roads
-		var y: float = 0.07 + style[0] * 0.004
-		_ribbon(target, line, r.width, y, style[1], 0.0, 0.0, r.bridge, true)
-		if style[3]:
-			_ribbon(target, line, 0.18, y + 0.012, Color(0.96, 0.96, 0.9), 0.0, 3.0, r.bridge, false, r.width)
-	_commit_chunks(roads, group, "S", Toon.material())
-	# Brücken bekommen eine eigene Kollision, sonst fällt man ins Tal
-	_commit_chunks(bridge_bufs, group, "Bruecke", Toon.material(), true)
+		var is_dirt: bool = r.tier >= TIER_DIRT
+		var target := bridge_bufs if r.bridge else (roads_dirt if is_dirt else roads_asphalt)
+		var y: float
+		if r.bridge:
+			y = 0.04 + float(style[0]) * 0.002
+		elif is_dirt:
+			# Feld-/Wald-/Radwege strikt unter Asphalt (+0.012m Kernfläche, auf Asphalt -0.02m)
+			y = -0.014 + float(style[0]) * 0.0005
+		elif r.tier == TIER_MAIN:
+			# Hauptstraßen (+0.060m Kernfläche) über Nebenstraßen
+			y = 0.034 + float(style[0]) * 0.0005
+		else:
+			# Nebenstraßen (+0.045m Kernfläche) über Feldwegen
+			y = 0.019 + float(style[0]) * 0.0005
+		_ribbon(target, line, r.width, y, style[1], 0.0, 0.0, r.bridge, r.bridge, -1.0, 0.0, tunnel_zones, not is_dirt, is_dirt and not r.bridge)
+		if style[3] and r.bridge:
+			_ribbon(target, line, 0.18, y + 0.012, Color(0.96, 0.96, 0.9), 0.0, 3.0, true, false, r.width)
+	_commit_chunks(roads_asphalt, group, "SA", _road_shader_material(false))
+	_commit_chunks(roads_dirt, group, "SD", _road_shader_material(true))
 
 	var rails := {}
 	for r in data.rails:
 		if r.tunnel:
 			continue
-		var line := _resample(r.pts, 3.0)
+		var line := _resample(r.pts, 2.0)
 		if r.kind == "platform":
 			_ribbon(rails, line, r.width, 0.75, Color(0.72, 0.70, 0.66))
 			continue
-		_ribbon(rails, line, r.width, 0.12, Color(0.55, 0.50, 0.46), 0.0, 0.0, r.bridge)
-		_ribbon(rails, line, 2.4, 0.16, Color(0.42, 0.33, 0.27), 0.0, 0.7, r.bridge)  # Schwellen
-		for side in [-0.72, 0.72]:
-			_ribbon(rails, line, 0.12, 0.26, Color(0.75, 0.76, 0.80), side, 0.0, r.bridge)
+		if r.bridge and line.size() >= 2:
+			var p_start := line[0]
+			var p_end := line[line.size() - 1]
+			var p_mid := line[line.size() / 2]
+			var deck_y := maxf(maxf(height_at(p_start.x, p_start.y), height_at(p_end.x, p_end.y)) + 0.35, height_at(p_mid.x, p_mid.y) + 4.9)
+			var deck_col := Color(0.56, 0.56, 0.54)
+			var bw := float(r.width) + 1.4
+			var bhw := bw * 0.5
+			for k in range(1, line.size()):
+				var a := line[k - 1]
+				var b := line[k]
+				var dir := (b - a).normalized()
+				var side := Vector2(-dir.y, dir.x)
+				var al := Vector3(a.x - side.x * bhw, deck_y, a.y - side.y * bhw)
+				var ar := Vector3(a.x + side.x * bhw, deck_y, a.y + side.y * bhw)
+				var bl := Vector3(b.x - side.x * bhw, deck_y, b.y - side.y * bhw)
+				var br := Vector3(b.x + side.x * bhw, deck_y, b.y + side.y * bhw)
+				var mid := (a + b) * 0.5
+				var bbuf := _buf(bridge_bufs, mid.x, mid.y)
+				bbuf.add_quad(al, ar, br, bl, deck_col, Vector3.UP)
+				bbuf.add_quad(al - Vector3(0, 0.45, 0), ar - Vector3(0, 0.45, 0), br - Vector3(0, 0.45, 0), bl - Vector3(0, 0.45, 0), deck_col.darkened(0.25), Vector3.DOWN)
+			# Brückenpfeiler an den beiden Brückenenden (abseits der Unterführungsstraße)
+			for ep in [p_start, p_end]:
+				var h_bot := height_at(ep.x, ep.y) - 0.5
+				var pier_h := maxf(0.5, deck_y - h_bot)
+				var ob := {c = ep, u = (p_end - p_start).normalized(), v = Vector2(-(p_end - p_start).y, p_end.x - p_start.x).normalized(), hl = 0.7, hw = bhw - 0.15}
+				_box(_buf(bridge_bufs, ep.x, ep.y), ob, h_bot, deck_y, deck_col.darkened(0.15))
+				var r_y := deck_y + 0.08
+				var _unused := pier_h
+				var _u2 := r_y
+			for k in range(1, line.size()):
+				var a := line[k - 1]
+				var b := line[k]
+				var mid := (a + b) * 0.5
+				var dir := (b - a).normalized()
+				var side := Vector2(-dir.y, dir.x)
+				for rail_off: float in [-0.72, 0.72]:
+					var p0: Vector2 = a + side * rail_off
+					var p1: Vector2 = b + side * rail_off
+					var rl := Vector3(p0.x - side.x * 0.06, deck_y + 0.12, p0.y - side.y * 0.06)
+					var rr := Vector3(p0.x + side.x * 0.06, deck_y + 0.12, p0.y + side.y * 0.06)
+					var r2l := Vector3(p1.x - side.x * 0.06, deck_y + 0.12, p1.y - side.y * 0.06)
+					var r2r := Vector3(p1.x + side.x * 0.06, deck_y + 0.12, p1.y + side.y * 0.06)
+					_buf(rails, mid.x, mid.y).add_quad(rl, rr, r2r, r2l, Color(0.75, 0.76, 0.80), Vector3.UP)
+			continue
+		if line.size() < 2:
+			continue
+		var r_ys := PackedFloat32Array()
+		r_ys.resize(line.size())
+		var in_cut := PackedByteArray()
+		in_cut.resize(line.size())
+		for k in line.size():
+			var pt := line[k]
+			var min_deck := -INF
+			for tz: Dictionary in tunnel_zones:
+				var d := Geometry2D.get_closest_point_to_segment(pt, tz.a, tz.b).distance_to(pt)
+				if d <= float(tz.wall_hw) + 3.0:
+					in_cut[k] = 1
+					min_deck = maxf(min_deck, float(tz.deck_y))
+			r_ys[k] = maxf(height_at(pt.x, pt.y), min_deck)
+		# Natürliches Bahndamm-Profil über den schmalen Tunnel-Einschnitt hinweg unverändert fortführen
+		var k := 0
+		while k < line.size():
+			if in_cut[k] == 1:
+				var k0 := maxi(0, k - 1)
+				var k1 := k
+				while k1 < line.size() - 1 and in_cut[k1] == 1:
+					k1 += 1
+				var h0 := r_ys[k0]
+				var h1 := r_ys[k1]
+				for m in range(k0, k1 + 1):
+					var t := float(m - k0) / maxf(1.0, float(k1 - k0))
+					r_ys[m] = maxf(r_ys[m], lerpf(h0, h1, t))
+				k = k1 + 1
+			else:
+				k += 1
+		var seg_dist := 0.0
+		var top_hw := maxf(float(r.width) * 0.5, 2.2)
+		var emb_col := Color(0.40, 0.37, 0.31)
+		for m in range(1, line.size()):
+			var a := line[m - 1]
+			var b := line[m]
+			var seg_len := a.distance_to(b)
+			var mid := (a + b) * 0.5
+			var dir := (b - a).normalized()
+			if dir.length_squared() < 0.001:
+				continue
+			var side := Vector2(-dir.y, dir.x)
+			var ya := r_ys[m - 1]
+			var yb := r_ys[m]
+			var rbuf := _buf(rails, mid.x, mid.y)
+			# Bahndamm-Unterbau innerhalb von (wall_hw + 3.0 m) um eine tunnel_zone komplett weglassen
+			var inside_tunnel_box := false
+			for tz: Dictionary in tunnel_zones:
+				var skip_w := float(tz.wall_hw) + 3.0
+				if Geometry2D.get_closest_point_to_segment(a, tz.a, tz.b).distance_to(a) <= skip_w \
+						or Geometry2D.get_closest_point_to_segment(mid, tz.a, tz.b).distance_to(mid) <= skip_w \
+						or Geometry2D.get_closest_point_to_segment(b, tz.a, tz.b).distance_to(b) <= skip_w:
+					inside_tunnel_box = true
+					break
+			if not inside_tunnel_box:
+				var h_emb_a := maxf(0.0, ya - minf(height_at(a.x - side.x * top_hw, a.y - side.y * top_hw), height_at(a.x + side.x * top_hw, a.y + side.y * top_hw)))
+				var h_emb_b := maxf(0.0, yb - minf(height_at(b.x - side.x * top_hw, b.y - side.y * top_hw), height_at(b.x + side.x * top_hw, b.y + side.y * top_hw)))
+				var bot_hw_a := top_hw + maxf(3.2, h_emb_a * 1.4 + 2.0)
+				var bot_hw_b := top_hw + maxf(3.2, h_emb_b * 1.4 + 2.0)
+				var al_top := Vector3(a.x - side.x * top_hw, ya + 0.12, a.y - side.y * top_hw)
+				var ar_top := Vector3(a.x + side.x * top_hw, ya + 0.12, a.y + side.y * top_hw)
+				var bl_top := Vector3(b.x - side.x * top_hw, yb + 0.12, b.y - side.y * top_hw)
+				var br_top := Vector3(b.x + side.x * top_hw, yb + 0.12, b.y + side.y * top_hw)
+				var al_bp := a - side * bot_hw_a
+				var ar_bp := a + side * bot_hw_a
+				var bl_bp := b - side * bot_hw_b
+				var br_bp := b + side * bot_hw_b
+				var al_by := minf(height_at(al_bp.x, al_bp.y), ya) - 2.0
+				var ar_by := minf(height_at(ar_bp.x, ar_bp.y), ya) - 2.0
+				var bl_by := minf(height_at(bl_bp.x, bl_bp.y), yb) - 2.0
+				var br_by := minf(height_at(br_bp.x, br_bp.y), yb) - 2.0
+				for tz: Dictionary in tunnel_zones:
+					var buf_w := float(tz.wall_hw) + 4.0
+					if Geometry2D.get_closest_point_to_segment(al_bp, tz.a, tz.b).distance_to(al_bp) <= buf_w or Geometry2D.get_closest_point_to_segment(a, tz.a, tz.b).distance_to(a) <= buf_w:
+						al_by = maxf(al_by, float(tz.deck_y))
+					if Geometry2D.get_closest_point_to_segment(ar_bp, tz.a, tz.b).distance_to(ar_bp) <= buf_w or Geometry2D.get_closest_point_to_segment(a, tz.a, tz.b).distance_to(a) <= buf_w:
+						ar_by = maxf(ar_by, float(tz.deck_y))
+					if Geometry2D.get_closest_point_to_segment(bl_bp, tz.a, tz.b).distance_to(bl_bp) <= buf_w or Geometry2D.get_closest_point_to_segment(b, tz.a, tz.b).distance_to(b) <= buf_w:
+						bl_by = maxf(bl_by, float(tz.deck_y))
+					if Geometry2D.get_closest_point_to_segment(br_bp, tz.a, tz.b).distance_to(br_bp) <= buf_w or Geometry2D.get_closest_point_to_segment(b, tz.a, tz.b).distance_to(b) <= buf_w:
+						br_by = maxf(br_by, float(tz.deck_y))
+				var al_bot := Vector3(al_bp.x, al_by, al_bp.y)
+				var ar_bot := Vector3(ar_bp.x, ar_by, ar_bp.y)
+				var bl_bot := Vector3(bl_bp.x, bl_by, bl_bp.y)
+				var br_bot := Vector3(br_bp.x, br_by, br_bp.y)
+				var n_left := Vector3(-side.x * 0.7, 0.7, -side.y * 0.7).normalized()
+				var n_right := Vector3(side.x * 0.7, 0.7, side.y * 0.7).normalized()
+				rbuf.add_quad(al_bot, al_top, bl_top, bl_bot, emb_col, n_left)
+				rbuf.add_quad(ar_top, ar_bot, br_bot, br_top, emb_col, n_right)
+			# Schotterbett
+			rbuf.add_quad(
+				Vector3(a.x - side.x * top_hw, ya + 0.12, a.y - side.y * top_hw),
+				Vector3(a.x + side.x * top_hw, ya + 0.12, a.y + side.y * top_hw),
+				Vector3(b.x + side.x * top_hw, yb + 0.12, b.y + side.y * top_hw),
+				Vector3(b.x - side.x * top_hw, yb + 0.12, b.y - side.y * top_hw),
+				Color(0.55, 0.50, 0.46), Vector3.UP)
+			# Schwellen (gestrichelt)
+			if int(floor((seg_dist + seg_len * 0.5) / 0.7)) % 2 == 0:
+				rbuf.add_quad(
+					Vector3(a.x - side.x * 1.2, ya + 0.16, a.y - side.y * 1.2),
+					Vector3(a.x + side.x * 1.2, ya + 0.16, a.y + side.y * 1.2),
+					Vector3(b.x + side.x * 1.2, yb + 0.16, b.y + side.y * 1.2),
+					Vector3(b.x - side.x * 1.2, yb + 0.16, b.y - side.y * 1.2),
+					Color(0.42, 0.33, 0.27), Vector3.UP)
+			# Schienen
+			for rail_off: float in [-0.72, 0.72]:
+				var p0: Vector2 = a + side * rail_off
+				var p1: Vector2 = b + side * rail_off
+				rbuf.add_quad(
+					Vector3(p0.x - side.x * 0.06, ya + 0.26, p0.y - side.y * 0.06),
+					Vector3(p0.x + side.x * 0.06, ya + 0.26, p0.y + side.y * 0.06),
+					Vector3(p1.x + side.x * 0.06, yb + 0.26, p1.y + side.y * 0.06),
+					Vector3(p1.x - side.x * 0.06, yb + 0.26, p1.y - side.y * 0.06),
+					Color(0.75, 0.76, 0.80), Vector3.UP)
+			seg_dist += seg_len
 	_commit_chunks(rails, group, "Bahn", Toon.material())
+	# Brücken bekommen eine eigene Kollision, sonst fällt man ins Tal
+	_commit_chunks(bridge_bufs, group, "Bruecke", Toon.material(), true)
 
 	var water := {}
 	for w in data.water_lines:
@@ -937,6 +1365,105 @@ static func _poly_area(poly: PackedVector2Array) -> float:
 		var q := poly[(k + 1) % poly.size()]
 		a += p.x * q.y - q.x * p.y
 	return absf(a) * 0.5
+
+
+func _build_tunnel_tube(bufs: Dictionary, line: PackedVector2Array, road_w: float, tunnel_zones: Array,
+		floor_ys := PackedFloat32Array(), deck_top_ys := PackedFloat32Array()) -> void:
+	var clear_h := 6.00  # Mindestens 6.0m lichte Durchfahrtshöhe
+	var deck_thick := 0.55
+	var hw := road_w * 0.5 + 0.95  # Platz für Fahrbahn + Gehsteig/Bankett
+	var wall_w := 0.55
+	var conc := Color(0.62, 0.62, 0.60)
+	var conc_dark := Color(0.46, 0.46, 0.45)
+	var conc_wall := Color(0.55, 0.55, 0.53)
+	var conc_floor := Color(0.38, 0.38, 0.40)
+
+	var ys := PackedFloat32Array()
+	ys.resize(line.size())
+	var dys := PackedFloat32Array()
+	dys.resize(line.size())
+	for k in line.size():
+		ys[k] = floor_ys[k] if floor_ys.size() == line.size() else height_at(line[k].x, line[k].y)
+		var dt := deck_top_ys[k] if deck_top_ys.size() == line.size() else ys[k] + clear_h + deck_thick
+		dys[k] = maxf(ys[k] + clear_h, dt - deck_thick)
+
+	for k in range(1, line.size()):
+		var a := line[k - 1]
+		var b := line[k]
+		var dir := (b - a).normalized()
+		if dir.length_squared() < 0.001:
+			continue
+		var side := Vector2(-dir.y, dir.x)
+		var mid := (a + b) * 0.5
+		var buf := _buf(bufs, mid.x, mid.y)
+		var y0 := ys[k - 1]
+		var y1 := ys[k]
+		var dy0 := dys[k - 1]
+		var dy1 := dys[k]
+		tunnel_zones.append({a = a, b = b, hw = hw + wall_w + 1.5, clear_hw = hw, wall_hw = hw + wall_w, y0 = y0, y1 = y1, deck_y = maxf(dy0, dy1) + deck_thick})
+
+		# Durchgehende Tunnel-Bodenplatte (mit eigener Kollision über bridge_bufs)
+		var fl0 := Vector3(a.x - side.x * hw, y0, a.y - side.y * hw)
+		var fr0 := Vector3(a.x + side.x * hw, y0, a.y + side.y * hw)
+		var fl1 := Vector3(b.x - side.x * hw, y1, b.y - side.y * hw)
+		var fr1 := Vector3(b.x + side.x * hw, y1, b.y + side.y * hw)
+		buf.add_quad(fl0, fr0, fr1, fl1, conc_floor, Vector3.UP)
+
+		# Linke & rechte Beton-Stützmauer
+		for sgn: float in [-1.0, 1.0]:
+			var in_off := sgn * hw
+			var out_off := sgn * (hw + wall_w)
+			var bi0 := Vector3(a.x + side.x * in_off, y0 - 0.5, a.y + side.y * in_off)
+			var bi1 := Vector3(b.x + side.x * in_off, y1 - 0.5, b.y + side.y * in_off)
+			var ti0 := Vector3(a.x + side.x * in_off, dy0, a.y + side.y * in_off)
+			var ti1 := Vector3(b.x + side.x * in_off, dy1, b.y + side.y * in_off)
+			var bo0 := Vector3(a.x + side.x * out_off, y0 - 0.5, a.y + side.y * out_off)
+			var bo1 := Vector3(b.x + side.x * out_off, y1 - 0.5, b.y + side.y * out_off)
+			var to0 := Vector3(a.x + side.x * out_off, dy0 + deck_thick, a.y + side.y * out_off)
+			var to1 := Vector3(b.x + side.x * out_off, dy1 + deck_thick, b.y + side.y * out_off)
+			var n_in := Vector3(-side.x * sgn, 0, -side.y * sgn)
+			buf.add_quad(bi0, bi1, ti1, ti0, conc_wall, n_in)
+			buf.add_quad(bo0, to0, to1, bo1, conc_dark, -n_in)
+			buf.add_quad(ti0, ti1, to1, to0, conc, Vector3.UP)
+
+		# Geschlossene Betondecke + Lärmschutzwand-Brüstung oben
+		var l_in0 := Vector3(a.x - side.x * hw, dy0, a.y - side.y * hw)
+		var r_in0 := Vector3(a.x + side.x * hw, dy0, a.y + side.y * hw)
+		var l_in1 := Vector3(b.x - side.x * hw, dy1, b.y - side.y * hw)
+		var r_in1 := Vector3(b.x + side.x * hw, dy1, b.y + side.y * hw)
+		var l_top0 := l_in0 + Vector3(0, deck_thick, 0)
+		var r_top0 := r_in0 + Vector3(0, deck_thick, 0)
+		var l_top1 := l_in1 + Vector3(0, deck_thick, 0)
+		var r_top1 := r_in1 + Vector3(0, deck_thick, 0)
+		buf.add_quad(l_in0, l_in1, r_in1, r_in0, conc_dark, Vector3.DOWN)
+		buf.add_quad(l_top0, r_top0, r_top1, l_top1, conc, Vector3.UP)
+
+	# Portale: rot-weißer Höhen-Warnbalken + schräge Flügelmauern
+	for idx in [0, line.size() - 1]:
+		var ep := line[idx]
+		var out_dir := (line[0] - line[1]).normalized() if idx == 0 else (line[-1] - line[-2]).normalized()
+		var side := Vector2(-out_dir.y, out_dir.x)
+		var ey := ys[idx]
+		var edy := dys[idx]
+		var pbuf := _buf(bufs, ep.x, ep.y)
+		# Rot-weißer Warnstreifen am Portal
+		var strips := 6
+		for s in strips:
+			var f0 := -hw + (2.0 * hw) * float(s) / strips
+			var f1 := -hw + (2.0 * hw) * float(s + 1) / strips
+			var wcol := Color(0.85, 0.14, 0.14) if s % 2 == 0 else Color(0.95, 0.95, 0.95)
+			var p0 := Vector3(ep.x + side.x * f0, edy, ep.y + side.y * f0)
+			var p1 := Vector3(ep.x + side.x * f1, edy, ep.y + side.y * f1)
+			var p2 := p1 + Vector3(0, 0.32, 0)
+			var p3 := p0 + Vector3(0, 0.32, 0)
+			pbuf.add_quad(p0, p1, p2, p3, wcol, Vector3(out_dir.x, 0, out_dir.y))
+		# Schräge Flügelmauern (4.2m lang, nach außen aufgefächert)
+		for sgn: float in [-1.0, 1.0]:
+			var w_in := ep + side * (sgn * hw)
+			var w_out := ep + out_dir * 4.2 + side * (sgn * (hw + 1.7))
+			var wm := (w_in + w_out) * 0.5
+			var ob := {c = wm, u = (w_out - w_in).normalized(), v = Vector2(-(w_out - w_in).y, w_out.x - w_in.x).normalized(), hl = w_in.distance_to(w_out) * 0.5, hw = 0.28}
+			_box(pbuf, ob, ey - 0.5, ey + 2.6, conc_wall)
 
 
 func _build_buildings() -> void:
@@ -997,6 +1524,29 @@ func _house(b: Dictionary, poly: PackedVector2Array, walls: MeshBuffer, roofs: M
 		"fire_station":
 			wall_c = Color(0.95, 0.88, 0.80)
 			roof_c = Color(0.70, 0.18, 0.15)
+
+	# Offene Vordächer & Carports (z. B. Tankstellen-Dächer): 4 schlanke Pfeiler + schwebende Dachplatte
+	var is_canopy := type in ["roof", "carport", "canopy"]
+	if not is_canopy and poly.size() >= 4:
+		var c_pts := Vector2.ZERO
+		for p in poly:
+			c_pts += p / poly.size()
+		for poi in data.pois:
+			if poi.kind == "fuel" and c_pts.distance_to(Vector2(poi.pos[0], poi.pos[1])) < 18.0 and _poly_area(poly) < 350.0:
+				is_canopy = true
+				break
+	if is_canopy:
+		var ob := _obb(poly)
+		var roof_y0 := ground + 4.2
+		var roof_y1 := roof_y0 + 0.55
+		_box(roofs, ob, roof_y0, roof_y1, roof_c)
+		var px_off := maxf(0.25, ob.hl - 0.55)
+		var pz_off := maxf(0.25, ob.hw - 0.55)
+		for sx: float in [-px_off, px_off]:
+			for sz: float in [-pz_off, pz_off]:
+				var pc: Vector2 = ob.c + ob.u * sx + ob.v * sz
+				_box(walls, {c = pc, u = ob.u, v = ob.v, hl = 0.18, hw = 0.18}, base, roof_y0 + 0.05, Color(0.78, 0.80, 0.82))
+		return
 
 	# Wände mit dunklerem Sockel
 	var longest := -1
@@ -1269,6 +1819,72 @@ func _blob(buf: MeshBuffer, c: Vector3, r: float, color: Color) -> void:
 		buf.add_tri(a, b, d, Color(color.r * shade, color.g * shade, color.b * shade), (a + b + d) / 3.0 - c)
 
 
+var _bld_cull_grid := {}  # Vector2i -> Array[{min, max, poly}]
+
+
+func _index_buildings_cull() -> void:
+	if not _bld_cull_grid.is_empty():
+		return
+	const CELL := 48.0
+	var add_poly := func(poly: PackedVector2Array):
+		if poly.size() < 3:
+			return
+		var mn := poly[0]
+		var mx := poly[0]
+		for p in poly:
+			mn = mn.min(p)
+			mx = mx.max(p)
+		var entry := {min = mn, max = mx, poly = poly}
+		var c0 := Vector2i(floori((mn.x - 4.0) / CELL), floori((mn.y - 4.0) / CELL))
+		var c1 := Vector2i(floori((mx.x + 4.0) / CELL), floori((mx.y + 4.0) / CELL))
+		for cz in range(c0.y, c1.y + 1):
+			for cx in range(c0.x, c1.x + 1):
+				var key := Vector2i(cx, cz)
+				if not _bld_cull_grid.has(key):
+					_bld_cull_grid[key] = []
+				_bld_cull_grid[key].append(entry)
+	for b in data.buildings:
+		add_poly.call(to_v2_array(b.pts))
+	# Platzhalter-Wohnwagen (300.3, 1536.3), 10m x 20m
+	add_poly.call(PackedVector2Array([
+		Vector2(295.3, 1526.3), Vector2(305.3, 1526.3),
+		Vector2(305.3, 1546.3), Vector2(295.3, 1546.3)
+	]))
+
+
+func _near_building(px: float, pz: float, margin := 3.0) -> bool:
+	if _bld_cull_grid.is_empty():
+		_index_buildings_cull()
+	var pt := Vector2(px, pz)
+	var m2 := margin * margin
+	var key := Vector2i(floori(px / 48.0), floori(pz / 48.0))
+	for e: Dictionary in _bld_cull_grid.get(key, []):
+		var mn: Vector2 = e.min
+		var mx: Vector2 = e.max
+		if px < mn.x - margin or px > mx.x + margin or pz < mn.y - margin or pz > mx.y + margin:
+			continue
+		var poly: PackedVector2Array = e.poly
+		if Geometry2D.is_point_in_polygon(pt, poly):
+			return true
+		if margin > 0.0:
+			var n := poly.size()
+			for i in n:
+				var cp := Geometry2D.get_closest_point_to_segment(pt, poly[i], poly[(i + 1) % n])
+				if cp.distance_squared_to(pt) <= m2:
+					return true
+	return false
+
+
+func _near_farmland(px: float, pz: float, buf := 1.5) -> bool:
+	if kind_at(px, pz) == "farmland":
+		return true
+	if buf > 0.0:
+		for ox: float in [-buf, buf]:
+			if kind_at(px + ox, pz) == "farmland" or kind_at(px, pz + ox) == "farmland":
+				return true
+	return false
+
+
 func _build_trees() -> void:
 	var group := _group("Baeume")
 	var meshes := _tree_meshes()
@@ -1277,6 +1893,8 @@ func _build_trees() -> void:
 	for k in range(0, t.size(), 4):
 		var x := t[k] * MAP_SCALE
 		var z := t[k + 1] * MAP_SCALE
+		if _near_farmland(x, z, 1.5) or _near_building(x, z, 3.0):
+			continue
 		var key := _chunk_key(x, z)
 		if not per_chunk.has(key):
 			per_chunk[key] = [[], []]
@@ -1403,9 +2021,9 @@ func _build_foliage() -> void:
 				var pz := cz * T_CHUNK + rng_t.randf() * T_CHUNK
 				if px < x0 + 5.0 or pz < z0 + 5.0 or px > max_x or pz > max_z:
 					continue
-				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery"] or slope_at(px, pz) > 0.42:
+				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery", "farmland"] or _near_farmland(px, pz, 1.5) or slope_at(px, pz) > 0.42:
 					continue
-				if road_info(Vector2(px, pz), 7.5).tier != 0:
+				if road_info(Vector2(px, pz), 7.5).tier != 0 or _near_building(px, pz, 3.0):
 					continue
 				var py := height_at(px, pz) - 0.1
 				var tsc := rng_t.randf_range(0.85, 1.25)
@@ -1427,9 +2045,9 @@ func _build_foliage() -> void:
 				var pz := cz * T_CHUNK + rng_r.randf() * T_CHUNK
 				if px < x0 + 5.0 or pz < z0 + 5.0 or px > max_x or pz > max_z:
 					continue
-				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery"] or slope_at(px, pz) > 0.42:
+				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery", "farmland"] or _near_farmland(px, pz, 1.5) or slope_at(px, pz) > 0.42:
 					continue
-				if road_info(Vector2(px, pz), 6.5).tier != 0:
+				if road_info(Vector2(px, pz), 6.5).tier != 0 or _near_building(px, pz, 3.0):
 					continue
 				var py := height_at(px, pz) - 0.1
 				var rxf := Transform3D(Basis(Vector3.UP, rng_r.randf() * TAU).scaled(Vector3.ONE * rng_r.randf_range(0.8, 1.4)), Vector3(px, py, pz))
@@ -1471,9 +2089,9 @@ func _build_foliage() -> void:
 				var pz := cz * F_CHUNK + rng_b.randf() * F_CHUNK
 				if px < x0 + 5.0 or pz < z0 + 5.0 or px > max_x or pz > max_z:
 					continue
-				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery"] or slope_at(px, pz) > 0.42:
+				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery", "farmland"] or _near_farmland(px, pz, 1.5) or slope_at(px, pz) > 0.42:
 					continue
-				if road_info(Vector2(px, pz), 5.5).tier != 0:
+				if road_info(Vector2(px, pz), 6.5).tier != 0 or _near_building(px, pz, 3.0):
 					continue
 				var py := height_at(px, pz)
 				var bxf := Transform3D(Basis(Vector3.UP, rng_b.randf() * TAU).scaled(Vector3.ONE * rng_b.randf_range(0.85, 1.25)), Vector3(px, py, pz))
@@ -1489,9 +2107,9 @@ func _build_foliage() -> void:
 				var pz := cz * F_CHUNK + rng_g.randf() * F_CHUNK
 				if px < x0 + 5.0 or pz < z0 + 5.0 or px > max_x or pz > max_z:
 					continue
-				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery"] or slope_at(px, pz) > 0.42:
+				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery", "farmland"] or _near_farmland(px, pz, 1.5) or slope_at(px, pz) > 0.42:
 					continue
-				if road_info(Vector2(px, pz), 4.5).tier != 0:
+				if road_info(Vector2(px, pz), 5.8).tier != 0 or _near_building(px, pz, 0.8):
 					continue
 				var py := height_at(px, pz) - 0.04
 				var sc := rng_g.randf_range(0.85, 1.45)
@@ -1508,9 +2126,9 @@ func _build_foliage() -> void:
 				var pz := cz * F_CHUNK + rng_f.randf() * F_CHUNK
 				if px < x0 + 5.0 or pz < z0 + 5.0 or px > max_x or pz > max_z:
 					continue
-				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery"] or slope_at(px, pz) > 0.42:
+				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery", "farmland"] or _near_farmland(px, pz, 1.5) or slope_at(px, pz) > 0.42:
 					continue
-				if road_info(Vector2(px, pz), 4.5).tier != 0:
+				if road_info(Vector2(px, pz), 5.8).tier != 0 or _near_building(px, pz, 0.8):
 					continue
 				var py := height_at(px, pz) - 0.02
 				var fxf := Transform3D(Basis(Vector3.UP, rng_f.randf() * TAU).scaled(Vector3.ONE * rng_f.randf_range(0.9, 1.3)), Vector3(px, py, pz))
@@ -1529,6 +2147,131 @@ func _build_foliage() -> void:
 					_commit_foliage_mm(group, "BF%d_%d_%d" % [i, cx, cz], bush_meshes[i], Array(b_buckets[i], TYPE_TRANSFORM3D, &"", null), [], 270.0)
 					total_mmi += 1
 	print("DEBUG FOLIAGE TOTALS: trees=%d, grass=%d, flowers=%d, bushes=%d, rocks=%d | mmi_nodes=%d" % [total_trees, total_grass, total_flowers, total_bushes, total_rocks, total_mmi])
+
+
+func _make_crop_mesh(is_corn: bool) -> ArrayMesh:
+	var buf := MeshBuffer.new()
+	if is_corn:
+		var stalk_c := Color(0.32, 0.56, 0.16)
+		var leaf_c := stalk_c.lightened(0.08)
+		var cob_c := Color(0.88, 0.72, 0.22)
+		buf.add_quad_2s(Vector3(-0.07, 0.0, 0), Vector3(0.07, 0.0, 0), Vector3(0.04, 1.5, 0), Vector3(-0.04, 1.5, 0), stalk_c, Vector3.BACK, stalk_c)
+		buf.add_quad_2s(Vector3(0, 0.0, -0.07), Vector3(0, 0.0, 0.07), Vector3(0, 1.5, 0.04), Vector3(0, 1.5, -0.04), stalk_c, Vector3.RIGHT, stalk_c)
+		buf.add_quad_2s(Vector3(-0.24, 0.85, 0), Vector3(0.24, 0.92, 0), Vector3(0.22, 1.02, 0.06), Vector3(-0.22, 0.95, 0.06), leaf_c, Vector3.BACK, leaf_c)
+		buf.add_quad_2s(Vector3(0.03, 0.80, -0.05), Vector3(0.11, 0.80, -0.05), Vector3(0.10, 1.02, -0.05), Vector3(0.04, 1.02, -0.05), cob_c, Vector3.BACK, cob_c)
+	else:
+		var wheat_c := Color(0.82, 0.70, 0.26)
+		var stem_c := Color(0.64, 0.56, 0.22)
+		for ox: float in [-0.14, 0.0, 0.14]:
+			var oz: float = ox * 0.4
+			buf.add_quad_2s(Vector3(ox - 0.03, 0.0, oz), Vector3(ox + 0.03, 0.0, oz), Vector3(ox + 0.02, 0.72, oz), Vector3(ox - 0.02, 0.72, oz), stem_c, Vector3.BACK, stem_c)
+			buf.add_quad_2s(Vector3(ox - 0.05, 0.68, oz), Vector3(ox + 0.05, 0.68, oz), Vector3(ox + 0.03, 0.88, oz), Vector3(ox - 0.03, 0.88, oz), wheat_c, Vector3.BACK, wheat_c)
+	return buf.to_mesh(Toon.material())
+
+
+func _build_fields() -> void:
+	var group := _group("Felder")
+	var corn_mesh := _make_crop_mesh(true)
+	var wheat_mesh := _make_crop_mesh(false)
+	const F_CHUNK := 200.0
+	var max_x := x0 + (nx - 1) * step - 5.0
+	var max_z := z0 + (nz - 1) * step - 5.0
+	var cx0 := floori(x0 / F_CHUNK)
+	var cx1 := floori(max_x / F_CHUNK)
+	var cz0 := floori(z0 / F_CHUNK)
+	var cz1 := floori(max_z / F_CHUNK)
+	var total_crops := 0
+	for cz in range(cz0, cz1 + 1):
+		for cx in range(cx0, cx1 + 1):
+			var corn_xfs: Array[Transform3D] = []
+			var wheat_xfs: Array[Transform3D] = []
+			var x_start := maxf(x0 + 6.0, cx * F_CHUNK)
+			var x_end := minf(max_x, (cx + 1) * F_CHUNK)
+			var z_start := maxf(z0 + 6.0, cz * F_CHUNK)
+			var z_end := minf(max_z, (cz + 1) * F_CHUNK)
+			var px := x_start
+			while px < x_end:
+				var pz := z_start
+				while pz < z_end:
+					if kind_at(px, pz) == "farmland" and slope_at(px, pz) < 0.25:
+						if road_info(Vector2(px, pz), 7.0).tier == 0 and not _near_building(px, pz, 3.0):
+							var patch := hash01(floorf(px / 120.0), floorf(pz / 120.0))
+							var is_corn := patch > 0.55
+							var jitter := (hash01(px * 0.7, pz * 0.3) - 0.5) * 0.45
+							var py := height_at(px + jitter, pz + jitter)
+							var sc := 0.88 + hash01(px * 0.13, pz * 0.29) * 0.28
+							var xf := Transform3D(Basis(Vector3.UP, patch * TAU).scaled(Vector3.ONE * sc), Vector3(px + jitter, py, pz + jitter))
+							if is_corn:
+								corn_xfs.append(xf)
+							else:
+								wheat_xfs.append(xf)
+							total_crops += 1
+					pz += 2.8
+				px += 2.8
+			if not corn_xfs.is_empty():
+				_commit_foliage_mm(group, "FD0_%d_%d" % [cx, cz], corn_mesh, corn_xfs, [], 175.0)
+			if not wheat_xfs.is_empty():
+				_commit_foliage_mm(group, "FD1_%d_%d" % [cx, cz], wheat_mesh, wheat_xfs, [], 175.0)
+	print("  Felder-Pflanzen: %d" % total_crops)
+
+
+func _road_shader_material(is_dirt: bool) -> ShaderMaterial:
+	var sh := Shader.new()
+	if is_dirt:
+		sh.code = """shader_type spatial;
+render_mode cull_disabled, depth_draw_opaque;
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n2(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+void fragment() {
+	float u = UV.x;
+	float v = UV.y;
+	float edge = min(u, 1.0 - u);
+	float grit = n2(vec2(u * 14.0, v * 1.4)) * 0.65 + n2(vec2(u * 42.0, v * 4.5)) * 0.35;
+	float rut = exp(-pow((u - 0.32) * 11.0, 2.0)) + exp(-pow((u - 0.68) * 11.0, 2.0));
+	float mid_grass = exp(-pow((u - 0.5) * 9.0, 2.0)) * 0.55;
+	vec3 base = COLOR.rgb * (0.82 + grit * 0.30);
+	base = mix(base, base * vec3(0.75, 0.68, 0.60), clamp(rut * 0.65, 0.0, 0.7));
+	base = mix(base, vec3(0.28, 0.42, 0.16), mid_grass * grit);
+	// Volle Kern-Fahrbahn (u in [0.15, 0.85]) strikt ALPHA = 1.0; Ausblendung nur im Außen-Bankett
+	float alpha = edge >= 0.15 ? 1.0 : smoothstep(0.01, 0.15, edge + (grit - 0.5) * 0.06);
+	ALBEDO = base;
+	ROUGHNESS = 0.94;
+	ALPHA = alpha;
+}"""
+	else:
+		sh.code = """shader_type spatial;
+render_mode cull_disabled, depth_draw_opaque;
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float n2(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+void fragment() {
+	float u = UV.x;
+	float v = UV.y;
+	float edge = min(u, 1.0 - u);
+	float grain = n2(vec2(u * 26.0, v * 3.2)) * 0.6 + n2(vec2(u * 75.0, v * 9.0)) * 0.4;
+	float tracks = exp(-pow((u - 0.34) * 12.0, 2.0)) + exp(-pow((u - 0.66) * 12.0, 2.0));
+	vec3 base = COLOR.rgb * (0.78 + grain * 0.26);
+	base = mix(base, base * 0.76, clamp(tracks * 0.45, 0.0, 0.5));
+	float dash = step(0.42, fract(v * 0.18));
+	float mid_line = step(abs(u - 0.5), 0.015) * dash * (0.65 + 0.35 * grain);
+	float side_line = (step(abs(u - 0.185), 0.012) + step(abs(u - 0.815), 0.012)) * 0.55 * grain;
+	base = mix(base, vec3(0.88, 0.88, 0.84), clamp(mid_line + side_line, 0.0, 0.88));
+	// Außen-Bankett (u < 0.15 / u > 0.85): Kies-Übergang mit weichem Alpha-Fade; Kern strikt ALPHA = 1.0
+	vec3 shoulder_col = mix(vec3(0.38, 0.35, 0.29), vec3(0.32, 0.42, 0.18), grain * 0.35);
+	base = edge < 0.15 ? mix(shoulder_col, base, smoothstep(0.09, 0.15, edge)) : base;
+	float alpha = edge >= 0.15 ? 1.0 : smoothstep(0.01, 0.15, edge + (grain - 0.5) * 0.05);
+	ALBEDO = base;
+	ROUGHNESS = 0.88 - tracks * 0.08;
+	ALPHA = alpha;
+}"""
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	return mat
 
 
 static func _layer_seed(layer_id: int, cx: int, cz: int) -> int:
