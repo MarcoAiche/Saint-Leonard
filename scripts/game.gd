@@ -52,6 +52,8 @@ var _place_timer := 0.0
 var _dropzone_t := 0.0
 var _current_interaction := {}
 var _festival: Node3D
+var _default_car_xf := Transform3D.IDENTITY
+var _default_atv_xf := Transform3D.IDENTITY
 
 
 func _ready() -> void:
@@ -185,10 +187,26 @@ func _return_to_menu() -> void:
 	if player and is_instance_valid(player):
 		player.queue_free()
 	player = null
-	for v in [car, atv, trailer]:
+	for v in [car, atv]:
 		if v and is_instance_valid(v):
 			interactions.remove_node(v)
-			v.queue_free()
+			if v.get_parent() and v.get_parent().name == "Vehicles":
+				v.player_input = false
+				v.driving = false
+				v.linear_velocity = Vector3.ZERO
+				v.angular_velocity = Vector3.ZERO
+				if v is Truck:
+					for c in (v as Truck).cargo:
+						if is_instance_valid(c):
+							c.queue_free()
+					(v as Truck).cargo.clear()
+				v.global_transform = _default_car_xf if v == car else _default_atv_xf
+				v.reset_physics_interpolation()
+			else:
+				v.queue_free()
+	if trailer and is_instance_valid(trailer):
+		interactions.remove_node(trailer)
+		trailer.queue_free()
 	car = null
 	atv = null
 	trailer = null
@@ -394,23 +412,33 @@ func _start_dedicated() -> void:
 
 ## Feuerwehrhaus Korpitsch und Glücksspiel
 func _setup_hall() -> void:
-	var info := FireHall.find(world)
 	casino = Casino.new()
 	casino.name = "Casino"
 	casino.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(casino)
-	if not info.is_empty():
-		hall = FireHall.new()
-		hall.name = "FeuerwehrhausKorpitsch"
-		add_child(hall)
-		hall.setup(self, world, info)
+	var scene_hall := get_node_or_null("WorldOverlays/Shops/FeuerwehrhausKorpitsch") as FireHall
+	if scene_hall != null:
+		hall = scene_hall
+		hall.setup_in_scene(self, world)
+	else:
+		var info := FireHall.find(world)
+		if not info.is_empty():
+			hall = FireHall.new()
+			hall.name = "FeuerwehrhausKorpitsch"
+			add_child(hall)
+			hall.setup(self, world, info)
 	casino.setup(self, hall)
-	var g_info := Gasthaus.find(world)
-	if not g_info.is_empty():
-		gasthaus = Gasthaus.new()
-		gasthaus.name = "GasthausPirtscher"
-		add_child(gasthaus)
-		gasthaus.setup(self, world, g_info)
+	var scene_gh := get_node_or_null("WorldOverlays/Shops/GasthausPirtscher") as Gasthaus
+	if scene_gh != null:
+		gasthaus = scene_gh
+		gasthaus.setup_in_scene(self, world)
+	else:
+		var g_info := Gasthaus.find(world)
+		if not g_info.is_empty():
+			gasthaus = Gasthaus.new()
+			gasthaus.name = "GasthausPirtscher"
+			add_child(gasthaus)
+			gasthaus.setup(self, world, g_info)
 
 
 ## Hinsetzen (Bank, Pokertisch): Figur sitzt, Kamera bleibt frei
@@ -470,13 +498,34 @@ func _start_game() -> void:
 	player.reset_physics_interpolation()
 	player.shot.connect(_on_shot)
 
-	car = Truck.new()
-	car.name = "Pickup"
+	var scene_car := get_node_or_null("WorldOverlays/Vehicles/Pickup") as Truck
+	if scene_car != null:
+		car = scene_car
+		if _default_car_xf == Transform3D.IDENTITY:
+			_default_car_xf = car.global_transform
+	else:
+		car = Truck.new()
+		car.name = "Pickup"
+		add_child(car)
 	car.world = world
 	car.owner_name = GameState.player_name
 	car.player_input = true
 
-	if not landmarks.atv_spawn.is_empty():
+	var scene_atv := get_node_or_null("WorldOverlays/Vehicles/ATV") as ATV
+	if scene_atv != null:
+		atv = scene_atv
+		if _default_atv_xf == Transform3D.IDENTITY:
+			_default_atv_xf = atv.global_transform
+		atv.world = world
+		var fb_atv_pos := _default_atv_xf.origin
+		var fb_atv_yaw := _default_atv_xf.basis.get_euler().y
+		var atv_saved: Dictionary = GameState.vehicles_state.get("atv", {})
+		var atv_pos := GameState._v3_from_arr(atv_saved.get("pos", null))
+		var atv_yaw := float(atv_saved.get("rot", fb_atv_yaw))
+		atv.global_transform = world.find_safe_spawn_transform(atv_pos, atv_yaw, fb_atv_pos, fb_atv_yaw, 1.0, [atv.get_rid()])
+		atv.reset_physics_interpolation()
+		Animal.threats.append(atv)
+	elif not landmarks.atv_spawn.is_empty():
 		atv = ATV.new()
 		atv.name = "ATV"
 		atv.world = world
@@ -495,23 +544,25 @@ func _start_game() -> void:
 		Animal.threats.append(atv)
 	car.process_mode = Node.PROCESS_MODE_PAUSABLE
 	car.add_to_group("vehicle")
-	add_child(car)
-	var fb_car_pos: Vector3 = sp.car_pos
-	var fb_car_yaw := atan2(sp.car_dir.x, sp.car_dir.z)
-	var car_marker := get_map_marker("CarSpawn")
-	if car_marker == null:
-		car_marker = get_map_marker("TruckSpawn")
-	if car_marker != null:
-		fb_car_pos = car_marker.global_position
-		fb_car_yaw = car_marker.global_rotation.y
+	var fb_car_pos: Vector3 = _default_car_xf.origin if scene_car != null else sp.car_pos
+	var fb_car_yaw: float = _default_car_xf.basis.get_euler().y if scene_car != null else atan2(sp.car_dir.x, sp.car_dir.z)
+	if scene_car == null:
+		var car_marker := get_map_marker("CarSpawn")
+		if car_marker == null:
+			car_marker = get_map_marker("TruckSpawn")
+		if car_marker != null:
+			fb_car_pos = car_marker.global_position
+			fb_car_yaw = car_marker.global_rotation.y
 	var tr_saved: Dictionary = GameState.vehicles_state.get("truck", {})
 	var tr_pos := GameState._v3_from_arr(tr_saved.get("pos", null))
 	var tr_yaw := float(tr_saved.get("rot", fb_car_yaw))
 	car.global_transform = world.find_safe_spawn_transform(tr_pos, tr_yaw, fb_car_pos, fb_car_yaw, 1.2, [car.get_rid()])
 	car.reset_physics_interpolation()
-	car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
+	if not car.has_meta("_cargo_lost_connected"):
+		car.set_meta("_cargo_lost_connected", true)
+		car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
 	interactions.add(Truck.BED_SLOTS[0] + Vector3(0.45, 0.6, -0.4), 2.6, func(): return "Ladung lösen" if car.strapped else "Ladung festzurren", func(): _toggle_straps(car), func(): GameState.has("straps") and seat == "", car)
-	interactions.add(Vector3(0, 0.5, 0), 3.2, "Fahrzeug aufstellen [E]", func(): car.respawn_safe(sp.car_pos, fb_car_yaw), func(): seat == "" and car.global_basis.y.y < 0.65, car)
+	interactions.add(Vector3(0, 0.5, 0), 3.2, "Fahrzeug aufstellen [E]", func(): car.respawn_safe(fb_car_pos, fb_car_yaw), func(): seat == "" and car.global_basis.y.y < 0.65, car)
 	if GameState.truck.get("trailer", false):
 		_spawn_trailer()
 		var tl_saved: Dictionary = GameState.vehicles_state.get("trailer", {})
@@ -1050,7 +1101,7 @@ func _process_butcher_dropzones(dt: float) -> void:
 			continue
 		var in_zone: Dictionary = {}
 		for z in landmarks.butcher_zones:
-			var zp: Vector3 = z.pos
+			var zp: Vector3 = z.node.global_position if (z.has("node") and is_instance_valid(z.node)) else z.pos
 			if Vector2(c.global_position.x - zp.x, c.global_position.z - zp.z).length() <= 1.45 and absf(c.global_position.y - zp.y) < 2.5:
 				in_zone = z
 				break

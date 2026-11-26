@@ -1,3 +1,4 @@
+@tool
 class_name Gasthaus
 extends Node3D
 ## Gasthaus Pirtscher (Riegersdorf 1), begehbar: Gaststube mit Schank (Kellnerin Gerti, gleiches
@@ -12,7 +13,7 @@ const UPPER_H := 2.8  # Obergeschoss (nur von außen)
 
 var game: Node
 var world: WorldBuilder
-var size := Vector2(16, 12)
+@export var size := Vector2(13.6, 16.0)
 var door := Vector3.ZERO  # Weltposition vor der Tür
 var trophy_wall := Transform3D.IDENTITY  # lokale Lage der Trophäenwand (Mitte, Blick in den Raum)
 var board: TrophyBoard
@@ -41,6 +42,27 @@ static func find(w: WorldBuilder) -> Dictionary:
 		sz = Vector2(clampf(sz.x, 11.0, 22.0), clampf(sz.y, 9.0, 16.0))
 		return {pos = c, yaw = atan2(front.x, front.y), size = sz}
 	return {}
+
+
+func _ready() -> void:
+	if Engine.is_editor_hint():
+		_clear_generated()
+		_build()
+
+
+func _clear_generated() -> void:
+	for ch in get_children():
+		if ch.owner == null:
+			remove_child(ch)
+			ch.queue_free()
+
+
+func setup_in_scene(g: Node, w: WorldBuilder) -> void:
+	game = g
+	world = w
+	_clear_generated()
+	_build()
+	door = global_transform * Vector3(0, 0, size.y * 0.5 + 1.5)
 
 
 func setup(g: Node, w: WorldBuilder, info: Dictionary) -> void:
@@ -166,7 +188,7 @@ func _build() -> void:
 func _furnish(hx: float, hz: float) -> void:
 	var wood := Placeables.WOOD
 	var dark := Placeables.DARK_WOOD
-	var I: Interactions = game.interactions
+	var I: Interactions = game.interactions if (not Engine.is_editor_hint() and game != null) else null
 	# Schank hinten links: Theke, Zapfhähne, Flaschenregal, Kellnerin
 	var bx := -hx + 3.2
 	var bz := -hz + 1.6
@@ -177,10 +199,11 @@ func _furnish(hx: float, hz: float) -> void:
 	_box(Vector3(4.0, 1.8, 0.35), Vector3(bx, 2.0, -hz + 0.35), dark)
 	for k in 12:
 		Placeables.cyl(self, 0.05, 0.3, Vector3(bx - 1.7 + (k % 6) * 0.68, 1.65 + (k / 6) * 0.6, -hz + 0.4), Color.from_hsv(0.05 + k * 0.04, 0.55, 0.55))
-	var gerti := Npc.new("Kellnerin Gerti", {shirt = Color(0.95, 0.95, 0.92), pants = Color(0.15, 0.35, 0.2), hat = "none"})
-	add_child(gerti)
-	gerti.position = Vector3(bx, 0.15, bz - 0.2)
-	I.add(Vector3(bx, 1.0, bz + 1.2), 2.8, "Schank: Kellnerin Gerti", func(): game.open_shop("pub"), null, self)
+	if I != null:
+		var gerti := Npc.new("Kellnerin Gerti", {shirt = Color(0.95, 0.95, 0.92), pants = Color(0.15, 0.35, 0.2), hat = "none"})
+		add_child(gerti)
+		gerti.position = Vector3(bx, 0.15, bz - 0.2)
+		I.add(Vector3(bx, 1.0, bz + 1.2), 2.8, "Schank: Kellnerin Gerti", func(): game.open_shop("pub"), null, self)
 	# Tische mit Bänken
 	var tables := [Vector3(2.0, 0, -1.5), Vector3(2.0, 0, 2.0), Vector3(-1.5, 0, 2.2)]
 	for tp in tables:
@@ -200,7 +223,8 @@ func _furnish(hx: float, hz: float) -> void:
 	_box(Vector3(0.35, 0.06, 0.05), Vector3(0, 0.12, 0), dark, false, Vector3.ZERO, cross)
 	for s in [-1, 1]:
 		var seat := Vector3(ex - 1.4, -0.3, ez - 1.4) + (Vector3(1.3, 0, 0) if s > 0 else Vector3(0, 0, 1.3))
-		I.add(seat + Vector3(0, 0.5, 0), 1.2, "Hinsetzen", func(): game.sit_down(global_transform * seat, global_rotation.y + (PI / 2 if s > 0 else 0.0)), null, self)
+		if I != null:
+			I.add(seat + Vector3(0, 0.5, 0), 1.2, "Hinsetzen", func(): game.sit_down(global_transform * seat, global_rotation.y + (PI / 2 if s > 0 else 0.0)), null, self)
 	# Stammtisch mit Stammgästen
 	var st := Vector3(-1.8, 0.15, -2.0)
 	Placeables.cyl(self, 0.9, 0.08, st + Vector3(0, 0.78, 0), wood)
@@ -218,10 +242,11 @@ func _furnish(hx: float, hz: float) -> void:
 		var a := TAU * k / 3.0 + 0.4
 		var pos := st + Vector3(cos(a) * 1.4, -0.45, sin(a) * 1.4)
 		_box(Vector3(0.45, 0.45, 0.45), st + Vector3(cos(a) * 1.4, 0.07, sin(a) * 1.4), Placeables.DARK_WOOD)
-		var g := SittingNpc.new(guests[k][0], {shirt = guests[k][1], hat = guests[k][2], hat_color = Color(0.25, 0.32, 0.2)})
-		add_child(g)
-		g.position = pos
-		g.rotation.y = atan2(st.x - pos.x, st.z - pos.z)
+		if I != null:
+			var g := SittingNpc.new(guests[k][0], {shirt = guests[k][1], hat = guests[k][2], hat_color = Color(0.25, 0.32, 0.2)})
+			add_child(g)
+			g.position = pos
+			g.rotation.y = atan2(st.x - pos.x, st.z - pos.z)
 		Placeables.cyl(self, 0.04, 0.2, st + Vector3(cos(a) * 0.5, 0.92, sin(a) * 0.5), Color(0.45, 0.28, 0.08))  # Bierglas
 	# Kachelofen mit Ofenbank hinten rechts
 	var stove := Placeables.model("stove")
@@ -230,9 +255,10 @@ func _furnish(hx: float, hz: float) -> void:
 	# Trophäenwand: linke Wand, frei für Geweihe (Issue #9)
 	trophy_wall = Transform3D(Basis(Vector3.UP, PI / 2), Vector3(-hx + 0.25, 2.2, 1.0))
 	_box(Vector3(0.04, 1.9, 4.6), Vector3(-hx + 0.2, 2.25, 1.0), dark)
-	board = TrophyBoard.new()
-	board.name = "Trophaeenwand"
-	board.setup(game, self, trophy_wall)
+	if I != null:
+		board = TrophyBoard.new()
+		board.name = "Trophaeenwand"
+		board.setup(game, self, trophy_wall)
 
 
 func _table_with_benches(p: Vector3) -> void:
@@ -243,7 +269,8 @@ func _table_with_benches(p: Vector3) -> void:
 		_box(Vector3(1.8, 0.06, 0.35), p + Vector3(0, 0.45, 0.75 * s), wood)
 		_box(Vector3(0.08, 0.45, 0.3), p + Vector3(0, 0.22, 0.75 * s), Placeables.DARK_WOOD)
 		var seat := p + Vector3(0.4, -0.45, 0.75 * s)
-		game.interactions.add(seat + Vector3(0, 0.6, 0), 1.0, "Hinsetzen", func(): game.sit_down(global_transform * seat, global_rotation.y + (PI if s > 0 else 0.0)), null, self)
+		if not Engine.is_editor_hint() and game != null:
+			game.interactions.add(seat + Vector3(0, 0.6, 0), 1.0, "Hinsetzen", func(): game.sit_down(global_transform * seat, global_rotation.y + (PI if s > 0 else 0.0)), null, self)
 	Placeables.cyl(self, 0.04, 0.2, p + Vector3(-0.3, 0.92, 0.1), Color(0.45, 0.28, 0.08))
 
 

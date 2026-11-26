@@ -1,3 +1,4 @@
+@tool
 class_name ATV
 extends Vehicle
 ## Wendiges Green 4x4 ATV / Quad Bike am Camp Hub (#2D5A27 / #1E2022).
@@ -10,6 +11,9 @@ var _rider: CharacterModel = null
 
 
 func _ready() -> void:
+	if Engine.is_editor_hint():
+		_build_editor_preview()
+		return
 	super._ready()
 	mass = 420.0
 	center_of_mass = Vector3(0, -0.25, 0.0)
@@ -63,6 +67,39 @@ func set_rider(on: bool, outfit := {}) -> void:
 		_rider.rotation.x = 0.24  # leicht nach vorne gelehnt Richtung Lenker
 		seat_marker.add_child(_rider)
 		_rider.animate(0.016, 0.0, true, true, true)
+
+
+func _build_editor_preview() -> void:
+	var old := get_node_or_null("ATVBody")
+	if old:
+		old.queue_free()
+	var body := Node3D.new()
+	body.name = "ATVBody"
+	add_child(body)
+	var vis := AssetLoader.load_model("res://assets/models/vehicles/atv_4x4.glb", 1.3, func() -> Node3D:
+		var fb := Node3D.new()
+		var green := Color(0.176, 0.353, 0.153)
+		var dark := Color(0.118, 0.125, 0.133)
+		_box(fb, Vector3(0.95, 0.32, 1.75), Vector3(0, 0.42, 0), green)
+		_box(fb, Vector3(0.45, 0.18, 0.85), Vector3(0, 0.65, -0.15), dark)
+		_box(fb, Vector3(0.75, 0.08, 0.35), Vector3(0, 0.62, 0.65), dark)
+		_box(fb, Vector3(0.70, 0.06, 0.06), Vector3(0, 0.92, 0.45), dark)
+		_box(fb, Vector3(0.08, 0.32, 0.08), Vector3(0, 0.75, 0.45), dark)
+		return fb
+	)
+	body.add_child(vis)
+	for p in [Vector3(0.58, 0.15, 0.65), Vector3(-0.58, 0.15, 0.65), Vector3(0.58, 0.15, -0.65), Vector3(-0.58, 0.15, -0.65)]:
+		var tire := CylinderMesh.new()
+		tire.top_radius = 0.32
+		tire.bottom_radius = 0.32
+		tire.height = 0.24
+		tire.radial_segments = 16
+		var mi := MeshInstance3D.new()
+		mi.mesh = tire
+		mi.position = p
+		mi.rotation.z = PI / 2
+		mi.material_override = Toon.solid(Color(0.118, 0.125, 0.133), true, 0.015)
+		body.add_child(mi)
 
 
 func seat_pos(_s := "driver") -> Vector3:

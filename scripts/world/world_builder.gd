@@ -1520,6 +1520,8 @@ func _collect_building_exclusions() -> void:
 		for child in overlays.get_children():
 			if child.name == "MapMarkers":
 				_collect_marker_zones(child)
+			elif child.name in ["Vehicles", "Shops"]:
+				continue
 			elif child.name in ["StLeonhardProps", "KleinstadtProps"]:
 				for prop in child.get_children():
 					if prop is Node3D and not seen_nodes.has(prop):

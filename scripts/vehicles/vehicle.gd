@@ -1,3 +1,4 @@
+@tool
 class_name Vehicle
 extends VehicleBody3D
 ## Gemeinsame Fahrphysik für Pickup und Polizeiauto. Vorne ist +Z.
@@ -38,6 +39,8 @@ var offroad_mult := 1.0
 
 
 func _ready() -> void:
+	if Engine.is_editor_hint():
+		return
 	if puppet:
 		custom_integrator = true  # Godot bewegt es nicht selbst
 		gravity_scale = 0.0
@@ -132,6 +135,8 @@ func puppet_to(xf: Transform3D) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
 	if puppet:
 		engine_force = 0.0
 		brake = 0.0

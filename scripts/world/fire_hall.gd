@@ -1,3 +1,4 @@
+@tool
 class_name FireHall
 extends Node3D
 ## Feuerwehrhaus Korpitsch: Treffpunkt der Spieler. Begehbare Halle mit offenem Tor, Schlauchturm,
@@ -30,6 +31,29 @@ static func find(w: WorldBuilder) -> Dictionary:
 		var to_road: Vector2 = (road.pos - c).normalized() if road.tier != 0 else Vector2(-1, 0)
 		return {pos = c, yaw = atan2(to_road.x, to_road.y)}
 	return {}
+
+
+func _ready() -> void:
+	if Engine.is_editor_hint():
+		_clear_generated()
+		_build()
+
+
+func _clear_generated() -> void:
+	for ch in get_children():
+		if ch.owner == null:
+			remove_child(ch)
+			ch.queue_free()
+
+
+func setup_in_scene(g: Node, w: WorldBuilder) -> void:
+	game = g
+	world = w
+	_rng.seed = 112
+	base_y = global_position.y
+	_clear_generated()
+	_build()
+	door = global_transform * Vector3(0, 0, SIZE.y * 0.5 + 2.0)
 
 
 func setup(g: Node, w: WorldBuilder, info: Dictionary) -> void:
@@ -131,7 +155,7 @@ func _build() -> void:
 	for s in [-1, 1]:
 		_box(Vector3(0.1, 3.1, 0.1), Vector3(4.5 * s, 1.55, hz + 2.6), Placeables.DARK_WOOD)
 
-	var I: Interactions = game.interactions
+	var I: Interactions = game.interactions if (not Engine.is_editor_hint() and game != null) else null
 	# Bar hinten links
 	var bar := Vector3(-hx + 2.4, 0.15, -hz + 1.3)
 	_box(Vector3(3.4, 1.1, 0.7), bar + Vector3(0, 0.55, 0.3), Placeables.WOOD, true)
@@ -139,10 +163,11 @@ func _build() -> void:
 	_box(Vector3(3.2, 1.4, 0.3), bar + Vector3(0, 1.6, -0.75), Placeables.DARK_WOOD)
 	for k in 8:
 		Placeables.cyl(self, 0.05, 0.28, bar + Vector3(-1.3 + k * 0.37, 1.95, -0.65), Color.from_hsv(0.08 + k * 0.05, 0.6, 0.6))
-	var kommandant := Npc.new("Kommandant Ferdl", {shirt = Color(0.12, 0.15, 0.25), pants = Color(0.12, 0.15, 0.25), hat = "none"})
-	add_child(kommandant)
-	kommandant.position = bar + Vector3(0, 0, -0.35)
-	I.add(bar + Vector3(0, 1, 1.0), 2.6, "Bar: Kommandant Ferdl", func(): game.open_shop("fire"), null, self)
+	if I != null:
+		var kommandant := Npc.new("Kommandant Ferdl", {shirt = Color(0.12, 0.15, 0.25), pants = Color(0.12, 0.15, 0.25), hat = "none"})
+		add_child(kommandant)
+		kommandant.position = bar + Vector3(0, 0, -0.35)
+		I.add(bar + Vector3(0, 1, 1.0), 2.6, "Bar: Kommandant Ferdl", func(): game.open_shop("fire"), null, self)
 	# Pokertisch in der Mitte rechts
 	var pk := Vector3(2.4, 0.15, -1.2)
 	var felt := Placeables.cyl(self, 1.3, 0.1, pk + Vector3(0, 0.8, 0), Color(0.1, 0.4, 0.2))
@@ -162,18 +187,21 @@ func _build() -> void:
 	lamp.light_energy = 1.5
 	add_child(lamp)
 	poker_seat = pk
-	I.add(pk + Vector3(0, 1, 0), 3.0, func(): return "Poker spielen (illegal)" if game.casino.poker_open() else "Poker gibt's erst ab 20 Uhr", func(): game.casino.open_poker(), null, self)
+	if I != null:
+		I.add(pk + Vector3(0, 1, 0), 3.0, func(): return "Poker spielen (illegal)" if game.casino.poker_open() else "Poker gibt's erst ab 20 Uhr", func(): game.casino.open_poker(), null, self)
 	# Roulette vorne links
 	var rt := Vector3(-2.6, 0.15, 1.8)
 	_box(Vector3(2.6, 0.85, 1.3), rt + Vector3(0, 0.42, 0), Placeables.DARK_WOOD, true)
 	_box(Vector3(2.5, 0.04, 1.2), rt + Vector3(0, 0.86, 0), Color(0.1, 0.45, 0.22))
 	Placeables.cyl(self, 0.45, 0.12, rt + Vector3(-0.8, 0.94, 0), Color(0.35, 0.2, 0.1))
 	Placeables.cyl(self, 0.3, 0.13, rt + Vector3(-0.8, 0.95, 0), Color(0.7, 0.1, 0.1))
-	I.add(rt + Vector3(0, 1, 0), 2.6, "Roulette", func(): game.casino.open_roulette(), null, self)
+	if I != null:
+		I.add(rt + Vector3(0, 1, 0), 2.6, "Roulette", func(): game.casino.open_roulette(), null, self)
 	# Spielautomat an der rechten Wand
 	var sm := Vector3(hx - 0.6, 0.15, 2.4)
 	_slot_machine(sm, -PI / 2)
-	I.add(sm + Vector3(-0.6, 1, 0), 2.0, "Spielautomat", func(): game.casino.open_slots(), null, self)
+	if I != null:
+		I.add(sm + Vector3(-0.6, 1, 0), 2.0, "Spielautomat", func(): game.casino.open_slots(), null, self)
 	# Darts und Plakat
 	var dart := Placeables.cyl(self, 0.25, 0.04, Vector3(hx - 0.2, 1.7, -1.5), Color(0.15, 0.15, 0.15))
 	dart.rotation = Vector3(0, 0, PI / 2)
@@ -196,7 +224,8 @@ func _build() -> void:
 		Placeables.cyl(self, 0.04, 0.2, bt + Vector3(-0.6 + k * 0.6, 0.88, 0.1 * (k - 1)), Color(0.45, 0.28, 0.08))
 	for s in [-1, 1]:
 		var seat_pos := bt + Vector3(0, 0, 0.65 * s)
-		I.add(seat_pos + Vector3(0, 0.5, 0), 1.3, "Hinsetzen", func(): game.sit_down(_local(seat_pos), global_rotation.y + (PI if s > 0 else 0.0)), null, self)
+		if I != null:
+			I.add(seat_pos + Vector3(0, 0.5, 0), 1.3, "Hinsetzen", func(): game.sit_down(_local(seat_pos), global_rotation.y + (PI if s > 0 else 0.0)), null, self)
 	# Altes Löschfahrzeug
 	_fire_truck(Vector3(-4.8, 0.0, hz + 3.4))
 

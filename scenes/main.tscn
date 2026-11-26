@@ -8,6 +8,11 @@
 [ext_resource type="PackedScene" path="res://scenes/world_overlays/kleinstadt_props.tscn" id="6_kleinstadt"]
 [ext_resource type="PackedScene" uid="uid://bybx0o0b1vtgo" path="res://assets/models/buildings/Town House by Quaternius - sDQJBImZuw.glb" id="7_o6xl0"]
 [ext_resource type="PackedScene" uid="uid://cjkfs5lk3mofe" path="res://assets/models/buildings/Log cabin by Poly by Google - f7uccD5iyz0.glb" id="8_tipki"]
+[ext_resource type="Script" path="res://scripts/vehicles/truck.gd" id="9_truck"]
+[ext_resource type="Script" path="res://scripts/vehicles/atv.gd" id="10_atv"]
+[ext_resource type="Script" path="res://scripts/world/shop_station.gd" id="11_shop"]
+[ext_resource type="Script" path="res://scripts/world/gasthaus.gd" id="12_gasthaus"]
+[ext_resource type="Script" path="res://scripts/world/fire_hall.gd" id="13_firehall"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 sky_top_color = Color(0.231373, 0.556863, 0.952941, 1)
@@ -92,6 +97,106 @@ transform = Transform3D(-4.0100455, 0, -0.14745146, 0, 2.9655075, 0, 0.17715561,
 
 [node name="Log cabin by Poly by Google - f7uccD5iyz0" parent="WorldOverlays" unique_id=112295659 instance=ExtResource("8_tipki")]
 transform = Transform3D(-0.0074553583, 0, -0.008862954, 0, 0.011581639, 0, 0.008862954, 0, -0.0074553583, -310.65454, 911.6338, 4386.837)
+
+[node name="Vehicles" type="Node3D" parent="WorldOverlays"]
+
+[node name="Pickup" type="VehicleBody3D" parent="WorldOverlays/Vehicles"]
+transform = Transform3D(0.13339746, 0, 0.99106264, 0, 1, 0, -0.99106264, 0, 0.13339746, -8.822, 58.166, 116.861)
+script = ExtResource("9_truck")
+
+[node name="ATV" type="VehicleBody3D" parent="WorldOverlays/Vehicles"]
+transform = Transform3D(-0.99095607, 0, 0.13418669, 0, 1, 0, -0.13418669, 0, -0.99095607, -10.51, 58.108, 126.152)
+script = ExtResource("10_atv")
+
+[node name="Shops" type="Node3D" parent="WorldOverlays"]
+
+[node name="GasthausPirtscher" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(-6.095, 56.937, 92.087)
+rotation = Vector3(0, 0.03817, 0)
+script = ExtResource("12_gasthaus")
+size = Vector2(13.6, 16.0)
+
+[node name="FeuerwehrhausKorpitsch" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(3080.655, 115.724, 1005.962)
+rotation = Vector3(0, -1.23186, 0)
+script = ExtResource("13_firehall")
+
+[node name="Tankstelle" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(1347.579, 43.424, -1209.698)
+rotation = Vector3(0, 2.029, 0)
+script = ExtResource("11_shop")
+station_type = "gas"
+
+[node name="Werkstatt" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(1566.283, 70.371, 114.871)
+rotation = Vector3(0, 0.02, 0)
+script = ExtResource("11_shop")
+station_type = "garage"
+
+[node name="Bauhaus" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(7203.051, 13.158, -8121.993)
+rotation = Vector3(0, -1.099, 0)
+script = ExtResource("11_shop")
+station_type = "bauhaus"
+
+[node name="Supermarkt" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(7066.619, 10.998, -8240.394)
+rotation = Vector3(0, 1.272, 0)
+script = ExtResource("11_shop")
+station_type = "super"
+
+[node name="Waffengeschaeft" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(7422.1, 13.131, -8096.309)
+rotation = Vector3(0, 3.14159, 0)
+script = ExtResource("11_shop")
+station_type = "gun"
+
+[node name="Fleischerei" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(7025.491, 11.019, -7791.525)
+rotation = Vector3(0, -0.32217, 0)
+script = ExtResource("11_shop")
+station_type = "butcher"
+
+[node name="Polizei" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(6966.316, 12.035, -7831.946)
+rotation = Vector3(0, -1.54307, 0)
+script = ExtResource("11_shop")
+station_type = "police"
+
+[node name="ButcherFoodTruck" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(-37.804, 57.224, 95.241)
+rotation = Vector3(0, -0.13413, 0)
+script = ExtResource("11_shop")
+station_type = "gaston"
+
+[node name="WeaponShack" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(37.142, 56.34, 82.146)
+rotation = Vector3(0, 0.08135, 0)
+script = ExtResource("11_shop")
+station_type = "weapon_shack"
+
+[node name="CamperRV" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(54.957, 57.353, 125.764)
+rotation = Vector3(0, -3.06024, 0)
+script = ExtResource("11_shop")
+station_type = "camper_rv"
+
+[node name="CampfireSpot" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(20.37, 56.234, 80.68)
+rotation = Vector3(0, 0.08135, 0)
+script = ExtResource("11_shop")
+station_type = "campfire"
+
+[node name="WildlifeFieldOffice07" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(1401.302, 43.982, -1189.897)
+rotation = Vector3(0, -2.71852, 0)
+script = ExtResource("11_shop")
+station_type = "wildlife_office"
+
+[node name="CaravanSpot" type="Node3D" parent="WorldOverlays/Shops"]
+position = Vector3(398.675, 96.624, 1536.321)
+script = ExtResource("11_shop")
+station_type = "caravan"
 
 [editable path="WorldOverlays/MapMarkers"]
 [editable path="WorldOverlays/StLeonhardProps"]

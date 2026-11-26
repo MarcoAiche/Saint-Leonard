@@ -1,3 +1,4 @@
+@tool
 class_name Truck
 extends Vehicle
 ## 4x4-Pickup der Spieler. Umbauten aus der Werkstatt (GameState.truck.upgrades) ändern Aussehen
@@ -31,6 +32,9 @@ var _glb_wheels: Array[Node3D] = []
 
 
 func _ready() -> void:
+	if Engine.is_editor_hint():
+		_build_editor_preview()
+		return
 	super._ready()
 	mass = 1900.0
 	center_of_mass = Vector3(0, -0.35, 0.2)
@@ -175,7 +179,24 @@ func rebuild() -> void:
 	offroad_mult = 1.45 if mud else 1.0
 	if up.has("lift"):
 		offroad_mult *= 1.12
-	_engine.volume_db = 4.0 if up.has("exhaust") else 0.0
+	if _engine:
+		_engine.volume_db = 4.0 if up.has("exhaust") else 0.0
+
+
+func _build_editor_preview() -> void:
+	var old := get_node_or_null("Karosserie")
+	if old:
+		old.queue_free()
+	var body := Node3D.new()
+	body.name = "Karosserie"
+	add_child(body)
+	var glb_path := "res://assets/models/vehicles/pickup_truck.glb" if ResourceLoader.exists("res://assets/models/vehicles/pickup_truck.glb") else "res://assets/models/vehicles/pickup_4x4.glb"
+	var loaded_glb := _load_pickup_glb(glb_path)
+	if loaded_glb != null:
+		body.add_child(loaded_glb)
+	else:
+		_box(body, Vector3(1.9, 0.55, 5.0), Vector3(0, 0.12, -0.3), Color(0.65, 0.18, 0.14))
+		_box(body, Vector3(1.8, 0.8, 1.9), Vector3(0, 0.88, 0.35), Color(0.65, 0.18, 0.14))
 
 
 func _load_pickup_glb(glb_path: String) -> Node3D:
