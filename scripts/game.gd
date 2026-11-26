@@ -1959,7 +1959,7 @@ func _on_animal_died(a: Animal, c: Carcass) -> void:
 	if a.species == "legend":
 		GameState.notify("Wirt Sepp", "Der Riesenhirsch! Nimm ihn aus und bring mir das Geweih.")
 	if Net.is_server():
-		Net.animal_killed_on_server(a.net_id, Vector3.ZERO)
+		Net.animal_killed_on_server(a.net_id, a._last_die_dir)
 	c.net_id = a.net_id
 
 

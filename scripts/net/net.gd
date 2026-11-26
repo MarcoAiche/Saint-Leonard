@@ -497,6 +497,20 @@ func _hit(id: int, dmg: float, point: Vector3, dir: Vector3) -> void:
 		a.hit(dmg, point, dir, null)  # Tod wird über Game.on_animal_died an alle gemeldet
 
 
+## Fahrzeug-Kollision mit einem Tier (Client -> Server)
+func vehicle_hit_animal(id: int, impact_kmh: float, dir: Vector3) -> void:
+	_vehicle_hit.rpc_id(1, id, impact_kmh, dir)
+
+
+@rpc("any_peer", "reliable")
+func _vehicle_hit(id: int, impact_kmh: float, dir: Vector3) -> void:
+	if not is_server() or not game:
+		return
+	var a = game.spawner.animals.get(id)
+	if is_instance_valid(a):
+		a.hit_by_vehicle(impact_kmh, dir, null)
+
+
 func animal_killed_on_server(id: int, dir: Vector3) -> void:
 	if is_server() and active():
 		_animal_died.rpc(id, dir)

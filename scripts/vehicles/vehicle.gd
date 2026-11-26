@@ -36,6 +36,8 @@ var grip_mult := 1.0  # Umbauten (Geländereifen)
 ## Fahrzeug eines anderen Spielers: Lage kommt übers Netz, keine eigene Physik
 var puppet := false
 var offroad_mult := 1.0
+var parking_brake := true
+var _animal_hit_cd := {}  # instance_id -> Cooldown in Sekunden
 
 
 func _ready() -> void:
@@ -124,6 +126,18 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if puppet:
 		state.linear_velocity = Vector3.ZERO
 		state.angular_velocity = Vector3.ZERO
+	elif parking_brake and (_wheels_on_ground() >= 2 or not driving):
+		var hvel := Vector2(state.linear_velocity.x, state.linear_velocity.z).length()
+		if hvel < 0.6:
+			state.linear_velocity.x = 0.0
+			state.linear_velocity.z = 0.0
+			if state.linear_velocity.y > 0.0:
+				state.linear_velocity.y = 0.0
+			state.angular_velocity *= 0.2
+		elif hvel < 1.5:
+			state.linear_velocity.x *= 0.75
+			state.linear_velocity.z *= 0.75
+			state.angular_velocity *= 0.7
 
 
 ## Netz-Fahrzeug weich auf die gemeldete Lage ziehen
@@ -187,6 +201,16 @@ func _physics_process(delta: float) -> void:
 	if handbrake:
 		brk = max_brake * 1.5
 		force = 0.0
+	var wants_drive := driving and absf(throttle) >= 0.05 and not handbrake and not (broken and throttle > 0.0)
+	if wants_drive:
+		parking_brake = false
+		if sleeping:
+			sleeping = false
+	elif not driving or (absf(throttle) < 0.05 and linear_velocity.length() < 1.2):
+		parking_brake = true
+	if parking_brake:
+		brk = max_brake * 2.5
+		force = 0.0
 	engine_force = force
 	brake = brk
 	_engine.running = driving and not broken
@@ -225,6 +249,29 @@ func _physics_process(delta: float) -> void:
 	if dv > 9.0 and _last_vel.length() > 8.0:
 		_on_crash(dv)
 	_last_vel = linear_velocity
+	_check_animal_hits(delta)
+
+
+func _check_animal_hits(delta: float) -> void:
+	for k in _animal_hit_cd.keys():
+		_animal_hit_cd[k] -= delta
+		if _animal_hit_cd[k] <= 0.0:
+			_animal_hit_cd.erase(k)
+	var vel_xz := Vector3(linear_velocity.x, 0.0, linear_velocity.z)
+	var impact_kmh := vel_xz.length() * 3.6
+	if impact_kmh < 4.0:
+		return
+	var dir := vel_xz.normalized()
+	for body in get_colliding_bodies():
+		if body is Animal and not (body as Animal).is_dead():
+			var aid := body.get_instance_id()
+			if _animal_hit_cd.has(aid):
+				continue
+			_animal_hit_cd[aid] = 0.35
+			if Net.is_client():
+				Net.vehicle_hit_animal((body as Animal).net_id, impact_kmh, dir)
+			else:
+				(body as Animal).hit_by_vehicle(impact_kmh, dir, self)
 
 
 func _wheels_on_ground() -> int:
@@ -342,6 +389,8 @@ func respawn_safe(fallback_pos := Vector3.INF, fallback_yaw := 0.0) -> void:
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	_last_vel = Vector3.ZERO
+	parking_brake = not driving
+	_animal_hit_cd.clear()
 	reset_physics_interpolation()
 
 
@@ -355,6 +404,8 @@ func place_at(pos: Vector3, forward: Vector3) -> void:
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	_last_vel = Vector3.ZERO
+	parking_brake = not driving
+	_animal_hit_cd.clear()
 	reset_physics_interpolation()
 
 

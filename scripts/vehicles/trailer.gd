@@ -41,6 +41,18 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if puppet:
 		state.linear_velocity = Vector3.ZERO
 		state.angular_velocity = Vector3.ZERO
+	elif not towed_by:
+		var hvel := Vector2(state.linear_velocity.x, state.linear_velocity.z).length()
+		if hvel < 0.35:
+			state.linear_velocity.x = 0.0
+			state.linear_velocity.z = 0.0
+			if state.linear_velocity.y > 0.0:
+				state.linear_velocity.y = 0.0
+			state.angular_velocity *= 0.2
+		elif hvel < 1.2:
+			state.linear_velocity.x *= 0.6
+			state.linear_velocity.z *= 0.6
+			state.angular_velocity *= 0.5
 
 
 func _box(size: Vector3, pos: Vector3, col: Color, parent: Node3D = self) -> MeshInstance3D:
@@ -105,7 +117,7 @@ func _build() -> void:
 func _physics_process(_delta: float) -> void:
 	if puppet:
 		return
-	brake = 0.0 if towed_by else 6.0  # abgestellt: Feststellbremse
+	brake = 0.0 if towed_by else 80.0  # abgestellt: Feststellbremse am Hang
 	_check_cargo(_delta)
 
 

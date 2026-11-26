@@ -63,6 +63,8 @@ var _levitate_t := 0.0
 var _wound_count := 0
 var _pupils: Array[Node3D] = []
 var _x_eyes: Array[Node3D] = []
+var _last_die_dir := Vector3.ZERO
+var _last_die_impulse := 0.0
 static var blood_mat: StandardMaterial3D
 
 
@@ -738,6 +740,44 @@ func is_dead() -> bool:
 	return state == State.DEAD
 
 
+## Fahrzeug-Kollision (Roadkill-System): geschwindigkeitsabhängiger Schaden und Flucht/Aggro.
+func hit_by_vehicle(impact_kmh: float, dir: Vector3, veh: Node3D = null) -> void:
+	if state == State.DEAD:
+		return
+	var d := Vector3(dir.x, 0.0, dir.z)
+	d = d.normalized() if d.length() > 0.01 else global_basis.z
+	if impact_kmh < 8.0:
+		if info.get("aggressive", false):
+			state = State.CHARGE
+			_threat = veh if is_instance_valid(veh) else _closest_player()
+			_threat_pos = global_position - d * 12.0
+			_timer = 12.0
+		else:
+			_startle(global_position - d * 15.0, veh)
+		return
+	var dmg := lerpf(15.0, 95.0, (impact_kmh - 8.0) / 22.0) if impact_kmh < 30.0 else 95.0 + (impact_kmh - 30.0) * 5.0
+	hp -= dmg
+	var hit_pt := global_position + Vector3(0.0, 0.7 * info.size, 0.0)
+	_spawn_blood_spray(hit_pt, d)
+	_add_wound_spot(hit_pt)
+	if hp <= 0.0:
+		_last_die_impulse = clampf(impact_kmh / 3.6 * 0.45, 3.5, 16.0)
+		die(d, impact_kmh >= 40.0)
+	else:
+		if species == "rabbit":
+			_transform_to_mutant(veh)
+		_bleed += maxf(dmg * 0.1, 3.0)
+		if info.get("aggressive", false):
+			state = State.CHARGE
+			_threat = veh if is_instance_valid(veh) else _closest_player()
+			_threat_pos = global_position - d * 20.0
+			_timer = 16.0
+		else:
+			_startle(global_position - d * 25.0, veh)
+		for i in 3:
+			_drop_blood()
+
+
 func die(dir: Vector3, launch := false) -> Node3D:
 	if state == State.DEAD:
 		return null
@@ -758,7 +798,12 @@ func die(dir: Vector3, launch := false) -> Node3D:
 	c.take_model(_model)
 	var d_xz := Vector3(dir.x, 0.0, dir.z)
 	d_xz = d_xz.normalized() if d_xz.length() > 0.01 else global_basis.z
-	if launch:
+	_last_die_dir = d_xz
+	if _last_die_impulse > 0.0:
+		var up_v := clampf(_last_die_impulse * 0.35, 1.4, 4.5)
+		c.linear_velocity = d_xz * _last_die_impulse + Vector3.UP * up_v
+		c.angular_velocity = Vector3(randf_range(-5.0, 5.0), randf_range(-3.0, 3.0), randf_range(-5.0, 5.0))
+	elif launch:
 		c.linear_velocity = d_xz * 7.5 + Vector3.UP * 12.0
 		c.angular_velocity = Vector3(randf_range(-6.0, 6.0), randf_range(-4.0, 4.0), randf_range(-6.0, 6.0))
 	else:
