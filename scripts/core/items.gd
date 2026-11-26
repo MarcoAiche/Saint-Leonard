@@ -32,6 +32,7 @@ const ITEMS := {
 	"beer": {name = "Bier", kind = "drink", price = 3, shops = ["super", "gas", "pub", "fire"], alcohol = 0.03},
 	"schnaps": {name = "Schnaps", kind = "drink", price = 9, shops = ["super", "pub", "fire"], alcohol = 0.07},
 	"moonshine": {name = "Schwarzgebrannter", kind = "drink", price = 0, shops = [], alcohol = 0.16, illegal = true, sell = {pub = 45, gas = 30, fire = 40}},
+	"moonshine_keg": {name = "10-l-Moonshine-Bottich", kind = "cargo", price = 0, shops = [], illegal = true, sell = {pub = 420, gas = 280, fire = 380}},
 	"cigarettes": {name = "Zigaretten (Packung)", kind = "smoke", price = 7, shops = ["super", "gas"], gives = 20},
 	"snack": {name = "Wurstsemmel", kind = "food", price = 4, shops = ["super", "gas", "pub", "fire"], heal = 15, stamina = 30},
 	"meat_cooked": {name = "Gegrilltes Wildfleisch", kind = "food", price = 0, shops = [], heal = 40, stamina = 60, sell = {pub = 25}},
@@ -47,6 +48,7 @@ const ITEMS := {
 	"trailcam": {name = "Wildkamera", kind = "placeable", price = 90, shops = ["bauhaus"]},
 	"campfire": {name = "Feuerstelle", kind = "placeable", price = 15, shops = ["bauhaus", "gas"]},
 	"straps": {name = "Spanngurte", kind = "tool", price = 20, shops = ["bauhaus"]},
+	"tarp": {name = "Pickup-Plane (Abdeckung)", kind = "tool", price = 180, shops = ["bauhaus"]},
 	"trailer": {name = "Pickup-Anhänger", kind = "vehicle", price = 1500, shops = ["bauhaus"]},
 	"crate": {name = "Festkiste (Bier)", kind = "cargo", price = 30, shops = ["super"]},
 	# Kleidung: Arbeitskleidung im Bauhaus, Freizeit im Supermarkt

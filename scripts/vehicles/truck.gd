@@ -315,6 +315,21 @@ func has_space() -> bool:
 ## Ladung mit Spanngurten sichern (gelbe Gurte über der Ladefläche)
 var strapped := false
 var _strap_node: Node3D
+## Pickup-Plane (Abdeckung der Ladefläche für Schmuggel)
+var tarp_on := false
+var _tarp_node: Node3D
+
+
+func set_tarp(on: bool) -> void:
+	tarp_on = on
+	if _tarp_node == null:
+		_tarp_node = Node3D.new()
+		add_child(_tarp_node)
+		_box(_tarp_node, Vector3(1.86, 0.06, 2.26), Vector3(0, 0.94, -1.65), Color(0.22, 0.28, 0.19), true)
+		_box(_tarp_node, Vector3(1.88, 0.14, 0.06), Vector3(0, 0.88, -0.53), Color(0.18, 0.23, 0.16), false)
+		_box(_tarp_node, Vector3(1.88, 0.14, 0.06), Vector3(0, 0.88, -2.77), Color(0.18, 0.23, 0.16), false)
+	_tarp_node.position.y = _body.position.y
+	_tarp_node.visible = on
 
 
 func set_strapped(on: bool) -> void:
@@ -483,7 +498,7 @@ func show_remote_cargo(list: Array) -> void:
 			var sz: float = Animal.SPECIES[kind].size
 			_box(n, Vector3(0.5, 0.45, 1.1) * clampf(sz, 0.4, 1.0), Vector3(0, 0.25, 0), Animal.SPECIES[kind].body)
 		else:
-			n = Placeables.model("moonshine" if kind == "moonshine" else "crate")
+			n = Placeables.model(kind if kind in ["moonshine", "moonshine_keg"] else "crate")
 		n.set_meta("remote_cargo", true)
 		n.position = BED_SLOTS[i] + Vector3(0, _body.position.y - 0.1, 0)
 		n.rotation.y = PI / 2

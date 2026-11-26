@@ -140,13 +140,36 @@ static func play_2d(parent: Node, stream: AudioStream, volume_db := 0.0, pitch :
 	p.play()
 
 
-static func play_3d(parent: Node3D, stream: AudioStream, volume_db := 0.0, pitch := 1.0, bus_name := &"SFX") -> void:
+static func play_3d(parent: Node3D, stream: AudioStream, volume_db := 0.0, pitch := 1.0, bus_name := &"SFX", max_dist := 0.0, unit_size := 6.0) -> void:
 	var p := AudioStreamPlayer3D.new()
 	p.stream = stream
 	p.volume_db = volume_db
 	p.pitch_scale = pitch
 	p.bus = bus_name if AudioServer.get_bus_index(bus_name) >= 0 else &"Master"
-	p.unit_size = 6.0
+	p.unit_size = unit_size
+	if max_dist > 0.0:
+		p.max_distance = max_dist
+	p.attenuation_filter_cutoff_hz = 2800.0
+	p.attenuation_filter_db = -12.0
+	parent.add_child(p)
+	p.finished.connect(p.queue_free)
+	p.play()
+
+
+## Spielt je nach Kamera-Distanz den Nah- oder dumpferen Fern-Sound mit größerer Reichweite ab.
+static func play_3d_distance(parent: Node3D, near_stream: AudioStream, distant_stream: AudioStream, volume_db := 0.0, pitch := 1.0, max_dist := 320.0, far_threshold := 65.0) -> void:
+	var cam := parent.get_viewport().get_camera_3d() if parent.is_inside_tree() else null
+	var dist := cam.global_position.distance_to(parent.global_position) if cam else 0.0
+	var is_far := dist > far_threshold and distant_stream != null
+	var p := AudioStreamPlayer3D.new()
+	p.stream = distant_stream if is_far else near_stream
+	p.volume_db = volume_db
+	p.pitch_scale = pitch * (0.92 if is_far else 1.0)
+	p.bus = &"SFX" if AudioServer.get_bus_index(&"SFX") >= 0 else &"Master"
+	p.unit_size = 28.0 if is_far else 12.0
+	p.max_distance = max_dist
+	p.attenuation_filter_cutoff_hz = 1600.0 if is_far else 3200.0
+	p.attenuation_filter_db = -18.0 if is_far else -12.0
 	parent.add_child(p)
 	p.finished.connect(p.queue_free)
 	p.play()
@@ -309,6 +332,44 @@ static func explosion() -> AudioStreamWAV:
 		s[i] = (lp * 4.0 + sin(TAU * 38.0 * t) * 0.8) * exp(-t * 2.2) * minf(1.0, t * 200.0)
 	_cache["boom"] = _wav(s)
 	return _cache["boom"]
+
+
+## Ferner Schuss: tiefpassgefilterter Knall mit langem Tal-Nachhall
+static func gunshot_distant() -> AudioStreamWAV:
+	if _cache.has("shot_far"):
+		return _cache["shot_far"]
+	var n := int(RATE * 0.95)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 29
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (rng.randf_range(-1, 1) - lp) * 0.045
+		var crack := lp * 2.2 * exp(-t * 9.0)
+		var echo := lp * 0.85 * exp(-maxf(0.0, t - 0.14) * 3.8) if t > 0.14 else 0.0
+		s[i] = clampf((crack + echo) * minf(1.0, t * 80.0), -1.0, 1.0)
+	_cache["shot_far"] = _wav(s)
+	return _cache["shot_far"]
+
+
+## Ferne Explosion: dumpfes Grollen mit Nachhall
+static func explosion_distant() -> AudioStreamWAV:
+	if _cache.has("boom_far"):
+		return _cache["boom_far"]
+	var n := int(RATE * 3.0)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var lp := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		lp += (rng.randf_range(-1, 1) - lp) * 0.025
+		s[i] = clampf((lp * 3.4 + sin(TAU * 32.0 * t) * 0.45) * exp(-t * 1.45) * minf(1.0, t * 40.0), -1.0, 1.0)
+	_cache["boom_far"] = _wav(s)
+	return _cache["boom_far"]
 
 
 ## Polizeisirene (österreichisches Tatütata) als Schleife

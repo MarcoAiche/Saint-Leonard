@@ -251,6 +251,33 @@ static func still(game: Node, entry: Dictionary) -> void:
 	var d: Dictionary = entry.data
 	var reopen := func(): still(game, entry)
 	var mash: String = d.get("mash", "")
+	var ready_mash: String = d.get("ready_mash", "")
+	if not ready_mash.is_empty():
+		var bottles := randi_range(4, 6) if ready_mash == "fruit" else randi_range(2, 4)
+		text(body, "Der Brand ist fertig (%s)! Wie willst du ihn abfüllen?" % ("Obst" if ready_mash == "fruit" else "Getreide"))
+		row(body, "In Flaschen abfüllen (%d Flaschen Schwarzgebrannter)" % bottles, "Flaschen", func():
+			GameState.give("moonshine", bottles)
+			GameState.stats.bottles += bottles
+			d.ready_mash = ""
+			game.placed_changed(entry)
+			game.missions.event("brewed", {bottles = bottles})
+			close_all(hud)
+			hud.toast("%d Flaschen Schwarzgebrannter fertig!" % bottles, 3.0))
+		row(body, "In 10-l-Moonshine-Bottich abfüllen (Schmuggelware für Pickup)", "10-l-Bottich", func():
+			GameState.give("moonshine_keg", 1)
+			GameState.stats.bottles += 10
+			d.ready_mash = ""
+			game.placed_changed(entry)
+			game.missions.event("brewed", {bottles = 10})
+			if game.car and is_instance_valid(game.car) and game.car.global_position.distance_to(game.player.global_position) < 8.0 and game.car.has_space():
+				var keg := Placeables.model("moonshine_keg")
+				keg.set_meta("kind", "moonshine_keg")
+				game.car.load_cargo(keg)
+				hud.toast("10-l-Bottich abgefüllt & auf den Pickup geladen!", 3.5)
+			else:
+				hud.toast("10-l-Moonshine-Bottich abgefüllt!", 3.0)
+			close_all(hud))
+		return
 	if mash.is_empty():
 		text(body, "Maische ansetzen: 2x Zucker, 1x Hefe und 2x Obst (gut) oder 2x Getreide (billig, brennt leichter an).")
 		row(body, "Obstmaische (ergibt mehr und besseren Schnaps)", "Ansetzen", func():
@@ -314,15 +341,11 @@ static func still(game: Node, entry: Dictionary) -> void:
 			game.still_explode(entry)
 		elif float(d.progress) >= 1.0:
 			timer.stop()
-			var bottles := randi_range(4, 6) if mash == "fruit" else randi_range(2, 4)
-			GameState.give("moonshine", bottles)
-			GameState.stats.bottles += bottles
+			d.ready_mash = mash
 			d.mash = ""
 			d.progress = 0.0
 			game.placed_changed(entry)
-			game.missions.event("brewed", {bottles = bottles})
-			close_all(hud)
-			hud.toast("%d Flaschen Schwarzgebrannter fertig!" % bottles, 3.0))
+			reopen.call())
 
 
 # ------------------------------------------------------------------ Einstellungen

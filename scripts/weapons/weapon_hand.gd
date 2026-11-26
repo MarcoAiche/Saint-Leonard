@@ -489,7 +489,7 @@ func _fire() -> void:
 	rig.add_recoil(float(w.recoil) * (1.2 if aiming else 0.9))
 	rig.shake(0.35 if slot == "assault_rifle" else 0.6)
 	var pitch := 1.15 if slot == "pistol" else (1.05 if slot in ["assault_rifle", "lmg"] else (0.92 if slot == "sniper" else randf_range(0.95, 1.05)))
-	Sfx.play_3d(player, Sfx.gunshot_weapon(slot), 4.0, pitch)
+	Sfx.play_3d_distance(player, Sfx.gunshot_weapon(slot), Sfx.gunshot_distant(), 4.0, pitch)
 	GameState.make_noise(player.global_position, 900.0, "shot")
 	fired.emit(ray[0], dir)
 	if bool(w.bolt):

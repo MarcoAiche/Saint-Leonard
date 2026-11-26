@@ -246,14 +246,22 @@ func _open_control(busted: bool) -> void:
 		offences.append("Alkotest: %.1f Promille (%d €)" % [pm, f])
 		fine += f
 	var shine_inv := GameState.count("moonshine")
+	var keg_inv := GameState.count("moonshine_keg")
 	var shine_cargo := 0
+	var keg_cargo := 0
 	for n in car.cargo:
-		if n.get_meta("kind", "") == "moonshine":
+		var k := str(n.get_meta("kind", ""))
+		if k == "moonshine":
 			shine_cargo += int(n.get_meta("bottles", 1))
-	var search := busted or _rng.randf() < 0.35 + GameState.police_heat * 0.15
-	if search and (shine_inv + shine_cargo) > 0:
-		offences.append("Schwarzgebrannter gefunden: %d Flaschen (500 €, beschlagnahmt)" % (shine_inv + shine_cargo))
-		fine += 500
+		elif k == "moonshine_keg":
+			keg_cargo += 1
+	var search_chance := (0.10 + GameState.police_heat * 0.08) if car.tarp_on else (0.35 + GameState.police_heat * 0.15)
+	var search := busted or _rng.randf() < search_chance
+	var total_kegs := maxi(keg_inv, keg_cargo)
+	if search and (shine_inv + shine_cargo + total_kegs) > 0:
+		var extra_fine := 500 + total_kegs * 300
+		offences.append("Schwarzgebrannter gefunden: %d Fl. / %d Bottich (%d €, beschlagnahmt)" % [shine_inv + shine_cargo, total_kegs, extra_fine])
+		fine += extra_fine
 	if busted:
 		offences.append("Flucht vor der Polizei (400 €)")
 		fine += 400
@@ -266,8 +274,9 @@ func _open_control(busted: bool) -> void:
 	var confiscate := func():
 		if search:
 			GameState.take("moonshine", shine_inv)
+			GameState.take("moonshine_keg", keg_inv)
 			for n in car.cargo.duplicate():
-				if n.get_meta("kind", "") == "moonshine":
+				if n.get_meta("kind", "") in ["moonshine", "moonshine_keg"]:
 					car.cargo.erase(n)
 					n.queue_free()
 	var opts := [

@@ -562,6 +562,9 @@ func _start_game() -> void:
 		car.set_meta("_cargo_lost_connected", true)
 		car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
 	interactions.add(Truck.BED_SLOTS[0] + Vector3(0.45, 0.6, -0.4), 2.6, func(): return "Ladung lösen" if car.strapped else "Ladung festzurren", func(): _toggle_straps(car), func(): GameState.has("straps") and seat == "", car)
+	interactions.add(Truck.BED_SLOTS[2] + Vector3(0.45, 0.6, 0.0), 2.8, func(): return "Plane abziehen" if car.tarp_on else "Plane aufziehen", func():
+		car.set_tarp(not car.tarp_on)
+		hud.toast("Ladeflächen-Plane aufgezogen (Schmuggel-Schutz)" if car.tarp_on else "Plane abgezogen", 2.5), func(): GameState.has("tarp") and seat == "", car)
 	interactions.add(Vector3(0, 0.5, 0), 3.2, "Fahrzeug aufstellen [E]", func(): car.respawn_safe(fb_car_pos, fb_car_yaw), func(): seat == "" and car.global_basis.y.y < 0.65, car)
 	if GameState.truck.get("trailer", false):
 		_spawn_trailer()
@@ -2112,7 +2115,7 @@ func send_net_state() -> void:
 	var cargo := []
 	for n in car.cargo:
 		cargo.append(n.species if n is Carcass else str(n.get_meta("kind", "crate")))
-	var look := {paint = GameState.truck.paint, up = GameState.truck.upgrades.keys(), lights = car.lights_on, cargo = cargo}
+	var look := {paint = GameState.truck.paint, up = GameState.truck.upgrades.keys(), lights = car.lights_on, cargo = cargo, tarp = car.tarp_on}
 	if trailer:
 		var tcargo := []
 		for n in trailer.cargo:
@@ -2165,7 +2168,7 @@ func on_fx(kind: String, pos: Vector3) -> void:
 	n.global_position = pos
 	match kind:
 		"shot":
-			Sfx.play_3d(n, Sfx.gunshot(), 4.0, randf_range(0.95, 1.05))
+			Sfx.play_3d_distance(n, Sfx.gunshot(), Sfx.gunshot_distant(), 4.0, randf_range(0.95, 1.05))
 			Animal.notify_gunshot(get_tree(), pos, pos, 100.0, 100.0, null)
 			var flash := OmniLight3D.new()
 			flash.light_color = Color(1.0, 0.8, 0.4)
@@ -2174,11 +2177,11 @@ func on_fx(kind: String, pos: Vector3) -> void:
 			n.add_child(flash)
 			create_tween().tween_property(flash, "light_energy", 0.0, 0.1)
 		"horn":
-			Sfx.play_3d(n, Sfx.horn(), 2.0)
+			Sfx.play_3d(n, Sfx.horn(), 2.0, 1.0, &"SFX", 220.0, 12.0)
 		"burp":
 			Sfx.play_3d(n, Sfx.burp(), 2.0)
 		"boom":
-			Sfx.play_3d(n, Sfx.explosion(), 10.0)
+			Sfx.play_3d_distance(n, Sfx.explosion(), Sfx.explosion_distant(), 10.0, 1.0, 420.0, 80.0)
 			var light := OmniLight3D.new()
 			light.light_color = Color(1, 0.6, 0.2)
 			light.omni_range = 30.0
@@ -2245,6 +2248,7 @@ func on_remote_truck(id: int, xf: Transform3D, vel: Vector3, look: Dictionary) -
 		tr.rebuild()
 		GameState.truck = mine
 	tr.set_lights(look.get("lights", false))
+	tr.set_tarp(bool(look.get("tarp", false)))
 	_remote_trailer(id, look.get("trailer", []))
 	var cargo_key := str(look.get("cargo", []))
 	if tr.get_meta("cargo", "") != cargo_key:
