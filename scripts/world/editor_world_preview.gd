@@ -13,6 +13,15 @@ extends Node3D
 		if Engine.is_editor_hint() and is_inside_tree():
 			_refresh_preview()
 
+@export var reload_preview: bool = false:
+	set(value):
+		if not value:
+			reload_preview = false
+			return
+		reload_preview = false
+		if Engine.is_editor_hint() and is_inside_tree():
+			_refresh_preview()
+
 @export_file("*.scn", "*.tscn") var baked_scene_path: String = "res://data/world_baked.scn"
 
 var _preview_instance: Node = null

@@ -96,12 +96,15 @@ var _obstacle_grid := {}
 var _trunk_shapes: Array[CollisionShape3D] = []
 var _rock_shapes: Array[CollisionShape3D] = []
 var _col_timer := 0.0
+var _exclusion_rects: Array = []
+var _exclusion_hash := ""
 
 
 func _ready() -> void:
 	var t0 := Time.get_ticks_msec()
 	if not load_data():
 		return
+	_collect_building_exclusions()
 	if not _load_baked():
 		build()
 		_save_baked()
@@ -618,7 +621,7 @@ func ground_normal(x: float, z: float) -> Vector3:
 # ------------------------------------------------------------------ Speichern / Laden
 
 func _load_baked() -> bool:
-	if OS.get_cmdline_user_args().has("--rebuild") or not ResourceLoader.exists(baked_path):
+	if OS.get_cmdline_user_args().has("--rebuild") or OS.get_cmdline_user_args().has("--force-bake") or not ResourceLoader.exists(baked_path):
 		return false
 	if FileAccess.get_modified_time(baked_path) < FileAccess.get_modified_time(data_path):
 		return false
@@ -626,7 +629,7 @@ func _load_baked() -> bool:
 	if scene == null:
 		return false
 	var node := scene.instantiate()
-	if node.get_meta("version", 0) != BUILD_VERSION:
+	if node.get_meta("version", 0) != BUILD_VERSION or str(node.get_meta("exclusion_hash", "")) != _exclusion_hash:
 		node.free()
 		return false
 	_content = node
@@ -634,11 +637,13 @@ func _load_baked() -> bool:
 	return true
 
 
-func _save_baked() -> void:
-	if OS.has_feature("template") or DisplayServer.get_name() == "headless":
+func _save_baked(force := false) -> void:
+	var force_bake := force or OS.get_cmdline_user_args().has("--force-bake")
+	if not force_bake and (OS.has_feature("template") or DisplayServer.get_name() == "headless"):
 		return  # exportiertes Spiel oder Headless-Dummy-Renderer: nichts speichern
 	_set_owner_recursive(_content, _content)
 	_content.set_meta("version", BUILD_VERSION)
+	_content.set_meta("exclusion_hash", _exclusion_hash)
 	var scene := PackedScene.new()
 	if scene.pack(_content) != OK:
 		push_warning("Welt konnte nicht gepackt werden")
@@ -646,6 +651,11 @@ func _save_baked() -> void:
 	var err := ResourceSaver.save(scene, baked_path, ResourceSaver.FLAG_COMPRESS)
 	if err != OK:
 		push_warning("Welt konnte nicht gespeichert werden: %s" % err)
+		return
+	var hf := FileAccess.open(baked_path + ".hash", FileAccess.WRITE)
+	if hf != null:
+		hf.store_string(_exclusion_hash)
+		hf.close()
 
 
 func _set_owner_recursive(node: Node, owner_node: Node) -> void:
@@ -1494,11 +1504,142 @@ func _build_tunnel_tube(bufs: Dictionary, line: PackedVector2Array, road_w: floa
 			_box(pbuf, ob, ey - 0.5, ey + 2.6, conc_wall)
 
 
+func _collect_building_exclusions() -> void:
+	_exclusion_rects.clear()
+	var overlays := get_parent().get_node_or_null("WorldOverlays") if get_parent() != null else null
+	if overlays != null:
+		for child in overlays.get_children():
+			if child.name == "MapMarkers":
+				_collect_clear_markers(child)
+			elif child.name in ["StLeonhardProps", "KleinstadtProps"]:
+				for prop in child.get_children():
+					if prop is Node3D:
+						_add_exclusion_for_node(prop as Node3D)
+			elif child is Node3D:
+				_add_exclusion_for_node(child as Node3D)
+	else:
+		for p in ["res://scenes/world_overlays/st_leonhard_props.tscn", "res://scenes/world_overlays/kleinstadt_props.tscn"]:
+			if ResourceLoader.exists(p):
+				var packed := ResourceLoader.load(p) as PackedScene
+				if packed != null:
+					var inst := packed.instantiate()
+					if inst != null:
+						for prop in inst.get_children():
+							if prop is Node3D:
+								_add_exclusion_for_node(prop as Node3D)
+						inst.free()
+	_exclusion_rects.sort_custom(func(a, b): return str(a.name) < str(b.name) or (str(a.name) == str(b.name) and a.min_x < b.min_x))
+	var sig_parts: Array[String] = []
+	for r in _exclusion_rects:
+		sig_parts.append("%s:%.2f,%.2f,%.2f,%.2f" % [r.name, r.min_x, r.max_x, r.min_z, r.max_z])
+	_exclusion_hash = "|".join(sig_parts).sha256_text()
+
+
+func _collect_clear_markers(node: Node) -> void:
+	for c in node.get_children():
+		if c is Marker3D and c.visible and c.name.to_lower().begins_with("clearbuilding"):
+			var p := (c as Marker3D).global_position
+			_exclusion_rects.append({
+				name = c.name,
+				min_x = p.x - 10.0,
+				max_x = p.x + 10.0,
+				min_z = p.z - 10.0,
+				max_z = p.z + 10.0,
+			})
+		_collect_clear_markers(c)
+
+
+func _add_exclusion_for_node(node: Node3D) -> void:
+	if not node.visible:
+		return
+	var bounds := _compute_global_xz_bounds(node)
+	var buffer := 1.8
+	if not bounds.valid:
+		var p := node.global_position
+		_exclusion_rects.append({
+			name = node.name,
+			min_x = p.x - 10.0,
+			max_x = p.x + 10.0,
+			min_z = p.z - 10.0,
+			max_z = p.z + 10.0,
+		})
+	else:
+		_exclusion_rects.append({
+			name = node.name,
+			min_x = bounds.min_x - buffer,
+			max_x = bounds.max_x + buffer,
+			min_z = bounds.min_z - buffer,
+			max_z = bounds.max_z + buffer,
+		})
+
+
+func _compute_global_xz_bounds(root_node: Node3D) -> Dictionary:
+	var min_x := INF
+	var max_x := -INF
+	var min_z := INF
+	var max_z := -INF
+	var has_mesh := false
+	var stack: Array[Node] = [root_node]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D:
+			var mi := n as MeshInstance3D
+			if mi.mesh != null:
+				var aabb: AABB = mi.mesh.get_aabb()
+				var xf: Transform3D = mi.global_transform
+				for ix in 2:
+					for iy in 2:
+						for iz in 2:
+							var corner := Vector3(
+								aabb.position.x + aabb.size.x * float(ix),
+								aabb.position.y + aabb.size.y * float(iy),
+								aabb.position.z + aabb.size.z * float(iz)
+							)
+							var wp: Vector3 = xf * corner
+							min_x = minf(min_x, wp.x)
+							max_x = maxf(max_x, wp.x)
+							min_z = minf(min_z, wp.z)
+							max_z = maxf(max_z, wp.z)
+							has_mesh = true
+		for ch in n.get_children():
+			stack.append(ch)
+	return {valid = has_mesh, min_x = min_x, max_x = max_x, min_z = min_z, max_z = max_z}
+
+
+func _is_building_excluded(center: Vector2, poly: PackedVector2Array) -> bool:
+	if _exclusion_rects.is_empty():
+		return false
+	var bmin_x := INF
+	var bmax_x := -INF
+	var bmin_z := INF
+	var bmax_z := -INF
+	for p in poly:
+		bmin_x = minf(bmin_x, p.x)
+		bmax_x = maxf(bmax_x, p.x)
+		bmin_z = minf(bmin_z, p.y)
+		bmax_z = maxf(bmax_z, p.y)
+	for r in _exclusion_rects:
+		if bmax_x < r.min_x or bmin_x > r.max_x or bmax_z < r.min_z or bmin_z > r.max_z:
+			continue
+		if center.x >= r.min_x and center.x <= r.max_x and center.y >= r.min_z and center.y <= r.max_z:
+			return true
+		var rpoly := PackedVector2Array([
+			Vector2(r.min_x, r.min_z),
+			Vector2(r.max_x, r.min_z),
+			Vector2(r.max_x, r.max_z),
+			Vector2(r.min_x, r.max_z),
+		])
+		if not Geometry2D.intersect_polygons(poly, rpoly).is_empty():
+			return true
+	return false
+
+
 func _build_buildings() -> void:
 	var group := _group("Haeuser")
 	var walls := {}
 	var roofs := {}
 	var details := {}
+	var skipped_overlay := 0
 	for b in data.buildings:
 		var poly := to_v2_array(b.pts)
 		if poly.size() < 3:
@@ -1510,7 +1651,12 @@ func _build_buildings() -> void:
 			continue
 		if int(b.id) in SKIP_BUILDINGS:
 			continue
+		if _is_building_excluded(c, poly):
+			skipped_overlay += 1
+			continue
 		_house(b, poly, _buf(walls, c.x, c.y), _buf(roofs, c.x, c.y), _buf(details, c.x, c.y))
+	if skipped_overlay > 0 or not _exclusion_rects.is_empty():
+		print("Skipped %d OSM buildings due to overlay replacements (zones=%d)" % [skipped_overlay, _exclusion_rects.size()])
 	for k in walls:
 		var mesh: ArrayMesh = (walls[k] as MeshBuffer).to_mesh(Toon.material(false))
 		(roofs[k] as MeshBuffer).commit(mesh, Toon.material(false, true))
