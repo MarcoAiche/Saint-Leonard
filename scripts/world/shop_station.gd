@@ -29,6 +29,12 @@ const SHOP_SIGNS := {
 		if is_inside_tree() and Engine.is_editor_hint():
 			rebuild_visuals()
 
+@export var model_scale := GAS_STATION_SCALE:
+	set(v):
+		model_scale = v
+		if is_inside_tree() and Engine.is_editor_hint():
+			rebuild_visuals()
+
 
 func _ready() -> void:
 	rebuild_visuals()
@@ -98,7 +104,7 @@ func _build_gas(vis: Node3D) -> void:
 		if sc != null:
 			var inst := sc.instantiate() as Node3D
 			if inst != null:
-				inst.scale = Vector3.ONE * GAS_STATION_SCALE
+				inst.scale = Vector3.ONE * model_scale
 				vis.add_child(inst)
 				if not Engine.is_editor_hint():
 					_add_per_mesh_trimesh_collision(inst)

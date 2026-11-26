@@ -528,14 +528,7 @@ func _build_props() -> void:
 	# Tankstelle
 	var gas_sn: Node3D = gas.get("scene_node", null)
 	if gas_sn != null:
-		for px in [-18.5, -6.5]:
-			var pump_local := Vector3(px, 4.87, -2.2)
-			I.add(pump_local, 8.5, func(): return game.fuel_prompt(), func(): game.refuel(), func(): return game.truck_near(gas_sn.global_transform * pump_local, 10.0), gas_sn)
-		var gas_door_local := Vector3(-12.5, 3.87, -13.8)
-		_npc_local(gas_sn, "Tankwart Hias", gas_door_local, 0.0, {shirt = Color(0.1, 0.45, 0.25), hat = "cap", hat_color = Color(0.1, 0.4, 0.2)})
-		I.add(gas_door_local, 3.5, "Tankstelle (Shop)", func(): game.open_shop("gas"), null, gas_sn)
-		_slot_machine_local(gas_sn, Vector3(-9.5, 3.87, -14.2))
-		gas.door = gas_sn.global_transform * gas_door_local
+		_setup_gas_station_node(I, gas_sn, true)
 	else:
 		var gnode := Node3D.new()
 		gnode.name = "Tankstelle"
@@ -564,6 +557,11 @@ func _build_props() -> void:
 		var gsm: Vector3 = gas_door + Vector3(gas.dir.x, 0, gas.dir.y) * 2.2
 		_slot_machine(Vector3(gsm.x, world.height_at(gsm.x, gsm.z), gsm.z))
 		gas.door = gas_door
+
+	# Tankstelle Shell (Villach-Richtung)
+	var shell_sn := _get_shop_node("TankstelleShell")
+	if shell_sn != null:
+		_setup_gas_station_node(I, shell_sn, false)
 
 	# Werkstatt
 	var gar_sn: Node3D = garage.get("scene_node", null)
@@ -612,6 +610,20 @@ func _build_props() -> void:
 			var cone := _box(cnode, Vector3(0.3, 0.6, 0.3), v3(q, 0.3), Color(1.0, 0.45, 0.05))
 			cone.position.y += 0.05
 		checkpoint.node = cnode
+
+
+func _setup_gas_station_node(I: Interactions, gas_sn: Node3D, is_primary: bool) -> void:
+	var s: float = float(gas_sn.get("model_scale")) / 6.2758265 if "model_scale" in gas_sn else 1.0
+	for px in [-18.5, -6.5]:
+		var pump_local := Vector3(px, 4.87, -2.2) * s
+		I.add(pump_local, 8.5 * s, func(): return game.fuel_prompt(), func(): game.refuel(), func(): return game.truck_near(gas_sn.global_transform * pump_local, 10.0 * s), gas_sn)
+	var gas_door_local := Vector3(-12.5, 3.87, -13.8) * s
+	var npc_name := "Tankwart Hias" if is_primary else "Shell Tankwart"
+	_npc_local(gas_sn, npc_name, gas_door_local, 0.0, {shirt = Color(0.1, 0.45, 0.25), hat = "cap", hat_color = Color(0.1, 0.4, 0.2)})
+	I.add(gas_door_local, 3.5 * s, "Tankstelle (Shop)", func(): game.open_shop("gas"), null, gas_sn)
+	_slot_machine_local(gas_sn, Vector3(-9.5, 3.87, -14.2) * s)
+	if is_primary:
+		gas.door = gas_sn.global_transform * gas_door_local
 
 
 func _slot_machine_local(parent: Node3D, local_pos: Vector3) -> void:

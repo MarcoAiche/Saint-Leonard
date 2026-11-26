@@ -177,5 +177,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 39.547615, 56.093224, 85.4780
 script = ExtResource("11_shop")
 station_type = "weapon_shack"
 
+[node name="TankstelleShell" type="Node3D" parent="WorldOverlays/Shops" unique_id=1759786500]
+transform = Transform3D(0.48396356, 0, -0.87508815, 0, 1, 0, 0.87508815, 0, 0.48396356, 3670.7, 17.388071, -3240.2324)
+script = ExtResource("11_shop")
+model_scale = 7.2964745
+
 [editable path="WorldOverlays/MapMarkers"]
 [editable path="WorldOverlays/StLeonhardProps"]

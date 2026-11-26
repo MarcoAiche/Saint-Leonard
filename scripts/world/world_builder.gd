@@ -1526,7 +1526,11 @@ func _collect_building_exclusions() -> void:
 				var ts := child.get_node_or_null("Tankstelle") as Node3D
 				if ts != null and ts.visible and not seen_nodes.has(ts):
 					seen_nodes[ts] = true
-					_register_gas_station_zone(ts)
+					_register_gas_station_zone(ts, true)
+				var tss := child.get_node_or_null("TankstelleShell") as Node3D
+				if tss != null and tss.visible and not seen_nodes.has(tss):
+					seen_nodes[tss] = true
+					_register_gas_station_zone(tss, false)
 			elif child.name in ["StLeonhardProps", "KleinstadtProps"]:
 				for prop in child.get_children():
 					if prop is Node3D and not seen_nodes.has(prop):
@@ -1680,14 +1684,16 @@ func _compute_global_xz_bounds(root_node: Node3D) -> Dictionary:
 	return {valid = has_mesh, min_x = min_x, max_x = max_x, min_y = min_y, min_z = min_z, max_z = max_z}
 
 
-func _register_gas_station_zone(ts: Node3D) -> void:
+func _register_gas_station_zone(ts: Node3D, flatten: bool = true) -> void:
 	var xf := ts.global_transform
+	var mscale := float(ts.get("model_scale")) if "model_scale" in ts else 6.2758265
+	var half := 4.1573 * mscale
 	var min_x := INF
 	var max_x := -INF
 	var min_z := INF
 	var max_z := -INF
-	for sx in [-26.09, 26.09]:
-		for sz in [-26.09, 26.09]:
+	for sx in [-half, half]:
+		for sz in [-half, half]:
 			var wp := xf * Vector3(sx, 0.0, sz)
 			min_x = minf(min_x, wp.x)
 			max_x = maxf(max_x, wp.x)
@@ -1695,23 +1701,24 @@ func _register_gas_station_zone(ts: Node3D) -> void:
 			max_z = maxf(max_z, wp.z)
 	var ex_buf := 4.0
 	_exclusion_rects.append({
-		name = "Tankstelle",
+		name = ts.name,
 		min_x = min_x - ex_buf,
 		max_x = max_x + ex_buf,
 		min_z = min_z - ex_buf,
 		max_z = max_z + ex_buf,
 	})
-	var asphalt_y := ts.global_position.y + 3.8704
-	_flatten_zones.append({
-		name = "Tankstelle",
-		min_x = min_x,
-		max_x = max_x,
-		min_z = min_z,
-		max_z = max_z,
-		target_y = asphalt_y,
-		falloff = 16.0,
-	})
-	print("Gas station flatten/exclusion zone: xz=[%.1f..%.1f, %.1f..%.1f] asphalt_y=%.2f falloff=16.0m" % [min_x, max_x, min_z, max_z, asphalt_y])
+	if flatten:
+		var asphalt_y := ts.global_position.y + 0.6167 * mscale
+		_flatten_zones.append({
+			name = ts.name,
+			min_x = min_x,
+			max_x = max_x,
+			min_z = min_z,
+			max_z = max_z,
+			target_y = asphalt_y,
+			falloff = 16.0,
+		})
+	print("Gas station %s zone: xz=[%.1f..%.1f, %.1f..%.1f] flatten=%s" % [ts.name, min_x, max_x, min_z, max_z, str(flatten)])
 
 
 func _apply_terrain_flattening() -> void:
