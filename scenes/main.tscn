@@ -1,11 +1,13 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene format=3 uid="uid://n4183jxhh7ur"]
 
-[ext_resource type="Script" path="res://scripts/world/world_builder.gd" id="1_world"]
-[ext_resource type="Script" path="res://scripts/game.gd" id="2_game"]
-[ext_resource type="Script" path="res://scripts/world/editor_world_preview.gd" id="3_preview"]
+[ext_resource type="Script" uid="uid://ervc0btr5yca" path="res://scripts/world/world_builder.gd" id="1_world"]
+[ext_resource type="Script" uid="uid://ywyyb4hni00e" path="res://scripts/game.gd" id="2_game"]
+[ext_resource type="Script" uid="uid://bi728e2kdbhix" path="res://scripts/world/editor_world_preview.gd" id="3_preview"]
 [ext_resource type="PackedScene" path="res://scenes/world_overlays/map_markers.tscn" id="4_markers"]
 [ext_resource type="PackedScene" path="res://scenes/world_overlays/st_leonhard_props.tscn" id="5_stleonhard"]
 [ext_resource type="PackedScene" path="res://scenes/world_overlays/kleinstadt_props.tscn" id="6_kleinstadt"]
+[ext_resource type="PackedScene" uid="uid://bybx0o0b1vtgo" path="res://assets/models/buildings/Town House by Quaternius - sDQJBImZuw.glb" id="7_o6xl0"]
+[ext_resource type="PackedScene" uid="uid://cjkfs5lk3mofe" path="res://assets/models/buildings/Log cabin by Poly by Google - f7uccD5iyz0.glb" id="8_tipki"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 sky_top_color = Color(0.231373, 0.556863, 0.952941, 1)
@@ -25,37 +27,71 @@ ambient_light_source = 3
 ambient_light_color = Color(0.75, 0.82, 0.95, 1)
 ambient_light_sky_contribution = 0.6
 ambient_light_energy = 0.55
-tonemap_mode = 0
-fog_enabled = false
 fog_light_color = Color(0.545098, 0.784314, 1, 1)
 fog_density = 0.0004
 fog_sky_affect = 0.0
 adjustment_enabled = true
 adjustment_saturation = 1.15
 
-[node name="Main" type="Node3D"]
+[node name="Main" type="Node3D" unique_id=60648836]
 script = ExtResource("2_game")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1827612806]
 environment = SubResource("env")
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
-transform = Transform3D(0.866025, -0.383022, 0.321394, 0, 0.642788, 0.766044, -0.5, -0.663414, 0.556670, 0, 100, 0)
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1531221205]
+transform = Transform3D(0.866025, -0.383022, 0.321394, 0, 0.642788, 0.766044, -0.5, -0.663414, 0.55667, 0, 100, 0)
 light_color = Color(1, 0.96, 0.88, 1)
 light_energy = 1.2
 shadow_enabled = true
 directional_shadow_max_distance = 250.0
 
-[node name="World" type="Node3D" parent="."]
+[node name="World" type="Node3D" parent="." unique_id=1228402560]
 script = ExtResource("1_world")
 
-[node name="EditorWorldPreview" type="Node3D" parent="."]
+[node name="EditorWorldPreview" type="Node3D" parent="." unique_id=838199287]
 script = ExtResource("3_preview")
 
-[node name="WorldOverlays" type="Node3D" parent="."]
+[node name="WorldOverlays" type="Node3D" parent="." unique_id=1865822231]
 
-[node name="MapMarkers" parent="WorldOverlays" instance=ExtResource("4_markers")]
+[node name="MapMarkers" parent="WorldOverlays" unique_id=232955694 instance=ExtResource("4_markers")]
 
-[node name="StLeonhardProps" parent="WorldOverlays" instance=ExtResource("5_stleonhard")]
+[node name="PlayerSpawn" parent="WorldOverlays/MapMarkers/Spawns" index="0"]
+transform = Transform3D(-0.48135823, 0, -0.876524, 0, 1, 0, 0.876524, 0, -0.48135823, -15.398, 57.95, 113.25)
 
-[node name="KleinstadtProps" parent="WorldOverlays" instance=ExtResource("6_kleinstadt")]
+[node name="CarSpawn" parent="WorldOverlays/MapMarkers/Spawns" index="1"]
+transform = Transform3D(0.13339746, 0, 0.99106264, 0, 1, 0, -0.99106264, 0, 0.13339746, -8.822, 58.166, 116.861)
+
+[node name="AtvSpawn" parent="WorldOverlays/MapMarkers/Spawns" index="2"]
+transform = Transform3D(-0.99095607, 0, 0.13418669, 0, 1, 0, -0.13418669, 0, -0.99095607, -10.51, 58.108, 126.152)
+
+[node name="TruckSpawn" parent="WorldOverlays/MapMarkers/Spawns" index="3"]
+transform = Transform3D(0.13339746, 0, 0.99106264, 0, 1, 0, -0.99106264, 0, 0.13339746, -3, 58.166, 117.6)
+
+[node name="Supermarkt" parent="WorldOverlays/MapMarkers/POIs" index="0"]
+transform = Transform3D(0.2943701, 0, 0.9556915, 0, 1, 0, -0.9556915, 0, 0.2943701, 7076.654, 11.631, -8237.305)
+
+[node name="Baumarkt" parent="WorldOverlays/MapMarkers/POIs" index="1"]
+transform = Transform3D(0.45448712, 0, -0.8907533, 0, 1, 0, 0.8907533, 0, 0.45448712, 7193.7, 13.368, -8117.216)
+
+[node name="Gasthaus" parent="WorldOverlays/MapMarkers/POIs" index="2"]
+transform = Transform3D(0.9669022, 0, -0.25514725, 0, 1, 0, 0.25514725, 0, 0.9669022, -12.509, 56.994, 102.287)
+
+[node name="Tankstelle" parent="WorldOverlays/MapMarkers/POIs" index="3"]
+transform = Transform3D(-0.44233784, 0, 0.8968485, 0, 1, 0, -0.8968485, 0, -0.44233784, 1347.579, 43.424, -1209.698)
+
+[node name="Werkstatt" parent="WorldOverlays/MapMarkers/POIs" index="4"]
+transform = Transform3D(0.9998, 0, 0.019998666, 0, 1, 0, -0.019998666, 0, 0.9998, 1566.283, 70.371, 114.871)
+
+[node name="StLeonhardProps" parent="WorldOverlays" unique_id=1732476083 instance=ExtResource("5_stleonhard")]
+
+[node name="KleinstadtProps" parent="WorldOverlays" unique_id=1900946819 instance=ExtResource("6_kleinstadt")]
+
+[node name="Root Scene" parent="WorldOverlays" unique_id=240293296 instance=ExtResource("7_o6xl0")]
+transform = Transform3D(-4.0100455, 0, -0.14745146, 0, 2.9655075, 0, 0.17715561, 0, -3.3376703, 1710.1705, 75.84994, 265.08942)
+
+[node name="Log cabin by Poly by Google - f7uccD5iyz0" parent="WorldOverlays" unique_id=112295659 instance=ExtResource("8_tipki")]
+transform = Transform3D(-0.0074553583, 0, -0.008862954, 0, 0.011581639, 0, 0.008862954, 0, -0.0074553583, -310.65454, 911.6338, 4386.837)
+
+[editable path="WorldOverlays/MapMarkers"]
+[editable path="WorldOverlays/StLeonhardProps"]

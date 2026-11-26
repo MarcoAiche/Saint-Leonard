@@ -22,6 +22,14 @@ extends Node3D
 		if Engine.is_editor_hint() and is_inside_tree():
 			_refresh_preview()
 
+@export var editor_show_distant_trees_and_rocks: bool = true:
+	set(value):
+		if editor_show_distant_trees_and_rocks == value:
+			return
+		editor_show_distant_trees_and_rocks = value
+		if Engine.is_editor_hint() and is_inside_tree():
+			_refresh_preview()
+
 @export_file("*.scn", "*.tscn") var baked_scene_path: String = "res://data/world_baked.scn"
 
 var _preview_instance: Node = null
@@ -56,7 +64,7 @@ func _refresh_preview() -> void:
 		return
 	if baked_scene_path.is_empty() or not ResourceLoader.exists(baked_scene_path):
 		return
-	var packed := ResourceLoader.load(baked_scene_path) as PackedScene
+	var packed := ResourceLoader.load(baked_scene_path, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
 	if packed == null:
 		return
 	var inst := packed.instantiate()
@@ -65,4 +73,18 @@ func _refresh_preview() -> void:
 	inst.name = "_BakedWorldPreview"
 	# Wichtig: owner bleibt null, damit die tausenden Baked-Nodes nicht in main.tscn landen.
 	add_child(inst)
+	if editor_show_distant_trees_and_rocks:
+		_disable_tree_rock_culling(inst)
 	_preview_instance = inst
+
+
+func _disable_tree_rock_culling(root_node: Node) -> void:
+	for grp_name in ["Baeume", "Foliage"]:
+		var grp := root_node.get_node_or_null(grp_name)
+		if grp == null:
+			continue
+		for c in grp.get_children():
+			if c is MultiMeshInstance3D:
+				var mmi := c as MultiMeshInstance3D
+				if grp_name == "Baeume" or mmi.name.begins_with("T") or mmi.name.begins_with("RK"):
+					mmi.visibility_range_end = 0.0

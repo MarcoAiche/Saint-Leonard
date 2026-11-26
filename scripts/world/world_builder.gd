@@ -97,6 +97,7 @@ var _trunk_shapes: Array[CollisionShape3D] = []
 var _rock_shapes: Array[CollisionShape3D] = []
 var _col_timer := 0.0
 var _exclusion_rects: Array = []
+var _flatten_zones: Array = []
 var _exclusion_hash := ""
 
 
@@ -105,6 +106,7 @@ func _ready() -> void:
 	if not load_data():
 		return
 	_collect_building_exclusions()
+	_apply_terrain_flattening()
 	if not _load_baked():
 		build()
 		_save_baked()
@@ -1506,17 +1508,22 @@ func _build_tunnel_tube(bufs: Dictionary, line: PackedVector2Array, road_w: floa
 
 func _collect_building_exclusions() -> void:
 	_exclusion_rects.clear()
-	var overlays := get_parent().get_node_or_null("WorldOverlays") if get_parent() != null else null
+	_flatten_zones.clear()
+	var seen_nodes := {}
+	var parent := get_parent()
+	var overlays := parent.get_node_or_null("WorldOverlays") if parent != null else null
 	if overlays != null:
 		for child in overlays.get_children():
 			if child.name == "MapMarkers":
-				_collect_clear_markers(child)
+				_collect_marker_zones(child)
 			elif child.name in ["StLeonhardProps", "KleinstadtProps"]:
 				for prop in child.get_children():
-					if prop is Node3D:
-						_add_exclusion_for_node(prop as Node3D)
-			elif child is Node3D:
-				_add_exclusion_for_node(child as Node3D)
+					if prop is Node3D and not seen_nodes.has(prop):
+						seen_nodes[prop] = true
+						_register_overlay_node(prop as Node3D)
+			elif child is Node3D and not seen_nodes.has(child):
+				seen_nodes[child] = true
+				_register_overlay_node(child as Node3D)
 	else:
 		for p in ["res://scenes/world_overlays/st_leonhard_props.tscn", "res://scenes/world_overlays/kleinstadt_props.tscn"]:
 			if ResourceLoader.exists(p):
@@ -1526,56 +1533,111 @@ func _collect_building_exclusions() -> void:
 					if inst != null:
 						for prop in inst.get_children():
 							if prop is Node3D:
-								_add_exclusion_for_node(prop as Node3D)
+								_register_overlay_node(prop as Node3D)
 						inst.free()
+	if parent != null:
+		var ignored_main := ["World", "Sun", "WorldEnvironment", "EditorWorldPreview", "WorldOverlays", "Orte", "Wild", "Auftraege", "Himmel", "CameraRig", "Spieler", "Pickup", "ATV"]
+		for child in parent.get_children():
+			if child is Node3D and not child.name in ignored_main and not seen_nodes.has(child):
+				if child.name.to_lower().begins_with("flattenzone") or _has_any_mesh(child):
+					seen_nodes[child] = true
+					_register_overlay_node(child as Node3D)
 	_exclusion_rects.sort_custom(func(a, b): return str(a.name) < str(b.name) or (str(a.name) == str(b.name) and a.min_x < b.min_x))
+	_flatten_zones.sort_custom(func(a, b): return str(a.name) < str(b.name) or (str(a.name) == str(b.name) and a.min_x < b.min_x))
 	var sig_parts: Array[String] = []
 	for r in _exclusion_rects:
-		sig_parts.append("%s:%.2f,%.2f,%.2f,%.2f" % [r.name, r.min_x, r.max_x, r.min_z, r.max_z])
+		sig_parts.append("EX:%s:%.2f,%.2f,%.2f,%.2f" % [r.name, r.min_x, r.max_x, r.min_z, r.max_z])
+	for fz in _flatten_zones:
+		sig_parts.append("FL:%s:%.2f,%.2f,%.2f,%.2f,%.3f" % [fz.name, fz.min_x, fz.max_x, fz.min_z, fz.max_z, fz.target_y])
 	_exclusion_hash = "|".join(sig_parts).sha256_text()
 
 
-func _collect_clear_markers(node: Node) -> void:
+func _has_any_mesh(root_node: Node) -> bool:
+	var stack: Array[Node] = [root_node]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+			return true
+		for ch in n.get_children():
+			stack.append(ch)
+	return false
+
+
+func _collect_marker_zones(node: Node) -> void:
 	for c in node.get_children():
-		if c is Marker3D and c.visible and c.name.to_lower().begins_with("clearbuilding"):
+		if c is Marker3D and c.visible:
+			var lname := c.name.to_lower()
 			var p := (c as Marker3D).global_position
+			if lname.begins_with("clearbuilding"):
+				_exclusion_rects.append({
+					name = c.name,
+					min_x = p.x - 10.0,
+					max_x = p.x + 10.0,
+					min_z = p.z - 10.0,
+					max_z = p.z + 10.0,
+				})
+			elif lname.begins_with("flattenzone"):
+				_flatten_zones.append({
+					name = c.name,
+					min_x = p.x - 10.0,
+					max_x = p.x + 10.0,
+					min_z = p.z - 10.0,
+					max_z = p.z + 10.0,
+					target_y = p.y,
+				})
+		_collect_marker_zones(c)
+
+
+func _register_overlay_node(node: Node3D) -> void:
+	if not node.visible:
+		return
+	var bounds := _compute_global_xz_bounds(node)
+	var is_flatten_only := node.name.to_lower().begins_with("flattenzone")
+	var ex_buf := 3.2
+	var flat_buf := 2.0
+	if not bounds.valid:
+		var p := node.global_position
+		if not is_flatten_only:
 			_exclusion_rects.append({
-				name = c.name,
+				name = node.name,
 				min_x = p.x - 10.0,
 				max_x = p.x + 10.0,
 				min_z = p.z - 10.0,
 				max_z = p.z + 10.0,
 			})
-		_collect_clear_markers(c)
-
-
-func _add_exclusion_for_node(node: Node3D) -> void:
-	if not node.visible:
-		return
-	var bounds := _compute_global_xz_bounds(node)
-	var buffer := 1.8
-	if not bounds.valid:
-		var p := node.global_position
-		_exclusion_rects.append({
+		_flatten_zones.append({
 			name = node.name,
 			min_x = p.x - 10.0,
 			max_x = p.x + 10.0,
 			min_z = p.z - 10.0,
 			max_z = p.z + 10.0,
+			target_y = p.y,
 		})
+		print("Overlay building/zone detected: %s pos=(%.2f, %.2f, %.2f) target_y=%.2f (fallback 10m)" % [node.name, p.x, p.y, p.z, p.y])
 	else:
-		_exclusion_rects.append({
+		if not is_flatten_only:
+			_exclusion_rects.append({
+				name = node.name,
+				min_x = bounds.min_x - ex_buf,
+				max_x = bounds.max_x + ex_buf,
+				min_z = bounds.min_z - ex_buf,
+				max_z = bounds.max_z + ex_buf,
+			})
+		_flatten_zones.append({
 			name = node.name,
-			min_x = bounds.min_x - buffer,
-			max_x = bounds.max_x + buffer,
-			min_z = bounds.min_z - buffer,
-			max_z = bounds.max_z + buffer,
+			min_x = bounds.min_x - flat_buf,
+			max_x = bounds.max_x + flat_buf,
+			min_z = bounds.min_z - flat_buf,
+			max_z = bounds.max_z + flat_buf,
+			target_y = bounds.min_y,
 		})
+		print("Overlay building/zone detected: %s xz=[%.1f..%.1f, %.1f..%.1f] target_y=%.2f" % [node.name, bounds.min_x, bounds.max_x, bounds.min_z, bounds.max_z, bounds.min_y])
 
 
 func _compute_global_xz_bounds(root_node: Node3D) -> Dictionary:
 	var min_x := INF
 	var max_x := -INF
+	var min_y := INF
 	var min_z := INF
 	var max_z := -INF
 	var has_mesh := false
@@ -1598,12 +1660,45 @@ func _compute_global_xz_bounds(root_node: Node3D) -> Dictionary:
 							var wp: Vector3 = xf * corner
 							min_x = minf(min_x, wp.x)
 							max_x = maxf(max_x, wp.x)
+							min_y = minf(min_y, wp.y)
 							min_z = minf(min_z, wp.z)
 							max_z = maxf(max_z, wp.z)
 							has_mesh = true
 		for ch in n.get_children():
 			stack.append(ch)
-	return {valid = has_mesh, min_x = min_x, max_x = max_x, min_z = min_z, max_z = max_z}
+	return {valid = has_mesh, min_x = min_x, max_x = max_x, min_y = min_y, min_z = min_z, max_z = max_z}
+
+
+func _apply_terrain_flattening() -> void:
+	if _flatten_zones.is_empty() or heights.is_empty():
+		return
+	var falloff := 5.0
+	for fz in _flatten_zones:
+		var i0 := maxi(0, floori((fz.min_x - falloff - x0) / step))
+		var i1 := mini(nx - 1, ceili((fz.max_x + falloff - x0) / step))
+		var j0 := maxi(0, floori((fz.min_z - falloff - z0) / step))
+		var j1 := mini(nz - 1, ceili((fz.max_z + falloff - z0) / step))
+		for j in range(j0, j1 + 1):
+			var pz := z0 + j * step
+			var dz := maxf(fz.min_z - pz, maxf(0.0, pz - fz.max_z))
+			for i in range(i0, i1 + 1):
+				var px := x0 + i * step
+				var dx := maxf(fz.min_x - px, maxf(0.0, px - fz.max_x))
+				var dist := sqrt(dx * dx + dz * dz)
+				var idx := j * nx + i
+				if dist <= 0.0:
+					heights[idx] = fz.target_y
+				elif dist < falloff:
+					var t := dist / falloff
+					var w := t * t * (3.0 - 2.0 * t)
+					heights[idx] = lerpf(fz.target_y, heights[idx], w)
+
+
+func _is_point_excluded(x: float, z: float, extra := 0.0) -> bool:
+	for r in _exclusion_rects:
+		if x >= r.min_x - extra and x <= r.max_x + extra and z >= r.min_z - extra and z <= r.max_z + extra:
+			return true
+	return false
 
 
 func _is_building_excluded(center: Vector2, poly: PackedVector2Array) -> bool:
@@ -2067,7 +2162,7 @@ func _build_trees() -> void:
 	for k in range(0, t.size(), 4):
 		var x := t[k] * MAP_SCALE
 		var z := t[k + 1] * MAP_SCALE
-		if _near_farmland(x, z, 1.5) or _near_building(x, z, 3.0):
+		if _near_farmland(x, z, 1.5) or _near_building(x, z, 3.0) or _is_point_excluded(x, z, 1.0):
 			continue
 		var key := _chunk_key(x, z)
 		if not per_chunk.has(key):
@@ -2197,7 +2292,7 @@ func _build_foliage() -> void:
 					continue
 				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery", "farmland"] or _near_farmland(px, pz, 1.5) or slope_at(px, pz) > 0.42:
 					continue
-				if road_info(Vector2(px, pz), 7.5).tier != 0 or _near_building(px, pz, 3.0):
+				if road_info(Vector2(px, pz), 7.5).tier != 0 or _near_building(px, pz, 3.0) or _is_point_excluded(px, pz, 1.0):
 					continue
 				var py := height_at(px, pz) - 0.1
 				var tsc := rng_t.randf_range(0.85, 1.25)
@@ -2221,7 +2316,7 @@ func _build_foliage() -> void:
 					continue
 				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery", "farmland"] or _near_farmland(px, pz, 1.5) or slope_at(px, pz) > 0.42:
 					continue
-				if road_info(Vector2(px, pz), 6.5).tier != 0 or _near_building(px, pz, 3.0):
+				if road_info(Vector2(px, pz), 6.5).tier != 0 or _near_building(px, pz, 3.0) or _is_point_excluded(px, pz, 0.5):
 					continue
 				var py := height_at(px, pz) - 0.1
 				var rxf := Transform3D(Basis(Vector3.UP, rng_r.randf() * TAU).scaled(Vector3.ONE * rng_r.randf_range(0.8, 1.4)), Vector3(px, py, pz))
@@ -2265,7 +2360,7 @@ func _build_foliage() -> void:
 					continue
 				if kind_at(px, pz) in ["water", "parking", "industrial", "cemetery", "farmland"] or _near_farmland(px, pz, 1.5) or slope_at(px, pz) > 0.42:
 					continue
-				if road_info(Vector2(px, pz), 6.5).tier != 0 or _near_building(px, pz, 3.0):
+				if road_info(Vector2(px, pz), 6.5).tier != 0 or _near_building(px, pz, 3.0) or _is_point_excluded(px, pz, 0.5):
 					continue
 				var py := height_at(px, pz)
 				var bxf := Transform3D(Basis(Vector3.UP, rng_b.randf() * TAU).scaled(Vector3.ONE * rng_b.randf_range(0.85, 1.25)), Vector3(px, py, pz))
