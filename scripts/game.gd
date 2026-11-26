@@ -1102,7 +1102,7 @@ func _process_butcher_dropzones(dt: float) -> void:
 		var in_zone: Dictionary = {}
 		for z in landmarks.butcher_zones:
 			var zp: Vector3 = z.node.global_position if (z.has("node") and is_instance_valid(z.node)) else z.pos
-			if Vector2(c.global_position.x - zp.x, c.global_position.z - zp.z).length() <= 1.45 and absf(c.global_position.y - zp.y) < 2.5:
+			if Vector2(c.global_position.x - zp.x, c.global_position.z - zp.z).length() <= 1.6 and absf(c.global_position.y - zp.y) < 2.5:
 				in_zone = z
 				break
 		if in_zone.is_empty():

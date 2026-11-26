@@ -494,7 +494,7 @@ func _build_props() -> void:
 			outfit = {uniform = true, hat = "police"}
 		var npc_name: String = {"bauhaus": "Bauhaus-Verkäufer", "super": "Kassiererin", "gun": "Büchsenmacher", "butcher": "Fleischer Franz", "police": "Polizeiinspektion"}[id]
 		if sn != null:
-			var door_local := Vector3(0, 0, 10.5)
+			var door_local := Vector3(2.0, 0.0, 3.35) if id == "butcher" else Vector3(0, 0, 10.5)
 			_npc_local(sn, npc_name, door_local, 0.0, outfit)
 			if id == "police":
 				I.add(door_local, 3.0, "Polizei: Strafen bezahlen", func(): game.police_desk(), null, sn)
@@ -502,7 +502,7 @@ func _build_props() -> void:
 				I.add(door_local, 3.0, Items.SHOP_NAMES[id], func(): game.open_shop(id), null, sn)
 			if id == "butcher":
 				I.add(door_local, 14.0, "Wild von der Ladefläche verkaufen", func(): game.sell_truck_cargo(), func(): game.truck_has_game_near(sn.global_transform * door_local, 14.0), sn)
-				_add_butcher_dropzone_local(sn, Vector3(0, 0.04, 12.7))
+				_register_existing_butcher_dropzone(sn)
 			if id == "super":
 				_slot_machine_local(sn, Vector3(2.2, 0, 10.5))
 		else:
@@ -760,9 +760,9 @@ func _build_hub_landmarks(I: Interactions) -> void:
 	# 2. Butcher "GASTON" Food Truck
 	var gaston_sn := _get_shop_node("ButcherFoodTruck")
 	if gaston_sn != null:
-		_npc_local(gaston_sn, "GASTON", Vector3(0.4, 0.0, 2.1), 0.0, {shirt = Color(0.941, 0.941, 0.925), pants = Color(0.18, 0.18, 0.20), hat = "none"})
-		I.add(Vector3(0.4, 0.0, 2.1), 3.5, "Butcher Gaston: Wild verkaufen", func(): game.open_shop("butcher"), null, gaston_sn)
-		_add_butcher_dropzone_local(gaston_sn, Vector3(0.4, 0.04, 4.1))
+		_npc_local(gaston_sn, "GASTON", Vector3(3.35, 0.0, 2.0), PI * 0.5, {shirt = Color(0.941, 0.941, 0.925), pants = Color(0.18, 0.18, 0.20), hat = "none"})
+		I.add(Vector3(3.35, 0.0, 2.0), 3.5, "Butcher Gaston: Wild verkaufen", func(): game.open_shop("butcher"), null, gaston_sn)
+		_register_existing_butcher_dropzone(gaston_sn)
 		_log_hub_pos("GASTON Food Truck", Vector2(gaston_sn.global_position.x, gaston_sn.global_position.z))
 	else:
 		var gspot := _find_hub_spot(pub_2d, 14.0, 55.0, 4.2, avoid)
@@ -1067,6 +1067,12 @@ func _log_hub_pos(label: String, p2: Vector2) -> void:
 	var dirs := ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
 	var compass: String = dirs[int(round(ang / 45.0)) % 8]
 	print("HUB_POS | %s | (%.1f, %.1f) | %.1fm | %s" % [label, p2.x, p2.y, d.length(), compass])
+
+
+func _register_existing_butcher_dropzone(parent: Node3D) -> void:
+	var dz := parent.find_child("ButcherDropZone", true, false) as Node3D
+	if dz != null:
+		butcher_zones.append({pos = dz.global_position, node = dz, ring = dz.get_meta("ring", null), fill = dz.get_meta("fill", null)})
 
 
 func _add_butcher_dropzone_local(parent: Node3D, local_pos: Vector3) -> void:

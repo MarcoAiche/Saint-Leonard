@@ -4,6 +4,7 @@ extends Node3D
 ## Editor-sichtbare Shop-, Tankstellen-, Werkstatt- und Camp-Hub-Station unter WorldOverlays/Shops.
 ## Im Editor (@tool) werden nur visuelle Meshes/Schilder ohne .owner aufgebaut (keine Physik/KI/Speicher-Duplikate).
 
+const BUTCHER_TRUCK_PATH := "res://assets/shops/Sushi Truck by Quaternius - OgrROxABGT.glb"
 const SHOP_SIGNS := {
 	"bauhaus": ["BAUHAUS", Color(0.85, 0.10, 0.10)],
 	"super": ["SUPERMARKT", Color(0.95, 0.75, 0.10)],
@@ -43,10 +44,12 @@ func rebuild_visuals() -> void:
 			_build_gas(vis)
 		"garage":
 			_build_garage(vis)
-		"bauhaus", "super", "gun", "butcher", "police":
+		"bauhaus", "super", "gun", "police":
 			_build_city_shop(vis, station_type)
+		"butcher":
+			_build_butcher_truck(vis, "FLEISCHEREI", Color(0.70, 0.15, 0.15), -PI * 0.5, Vector3(0.0, 0.0, 4.6))
 		"gaston":
-			_build_gaston(vis)
+			_build_butcher_truck(vis, "GASTON BUTCHER", Color(0.722, 0.157, 0.157), 0.0, Vector3(4.6, 0.0, 0.0))
 		"weapon_shack":
 			_build_weapon_shack(vis)
 		"camper_rv":
@@ -115,23 +118,78 @@ func _build_city_shop(vis: Node3D, id: String) -> void:
 	_sign(vis, sign_info[0], sign_info[1], Vector3(0, 6.9, 9.4), 0.0, 8.0)
 
 
-func _build_gaston(vis: Node3D) -> void:
-	_foundation_skirt(vis, 6.2, 3.2, Color(0.48, 0.46, 0.42))
-	var truck_vis := AssetLoader.load_model("res://assets/models/landmarks/gaston_food_truck.glb", 3.6, func() -> Node3D:
-		var fb := Node3D.new()
-		_box(fb, Vector3(5.6, 2.4, 2.5), Vector3(0, 1.55, 0), Color(0.937, 0.910, 0.847), true)
-		_box(fb, Vector3(5.7, 0.55, 2.56), Vector3(0, 0.65, 0), Color(0.722, 0.157, 0.157), true)
-		_box(fb, Vector3(1.6, 1.7, 2.4), Vector3(3.4, 1.2, 0), Color(0.937, 0.910, 0.847), true)
-		_box(fb, Vector3(3.2, 0.18, 1.1), Vector3(0.2, 2.35, 1.75), Color(0.722, 0.157, 0.157))
-		_box(fb, Vector3(2.0, 0.9, 0.28), Vector3(0.0, 3.2, 0), Color(0.784, 0.220, 0.220))
-		_box(fb, Vector3(0.45, 0.45, 0.34), Vector3(1.1, 3.2, 0), Color(0.941, 0.929, 0.902))
-		for wx in [-1.8, 2.6]:
-			for wz in [-1.2, 1.2]:
-				_box(fb, Vector3(0.75, 0.75, 0.32), Vector3(wx, 0.38, wz), Color(0.165, 0.173, 0.188))
-		return fb
-	)
-	vis.add_child(truck_vis)
-	_sign(vis, "GASTON BUTCHER", Color(0.722, 0.157, 0.157), Vector3(0, 3.9, 1.3), 0.0, 4.4)
+func _build_butcher_truck(vis: Node3D, sign_text: String, sign_col: Color, truck_yaw: float, drop_local: Vector3) -> void:
+	var holder := Node3D.new()
+	holder.rotation.y = truck_yaw
+	vis.add_child(holder)
+	if ResourceLoader.exists(BUTCHER_TRUCK_PATH):
+		var sc := ResourceLoader.load(BUTCHER_TRUCK_PATH) as PackedScene
+		if sc != null:
+			var inst := sc.instantiate() as Node3D
+			if inst != null:
+				holder.add_child(inst)
+	else:
+		_box(holder, Vector3(4.6, 3.0, 7.6), Vector3(0.2, 1.5, 0), Color(0.937, 0.910, 0.847))
+	if not Engine.is_editor_hint():
+		var sb := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(4.6, 3.2, 7.6)
+		cs.shape = bs
+		cs.position = Vector3(0.2, 1.6, 0.0)
+		sb.add_child(cs)
+		holder.add_child(sb)
+	_sign(holder, sign_text, sign_col, Vector3(2.8, 5.2, 0.0), PI * 0.5, 4.8)
+	_build_butcher_dropzone_visual(vis, drop_local)
+
+
+func _build_butcher_dropzone_visual(vis: Node3D, local_pos: Vector3) -> void:
+	var holder := Node3D.new()
+	holder.name = "ButcherDropZone"
+	holder.position = local_pos + Vector3(0, 0.05, 0)
+	vis.add_child(holder)
+
+	var fill_mesh := CylinderMesh.new()
+	fill_mesh.top_radius = 1.5
+	fill_mesh.bottom_radius = 1.5
+	fill_mesh.height = 0.03
+	fill_mesh.radial_segments = 32
+	var fill_mat := StandardMaterial3D.new()
+	fill_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	fill_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fill_mat.albedo_color = Color(0.851, 0.169, 0.169, 0.36)
+	var fill_mi := MeshInstance3D.new()
+	fill_mi.mesh = fill_mesh
+	fill_mi.material_override = fill_mat
+	fill_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(fill_mi)
+
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.inner_radius = 1.38
+	ring_mesh.outer_radius = 1.52
+	ring_mesh.rings = 32
+	ring_mesh.ring_segments = 8
+	var ring_mat := StandardMaterial3D.new()
+	ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_mat.albedo_color = Color(0.851, 0.169, 0.169, 1.0)
+	var ring_mi := MeshInstance3D.new()
+	ring_mi.mesh = ring_mesh
+	ring_mi.position.y = 0.02
+	ring_mi.material_override = ring_mat
+	ring_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	holder.add_child(ring_mi)
+
+	var lbl := Label3D.new()
+	lbl.text = "WILD HIER ABLEGEN"
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.font_size = 48
+	lbl.outline_size = 10
+	lbl.modulate = Color(1.0, 0.92, 0.88)
+	lbl.position = Vector3(0, 0.65, 0)
+	holder.add_child(lbl)
+
+	holder.set_meta("ring", ring_mi)
+	holder.set_meta("fill", fill_mi)
 
 
 func _build_weapon_shack(vis: Node3D) -> void:
