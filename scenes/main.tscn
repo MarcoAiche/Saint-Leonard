@@ -83,7 +83,7 @@ transform = Transform3D(0.45448712, 0, -0.8907533, 0, 1, 0, 0.8907533, 0, 0.4544
 transform = Transform3D(0.9669022, 0, -0.25514725, 0, 1, 0, 0.25514725, 0, 0.9669022, -12.509, 56.994, 102.287)
 
 [node name="Tankstelle" parent="WorldOverlays/MapMarkers/POIs" index="3"]
-transform = Transform3D(-0.44233784, 0, 0.8968485, 0, 1, 0, -0.8968485, 0, -0.44233784, 1347.579, 43.424, -1209.698)
+transform = Transform3D(-0.44233784, 0, 0.8968485, 0, 1, 0, -0.8968485, 0, -0.44233784, 1347.6194, 43.240574, -1209.7106)
 
 [node name="Werkstatt" parent="WorldOverlays/MapMarkers/POIs" index="4"]
 transform = Transform3D(0.9998, 0, 0.019998666, 0, 1, 0, -0.019998666, 0, 0.9998, 1566.283, 70.371, 114.871)
@@ -119,7 +119,7 @@ transform = Transform3D(0.3324841, 0, -0.94310886, 0, 1, 0, 0.94310886, 0, 0.332
 script = ExtResource("13_firehall")
 
 [node name="Tankstelle" type="Node3D" parent="WorldOverlays/Shops" unique_id=934006543]
-transform = Transform3D(-0.44233784, 0, 0.8968485, 0, 1, 0, -0.8968485, 0, -0.44233784, 1347.579, 43.424, -1209.698)
+transform = Transform3D(-0.8964186, 0, -0.44320834, 0, 1, 0, 0.44320834, 0, -0.8964186, 1368.1989, 40.148716, -1194.8875)
 script = ExtResource("11_shop")
 
 [node name="Werkstatt" type="Node3D" parent="WorldOverlays/Shops" unique_id=1521692261]
@@ -161,11 +161,6 @@ station_type = "camper_rv"
 transform = Transform3D(0.9966929, 0, 0.0812603, 0, 1, 0, -0.0812603, 0, 0.9966929, 20.37, 56.234, 80.68)
 script = ExtResource("11_shop")
 station_type = "campfire"
-
-[node name="WildlifeFieldOffice07" type="Node3D" parent="WorldOverlays/Shops" unique_id=1413869330]
-transform = Transform3D(-0.9118317, 0, -0.41056418, 0, 1, 0, 0.41056418, 0, -0.9118317, 1401.302, 43.982, -1189.897)
-script = ExtResource("11_shop")
-station_type = "wildlife_office"
 
 [node name="CaravanSpot" type="Node3D" parent="WorldOverlays/Shops" unique_id=1816969211]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 398.675, 96.624, 1536.321)

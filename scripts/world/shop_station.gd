@@ -6,6 +6,9 @@ extends Node3D
 
 const BUTCHER_TRUCK_PATH := "res://assets/shops/Sushi Truck by Quaternius - OgrROxABGT.glb"
 const GUN_TRUCK_PATH := "res://assets/shops/M939 Truck by J-Toastie - y8lBpvMlim.glb"
+const GAS_STATION_PATH := "res://assets/shops/Gas Station by Alex Safayan - 7rUkCX-AIR2.glb"
+const GAS_STATION_SCALE := 6.2758265
+const GAS_ASPHALT_Y := 3.8704
 const SHOP_SIGNS := {
 	"bauhaus": ["BAUHAUS", Color(0.85, 0.10, 0.10)],
 	"super": ["SUPERMARKT", Color(0.95, 0.75, 0.10)],
@@ -14,7 +17,7 @@ const SHOP_SIGNS := {
 	"police": ["POLIZEI", Color(0.15, 0.30, 0.65)],
 }
 
-@export_enum("gas", "garage", "bauhaus", "super", "gun", "butcher", "police", "gaston", "weapon_shack", "camper_rv", "campfire", "wildlife_office", "caravan") var station_type := "gas":
+@export_enum("gas", "garage", "bauhaus", "super", "gun", "butcher", "police", "gaston", "weapon_shack", "camper_rv", "campfire", "caravan") var station_type := "gas":
 	set(v):
 		station_type = v
 		if is_inside_tree() and Engine.is_editor_hint():
@@ -59,8 +62,6 @@ func rebuild_visuals() -> void:
 			_build_camper_rv(vis)
 		"campfire":
 			_build_campfire(vis)
-		"wildlife_office":
-			_build_wildlife_office(vis)
 		"caravan":
 			_build_caravan(vis)
 
@@ -92,17 +93,34 @@ func _foundation_skirt(parent: Node3D, w: float, d: float, col: Color) -> void:
 
 
 func _build_gas(vis: Node3D) -> void:
+	if ResourceLoader.exists(GAS_STATION_PATH):
+		var sc := ResourceLoader.load(GAS_STATION_PATH) as PackedScene
+		if sc != null:
+			var inst := sc.instantiate() as Node3D
+			if inst != null:
+				inst.scale = Vector3.ONE * GAS_STATION_SCALE
+				vis.add_child(inst)
+				if not Engine.is_editor_hint():
+					_add_per_mesh_trimesh_collision(inst)
+				return
 	_box(vis, Vector3(16, 0.6, 9), Vector3(0, 5.2, 0), Color(0.95, 0.95, 0.95))
-	_box(vis, Vector3(16.2, 0.4, 9.2), Vector3(0, 5.6, 0), Color(0.95, 0.75, 0.1))
-	for k in [-1, 1]:
-		_box(vis, Vector3(0.4, 5.2, 0.4), Vector3(0, 2.6, 6.5 * k), Color(0.8, 0.8, 0.8), true)
-	for k in [-1, 1]:
-		var pz: float = 4.0 * float(k)
-		_box(vis, Vector3(0.9, 1.8, 0.6), Vector3(0, 0.9, pz), Color(0.9, 0.2, 0.15), true)
-		_box(vis, Vector3(0.7, 0.4, 0.62), Vector3(0, 1.4, pz), Color(0.2, 0.2, 0.22))
-	# Shop-Gebäude (-X = +side)
-	_box(vis, Vector3(9, 3.4, 6), Vector3(-9.0, 1.5, 0), Color(0.92, 0.90, 0.85), true)
-	_sign(vis, "TANKSTELLE", Color(0.10, 0.45, 0.25), Vector3(-5.9, 3.8, 0), PI * 0.5, 7.0)
+
+
+func _add_per_mesh_trimesh_collision(root_node: Node) -> void:
+	var stack: Array[Node] = [root_node]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D:
+			var mi := n as MeshInstance3D
+			if mi.mesh != null:
+				mi.create_trimesh_collision()
+				for ch in mi.get_children():
+					if ch is StaticBody3D:
+						var sb := ch as StaticBody3D
+						sb.collision_layer = 1
+						sb.collision_mask = 0
+		for c in n.get_children():
+			stack.append(c)
 
 
 func _build_garage(vis: Node3D) -> void:
@@ -257,20 +275,6 @@ func _build_campfire(vis: Node3D) -> void:
 	chair.name = "RockingChair"
 	chair.position = Vector3(1.6, 0, 0)
 	vis.add_child(chair)
-
-
-func _build_wildlife_office(vis: Node3D) -> void:
-	_foundation_skirt(vis, 6.4, 3.0, Color(0.55, 0.57, 0.60))
-	var wfo_vis := AssetLoader.load_model("res://assets/models/landmarks/wildlife_office_07.glb", 3.2, func() -> Node3D:
-		var fb := Node3D.new()
-		_box(fb, Vector3(6.0, 2.4, 2.5), Vector3(0, 1.5, 0), Color(0.863, 0.886, 0.910), true)
-		for kx in [-2.2, 2.2]:
-			var cone := _box(fb, Vector3(0.32, 0.65, 0.32), Vector3(kx, 0.32, 1.6), Color(1.0, 0.416, 0.102))
-			_box(cone, Vector3(0.28, 0.16, 0.33), Vector3(0, 0.08, 0), Color(1, 1, 1))
-		return fb
-	)
-	vis.add_child(wfo_vis)
-	_sign(vis, "DEPT. OF WILDLIFE / FIELD OFFICE 07", Color(0.22, 0.28, 0.35), Vector3(0, 3.1, 1.32), 0.0, 5.4)
 
 
 func _build_caravan(vis: Node3D) -> void:

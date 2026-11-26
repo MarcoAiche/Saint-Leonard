@@ -1520,8 +1520,13 @@ func _collect_building_exclusions() -> void:
 		for child in overlays.get_children():
 			if child.name == "MapMarkers":
 				_collect_marker_zones(child)
-			elif child.name in ["Vehicles", "Shops"]:
+			elif child.name == "Vehicles":
 				continue
+			elif child.name == "Shops":
+				var ts := child.get_node_or_null("Tankstelle") as Node3D
+				if ts != null and ts.visible and not seen_nodes.has(ts):
+					seen_nodes[ts] = true
+					_register_gas_station_zone(ts)
 			elif child.name in ["StLeonhardProps", "KleinstadtProps"]:
 				for prop in child.get_children():
 					if prop is Node3D and not seen_nodes.has(prop):
@@ -1675,11 +1680,45 @@ func _compute_global_xz_bounds(root_node: Node3D) -> Dictionary:
 	return {valid = has_mesh, min_x = min_x, max_x = max_x, min_y = min_y, min_z = min_z, max_z = max_z}
 
 
+func _register_gas_station_zone(ts: Node3D) -> void:
+	var xf := ts.global_transform
+	var min_x := INF
+	var max_x := -INF
+	var min_z := INF
+	var max_z := -INF
+	for sx in [-26.09, 26.09]:
+		for sz in [-26.09, 26.09]:
+			var wp := xf * Vector3(sx, 0.0, sz)
+			min_x = minf(min_x, wp.x)
+			max_x = maxf(max_x, wp.x)
+			min_z = minf(min_z, wp.z)
+			max_z = maxf(max_z, wp.z)
+	var ex_buf := 4.0
+	_exclusion_rects.append({
+		name = "Tankstelle",
+		min_x = min_x - ex_buf,
+		max_x = max_x + ex_buf,
+		min_z = min_z - ex_buf,
+		max_z = max_z + ex_buf,
+	})
+	var asphalt_y := ts.global_position.y + 3.8704
+	_flatten_zones.append({
+		name = "Tankstelle",
+		min_x = min_x,
+		max_x = max_x,
+		min_z = min_z,
+		max_z = max_z,
+		target_y = asphalt_y,
+		falloff = 16.0,
+	})
+	print("Gas station flatten/exclusion zone: xz=[%.1f..%.1f, %.1f..%.1f] asphalt_y=%.2f falloff=16.0m" % [min_x, max_x, min_z, max_z, asphalt_y])
+
+
 func _apply_terrain_flattening() -> void:
 	if _flatten_zones.is_empty() or heights.is_empty():
 		return
-	var falloff := 5.0
 	for fz in _flatten_zones:
+		var falloff := float(fz.get("falloff", 5.0))
 		var i0 := maxi(0, floori((fz.min_x - falloff - x0) / step))
 		var i1 := mini(nx - 1, ceili((fz.max_x + falloff - x0) / step))
 		var j0 := maxi(0, floori((fz.min_z - falloff - z0) / step))

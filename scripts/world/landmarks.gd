@@ -315,8 +315,8 @@ func _find_gas_station() -> void:
 		var gyaw := gas_sn.global_rotation.y
 		var dir2 := Vector2(sin(gyaw), cos(gyaw))
 		var side := Vector2(-dir2.y, dir2.x)
-		var pumps := [gas_sn.global_transform * Vector3(0, 0, -4.0), gas_sn.global_transform * Vector3(0, 0, 4.0)]
-		gas = {pos = gas_sn.global_position, pumps = pumps, shop = gas_sn.global_transform * Vector3(-9.0, 0, 0), dir = dir2, side = side, scene_node = gas_sn}
+		var pumps := [gas_sn.global_transform * Vector3(-18.5, 3.87, -2.2), gas_sn.global_transform * Vector3(-6.5, 3.87, -2.2)]
+		gas = {pos = gas_sn.global_position, pumps = pumps, shop = gas_sn.global_transform * Vector3(-12.5, 3.87, -13.8), dir = dir2, side = side, scene_node = gas_sn}
 		return
 	var p := world.poi_position(GAS_POI)
 	if p == Vector2.ZERO:
@@ -528,13 +528,13 @@ func _build_props() -> void:
 	# Tankstelle
 	var gas_sn: Node3D = gas.get("scene_node", null)
 	if gas_sn != null:
-		for k in [-1, 1]:
-			var pump_local := Vector3(0, 1.0, 4.0 * k)
-			I.add(pump_local, 7.0, func(): return game.fuel_prompt(), func(): game.refuel(), func(): return game.truck_near(gas_sn.global_transform * pump_local, 9.0), gas_sn)
-		var gas_door_local := Vector3(-5.4, 0, 0)
-		_npc_local(gas_sn, "Tankwart Hias", gas_door_local, PI * 0.5, {shirt = Color(0.1, 0.45, 0.25), hat = "cap", hat_color = Color(0.1, 0.4, 0.2)})
-		I.add(gas_door_local, 3.0, "Tankstelle (Shop)", func(): game.open_shop("gas"), null, gas_sn)
-		_slot_machine_local(gas_sn, Vector3(-5.4, 0, 2.2))
+		for px in [-18.5, -6.5]:
+			var pump_local := Vector3(px, 4.87, -2.2)
+			I.add(pump_local, 8.5, func(): return game.fuel_prompt(), func(): game.refuel(), func(): return game.truck_near(gas_sn.global_transform * pump_local, 10.0), gas_sn)
+		var gas_door_local := Vector3(-12.5, 3.87, -13.8)
+		_npc_local(gas_sn, "Tankwart Hias", gas_door_local, 0.0, {shirt = Color(0.1, 0.45, 0.25), hat = "cap", hat_color = Color(0.1, 0.4, 0.2)})
+		I.add(gas_door_local, 3.5, "Tankstelle (Shop)", func(): game.open_shop("gas"), null, gas_sn)
+		_slot_machine_local(gas_sn, Vector3(-9.5, 3.87, -14.2))
 		gas.door = gas_sn.global_transform * gas_door_local
 	else:
 		var gnode := Node3D.new()
@@ -1010,38 +1010,6 @@ func _build_hub_landmarks(I: Interactions) -> void:
 			)
 			_log_hub_pos("Campfire & Rocking Chair", cp2)
 			_add_caravan_spot()
-
-	# 6. Dept. of Wildlife Field Office 07 Trailer + Kegel
-	var wfo_sn := _get_shop_node("WildlifeFieldOffice07")
-	if wfo_sn != null:
-		_npc_local(wfo_sn, "Wildlife Agent", Vector3(0.0, 0.0, 2.0), 0.0, {shirt = Color(0.94, 0.94, 0.94), pants = Color(0.094, 0.094, 0.102), jacket = false, hat = "none", glasses = true})
-		_log_hub_pos("Wildlife Field Office 07", Vector2(wfo_sn.global_position.x, wfo_sn.global_position.z))
-	else:
-		var wfo_center := Vector2(gas.pos.x, gas.pos.z) if not gas.is_empty() else pub_2d
-		var fspot := _find_hub_spot(wfo_center, 18.0, 80.0, 4.5, avoid)
-		if not fspot.is_empty():
-			var fp2: Vector2 = fspot.pos
-			var fy := world.height_at(fp2.x, fp2.y)
-			var fn := Node3D.new()
-			fn.name = "WildlifeFieldOffice07"
-			fn.position = Vector3(fp2.x, fy, fp2.y)
-			fn.rotation.y = fspot.yaw
-			add_child(fn)
-			_foundation_skirt(fn, 6.4, 3.0, Color(0.55, 0.57, 0.60))
-			var wfo_vis := AssetLoader.load_model("res://assets/models/landmarks/wildlife_office_07.glb", 3.2, func() -> Node3D:
-				var fb := Node3D.new()
-				_box(fb, Vector3(6.0, 2.4, 2.5), Vector3(0, 1.5, 0), Color(0.863, 0.886, 0.910), true)  # #DCE2E8
-				for kx in [-2.2, 2.2]:
-					var cone := _box(fb, Vector3(0.32, 0.65, 0.32), Vector3(kx, 0.32, 1.6), Color(1.0, 0.416, 0.102))  # #FF6A1A
-					_box(cone, Vector3(0.28, 0.16, 0.33), Vector3(0, 0.08, 0), Color(1, 1, 1))
-				return fb
-			)
-			fn.add_child(wfo_vis)
-			_sign(fn, "DEPT. OF WILDLIFE / FIELD OFFICE 07", Color(0.22, 0.28, 0.35), Vector3(0, 3.1, 1.32), 0.0, 5.4)
-			var ag_pos := fn.to_global(Vector3(0.0, 0.0, 2.0))
-			ag_pos.y = world.height_at(ag_pos.x, ag_pos.z)
-			_npc(self, "Wildlife Agent", ag_pos, fspot.yaw, {shirt = Color(0.94, 0.94, 0.94), pants = Color(0.094, 0.094, 0.102), jacket = false, hat = "none", glasses = true})
-			_log_hub_pos("Wildlife Field Office 07", fp2)
 
 	# 7. Green 4x4 ATV / Quad Bike am Camp Hub
 	var atv_m := _get_marker("AtvSpawn")
