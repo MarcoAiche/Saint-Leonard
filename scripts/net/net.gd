@@ -615,6 +615,8 @@ func _placed_data(uid: int, data: Dictionary) -> void:
 	var e := GameState.find_placed(uid)
 	if not e.is_empty():
 		e.data = data
+		if game and game.has_method("refresh_placed"):
+			game.refresh_placed(e)
 
 
 func request_house(plot: int, type: int) -> void:

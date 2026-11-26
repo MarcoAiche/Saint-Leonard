@@ -171,7 +171,7 @@ func event(name: String, data := {}) -> void:
 		"house":
 			_complete("house")
 		"bought":
-			if data.get("id", "") == "still":
+			if data.get("id", "") in ["still", "still_pot"]:
 				_complete("buy_still")
 		"placed":
 			if data.get("type", "") == "still":

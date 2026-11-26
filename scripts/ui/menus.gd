@@ -250,55 +250,68 @@ static func still(game: Node, entry: Dictionary) -> void:
 	var body := window(hud, "Brennkessel", 560)
 	var d: Dictionary = entry.data
 	var reopen := func(): still(game, entry)
+	var legacy := not d.has("has_pot") and not d.has("has_condenser")
+	var has_pot: bool = bool(d.get("has_pot", legacy))
+	var has_cond: bool = bool(d.get("has_condenser", legacy))
+	if not has_pot or not has_cond:
+		text(body, "Brennanlage aufbauen: Für den Betrieb werden Kupferkessel (Teil 1) und Kühlfässer & Rohre (Teil 2) benötigt.")
+		if not has_pot:
+			row(body, "Kupferkessel (Teil 1) montieren", "Verbaut", func():
+				if GameState.take("still_pot"):
+					d.has_pot = true
+					game.placed_changed(entry)
+				reopen.call(), GameState.has("still_pot"))
+		if not has_cond:
+			row(body, "Kühlfässer & Rohre (Teil 2) anbauen", "Anbauen", func():
+				if GameState.take("still_condenser"):
+					d.has_condenser = true
+					game.placed_changed(entry)
+				reopen.call(), GameState.has("still_condenser"))
+		row(body, "Anlage abbauen (verbaute Teile zurück ins Inventar)", "Abbauen", func():
+			if has_pot:
+				GameState.give("still_pot")
+			if has_cond:
+				GameState.give("still_condenser")
+			Net.request_remove(int(entry.uid))
+			close_all(hud))
+		return
 	var mash: String = d.get("mash", "")
 	var ready_mash: String = d.get("ready_mash", "")
 	if not ready_mash.is_empty():
-		var bottles := randi_range(4, 6) if ready_mash == "fruit" else randi_range(2, 4)
-		text(body, "Der Brand ist fertig (%s)! Wie willst du ihn abfüllen?" % ("Obst" if ready_mash == "fruit" else "Getreide"))
-		row(body, "In Flaschen abfüllen (%d Flaschen Schwarzgebrannter)" % bottles, "Flaschen", func():
-			GameState.give("moonshine", bottles)
-			GameState.stats.bottles += bottles
-			d.ready_mash = ""
-			game.placed_changed(entry)
-			game.missions.event("brewed", {bottles = bottles})
-			close_all(hud)
-			hud.toast("%d Flaschen Schwarzgebrannter fertig!" % bottles, 3.0))
-		row(body, "In 10-l-Moonshine-Bottich abfüllen (Schmuggelware für Pickup)", "10-l-Bottich", func():
+		text(body, "Der Brand ist fertig! Fülle den Schwarzgebrannten in einen leeren 10-l-Bottich ab.")
+		row(body, "In 10-l-Moonshine-Bottich abfüllen (benötigt 1x Leerer 10-l-Bottich)", "10-l-Bottich", func():
+			if not GameState.take("empty_keg"):
+				return
 			GameState.give("moonshine_keg", 1)
 			GameState.stats.bottles += 10
 			d.ready_mash = ""
 			game.placed_changed(entry)
 			game.missions.event("brewed", {bottles = 10})
-			if game.car and is_instance_valid(game.car) and game.car.global_position.distance_to(game.player.global_position) < 8.0 and game.car.has_space():
+			if game.car and is_instance_valid(game.car) and game.car.global_position.distance_to(game.player.global_position) <= 8.0 and game.car.has_space():
 				var keg := Placeables.model("moonshine_keg")
 				keg.set_meta("kind", "moonshine_keg")
 				game.car.load_cargo(keg)
 				hud.toast("10-l-Bottich abgefüllt & auf den Pickup geladen!", 3.5)
 			else:
 				hud.toast("10-l-Moonshine-Bottich abgefüllt!", 3.0)
-			close_all(hud))
+			close_all(hud), GameState.has("empty_keg"))
 		return
 	if mash.is_empty():
-		text(body, "Maische ansetzen: 2x Zucker, 1x Hefe und 2x Obst (gut) oder 2x Getreide (billig, brennt leichter an).")
-		row(body, "Obstmaische (ergibt mehr und besseren Schnaps)", "Ansetzen", func():
-			if GameState.take("sugar", 2) and GameState.take("yeast", 1) and GameState.take("fruit", 2):
-				d.mash = "fruit"
+		text(body, "Brand starten: Benötigt 1x Maische (Ansatz) und 1x Brennholz.")
+		row(body, "Brennvorgang starten (1x Maische + 1x Brennholz)", "Feuer entfachen", func():
+			if GameState.take("mash") and GameState.take("firewood"):
+				d.mash = "mash"
 				d.temp = 20.0
 				d.progress = 0.0
 				game.placed_changed(entry)
-			reopen.call(), GameState.has("sugar", 2) and GameState.has("yeast") and GameState.has("fruit", 2))
-		row(body, "Getreidemaische", "Ansetzen", func():
-			if GameState.take("sugar", 2) and GameState.take("yeast", 1) and GameState.take("grain", 2):
-				d.mash = "grain"
-				d.temp = 20.0
-				d.progress = 0.0
-				game.placed_changed(entry)
-			reopen.call(), GameState.has("sugar", 2) and GameState.has("yeast") and GameState.has("grain", 2))
-		row(body, "Brennkessel abbauen (zurück ins Inventar)", "Abbauen", func():
-			game.pick_up_placed(entry)
+			reopen.call(), GameState.has("mash") and GameState.has("firewood"))
+		row(body, "Brennanlage abbauen (Teil 1 & 2 zurück ins Inventar)", "Abbauen", func():
+			GameState.give("still_pot")
+			GameState.give("still_condenser")
+			Net.request_remove(int(entry.uid))
 			close_all(hud))
 		return
-	text(body, "Maische: %s. Halte die Temperatur im grünen Bereich (78 bis 92 °C).\nÜber 100 °C fliegt der Kessel in die Luft!" % ("Obst" if mash == "fruit" else "Getreide"))
+	text(body, "Brennvorgang läuft: Halte die Temperatur im grünen Bereich (78 bis 92 °C).\nÜber 100 °C fliegt der Kessel in die Luft!")
 	var temp_l := text(body, "", 22)
 	var bar := ProgressBar.new()
 	bar.max_value = 120
@@ -337,6 +350,9 @@ static func still(game: Node, entry: Dictionary) -> void:
 		prog.value = float(d.progress) * 100.0
 		if over[0] > 2.5:
 			timer.stop()
+			d.mash = ""
+			d.progress = 0.0
+			game.placed_changed(entry)
 			close_all(hud)
 			game.still_explode(entry)
 		elif float(d.progress) >= 1.0:
@@ -346,6 +362,35 @@ static func still(game: Node, entry: Dictionary) -> void:
 			d.progress = 0.0
 			game.placed_changed(entry)
 			reopen.call())
+
+
+static func bottling_table(game: Node, entry: Dictionary) -> void:
+	var hud: Hud = game.hud
+	var body := window(hud, "Abfülltisch", 560)
+	var keg_car: Node3D = null
+	if game.car and is_instance_valid(game.car) and game.car.global_position.distance_to(game.player.global_position) <= 8.0:
+		for n in game.car.cargo:
+			if n.get_meta("kind", "") == "moonshine_keg":
+				keg_car = n
+				break
+	var has_keg: bool = GameState.has("moonshine_keg") or keg_car != null
+	var empty_bottles := GameState.count("empty_bottle")
+	text(body, "Schütte einen 10-l-Moonshine-Bottich (Inventar oder Pickup in 8 m Nähe) in 10 leere Flaschen um.\nVorhanden: %s | Leere Flaschen: %d / 10" % ["10-l-Bottich bereit" if has_keg else "kein Bottich", empty_bottles])
+	row(body, "10-l-Bottich in 10 Flaschen abfüllen (+1x Leerer Bottich zurück)", "Abfüllen", func():
+		if not GameState.take("empty_bottle", 10):
+			return
+		if GameState.has("moonshine_keg"):
+			GameState.take("moonshine_keg", 1)
+		if keg_car != null and is_instance_valid(keg_car):
+			game.car.cargo.erase(keg_car)
+			keg_car.queue_free()
+		GameState.give("moonshine", 10)
+		GameState.give("empty_keg", 1)
+		close_all(hud)
+		hud.toast("10 Flaschen Schwarzgebrannter abgefüllt (+1x Leerer Bottich zurück)!", 3.5), has_keg and empty_bottles >= 10)
+	row(body, "Abfülltisch abbauen (zurück ins Inventar)", "Abbauen", func():
+		game.pick_up_placed(entry)
+		close_all(hud))
 
 
 # ------------------------------------------------------------------ Einstellungen

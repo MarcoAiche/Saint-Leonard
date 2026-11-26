@@ -1549,15 +1549,19 @@ func _confirm_place() -> void:
 		_stop_placing()
 		return
 	var data := {}
-	if _placing in ["frame", "frame_big"] and not GameState.photos.is_empty():
+	var placed_type := _placing
+	if _placing == "still_pot":
+		placed_type = "still"
+		data = {has_pot = true, has_condenser = false}
+	elif _placing in ["frame", "frame_big"] and not GameState.photos.is_empty():
 		data.photo = GameState.photos[-1]
-	var e := {uid = GameState.new_uid(), type = _placing, pos = [xf.origin.x, xf.origin.y, xf.origin.z],
-		rot = xf.basis.get_euler().y, wall = Placeables.is_wall_item(_placing), owner = GameState.player_name, data = data}
+	var e := {uid = GameState.new_uid(), type = placed_type, pos = [xf.origin.x, xf.origin.y, xf.origin.z],
+		rot = xf.basis.get_euler().y, wall = Placeables.is_wall_item(placed_type), owner = GameState.player_name, data = data}
 	if e.wall:
 		var q := xf.basis.get_rotation_quaternion()
 		e.quat = [q.x, q.y, q.z, q.w]
 	Net.request_place(e)
-	missions.event("placed", {type = _placing})
+	missions.event("placed", {type = placed_type})
 	hud.toast("%s aufgestellt" % Items.display(_placing))
 	var id := _placing
 	_stop_placing()
@@ -1571,7 +1575,14 @@ func pick_up_placed(entry: Dictionary) -> void:
 
 
 func placed_changed(entry: Dictionary) -> void:
+	refresh_placed(entry)
 	Net.update_placed(entry)
+
+
+func refresh_placed(entry: Dictionary) -> void:
+	var n: Node3D = placed_nodes.get(int(entry.uid))
+	if is_instance_valid(n) and entry.type == "still":
+		_update_still_visual(n, entry)
 
 
 ## Aufgestellte Dinge und Häuser mit GameState abgleichen
@@ -1613,7 +1624,10 @@ func _spawn_placed(e: Dictionary) -> Node3D:
 	var entry := e
 	match e.type:
 		"still":
+			_update_still_visual(n, entry)
 			interactions.add(Vector3(0, 1, 0), 3.0, "Brennkessel", func(): Menus.still(self, entry), null, n)
+		"bottling_table":
+			interactions.add(Vector3(0, 0.85, 0), 2.8, "Abfülltisch", func(): Menus.bottling_table(self, entry), null, n)
 		"stand":
 			interactions.add(Vector3(0, 0.5, -1.4), 2.5, "Hochstand besteigen", func():
 				player.on_stand = n
@@ -1649,6 +1663,33 @@ func _spawn_placed(e: Dictionary) -> Node3D:
 	if e.type in ["frame", "frame_big"] and e.owner == GameState.player_name and GameState.photos.size() > 1:
 		interactions.add(Vector3(0, 0, 0.2), 1.6, "Anderes Foto", func(): _next_photo(entry, n), null, n)
 	return n
+
+
+func _update_still_visual(n: Node3D, entry: Dictionary) -> void:
+	var d: Dictionary = entry.get("data", {})
+	var legacy := not d.has("has_pot") and not d.has("has_condenser")
+	var has_pot := bool(d.get("has_pot", legacy))
+	var has_cond := bool(d.get("has_condenser", legacy))
+	var burning := has_pot and has_cond and not str(d.get("mash", "")).is_empty()
+	var pot := n.get_node_or_null("StillPot")
+	if pot:
+		pot.visible = has_pot
+	var cond := n.get_node_or_null("StillCondenser")
+	if cond:
+		cond.visible = has_cond
+	var fire := n.get_node_or_null("StillPot/StillFire") as Node3D
+	if fire:
+		fire.visible = burning
+		var light := fire.get_node_or_null("FireLight") as OmniLight3D
+		if burning and light and not fire.has_meta("_flicker"):
+			fire.set_meta("_flicker", true)
+			var t := Timer.new()
+			t.wait_time = 0.09
+			t.autostart = true
+			fire.add_child(t)
+			t.timeout.connect(func():
+				if is_instance_valid(light) and fire.visible:
+					light.light_energy = randf_range(1.35, 1.85))
 
 
 ## Foto im Bilderrahmen anzeigen (klein oder groß)
