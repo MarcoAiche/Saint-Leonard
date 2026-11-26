@@ -494,7 +494,7 @@ func _build_props() -> void:
 			outfit = {uniform = true, hat = "police"}
 		var npc_name: String = {"bauhaus": "Bauhaus-Verkäufer", "super": "Kassiererin", "gun": "Büchsenmacher", "butcher": "Fleischer Franz", "police": "Polizeiinspektion"}[id]
 		if sn != null:
-			var door_local := Vector3(2.0, 0.0, 3.35) if id == "butcher" else (Vector3(0.0, 0.0, 2.3) if id == "gun" else Vector3(0, 0, 10.5))
+			var door_local := Vector3(2.0, 0.0, 3.35) if id == "butcher" else (Vector3(0.0, 0.0, 2.5) if id == "gun" else Vector3(0, 0, 10.5))
 			_npc_local(sn, npc_name, door_local, 0.0, outfit)
 			if id == "police":
 				I.add(door_local, 3.0, "Polizei: Strafen bezahlen", func(): game.police_desk(), null, sn)
@@ -806,8 +806,8 @@ func _build_hub_landmarks(I: Interactions) -> void:
 	# 3. Outdoor Weapon Shack
 	var ws_sn := _get_shop_node("WeaponShack")
 	if ws_sn != null:
-		_npc_local(ws_sn, "Gunsmith", Vector3(0, 0, 2.3), 0.0, {shirt = Color(0.306, 0.353, 0.220), pants = Color(0.165, 0.173, 0.188), hat = "none"})
-		I.add(Vector3(0, 0, 2.3), 3.5, "Weapon Shack: Waffen & Munition", func(): game.open_shop("gun"), null, ws_sn)
+		_npc_local(ws_sn, "Gunsmith", Vector3(0, 0, 2.5), 0.0, {shirt = Color(0.306, 0.353, 0.220), pants = Color(0.165, 0.173, 0.188), hat = "none"})
+		I.add(Vector3(0, 0, 2.5), 3.5, "Weapon Shack: Waffen & Munition", func(): game.open_shop("gun"), null, ws_sn)
 		_log_hub_pos("Weapon Shack", Vector2(ws_sn.global_position.x, ws_sn.global_position.z))
 	else:
 		var wspot := _find_hub_spot(pub_2d, 16.0, 65.0, 4.0, avoid)

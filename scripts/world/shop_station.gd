@@ -121,6 +121,21 @@ func _build_city_shop(vis: Node3D, id: String) -> void:
 	_sign(vis, sign_info[0], sign_info[1], Vector3(0, 6.9, 9.4), 0.0, 8.0)
 
 
+func _add_solid_box(parent: Node3D, size: Vector3, pos: Vector3) -> void:
+	if Engine.is_editor_hint():
+		return
+	var sb := StaticBody3D.new()
+	sb.collision_layer = 1
+	sb.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = size
+	cs.shape = bs
+	cs.position = pos
+	sb.add_child(cs)
+	parent.add_child(sb)
+
+
 func _build_butcher_truck(vis: Node3D, sign_text: String, sign_col: Color, truck_yaw: float, drop_local: Vector3) -> void:
 	var holder := Node3D.new()
 	holder.rotation.y = truck_yaw
@@ -133,15 +148,7 @@ func _build_butcher_truck(vis: Node3D, sign_text: String, sign_col: Color, truck
 				holder.add_child(inst)
 	else:
 		_box(holder, Vector3(4.6, 3.0, 7.6), Vector3(0.2, 1.5, 0), Color(0.937, 0.910, 0.847))
-	if not Engine.is_editor_hint():
-		var sb := StaticBody3D.new()
-		var cs := CollisionShape3D.new()
-		var bs := BoxShape3D.new()
-		bs.size = Vector3(4.6, 3.2, 7.6)
-		cs.shape = bs
-		cs.position = Vector3(0.2, 1.6, 0.0)
-		sb.add_child(cs)
-		holder.add_child(sb)
+	_add_solid_box(holder, Vector3(4.6, 3.2, 7.6), Vector3(0.2, 1.6, 0.0))
 	_sign(holder, sign_text, sign_col, Vector3(2.8, 5.2, 0.0), PI * 0.5, 4.8)
 	_build_butcher_dropzone_visual(vis, drop_local)
 
@@ -203,37 +210,12 @@ func _build_gun_truck(vis: Node3D, sign_text: String, sign_col: Color) -> void:
 		if sc != null:
 			var inst := sc.instantiate() as Node3D
 			if inst != null:
+				inst.scale = Vector3(2.1692882, 2.0415616, 1.1095659)
 				holder.add_child(inst)
 	else:
-		_box(holder, Vector3(7.3, 2.8, 2.7), Vector3(0.5, 1.4, 0), Color(0.306, 0.353, 0.220))
-	if not Engine.is_editor_hint():
-		var sb := StaticBody3D.new()
-		var cs := CollisionShape3D.new()
-		var bs := BoxShape3D.new()
-		bs.size = Vector3(7.3, 2.8, 2.7)
-		cs.shape = bs
-		cs.position = Vector3(0.5, 1.4, 0.0)
-		sb.add_child(cs)
-		holder.add_child(sb)
-	_sign(holder, sign_text, sign_col, Vector3(0.5, 3.6, 1.45), 0.0, 4.8)
-
-
-func _build_weapon_shack(vis: Node3D) -> void:
-	_foundation_skirt(vis, 5.4, 4.2, Color(0.38, 0.32, 0.26))
-	var shack_vis := AssetLoader.load_model("res://assets/models/landmarks/weapon_shack.glb", 3.4, func() -> Node3D:
-		var fb := Node3D.new()
-		_box(fb, Vector3(5.0, 3.0, 0.3), Vector3(0, 1.5, -1.7), Color(0.431, 0.294, 0.184), true)
-		for sx in [-2.35, 2.35]:
-			_box(fb, Vector3(0.3, 3.0, 3.4), Vector3(sx, 1.5, 0), Color(0.431, 0.294, 0.184), true)
-		_box(fb, Vector3(5.6, 0.28, 4.2), Vector3(0, 3.2, 0), Color(0.361, 0.239, 0.133), true)
-		_box(fb, Vector3(4.2, 1.0, 0.9), Vector3(0, 0.5, 1.35), Color(0.549, 0.384, 0.220), true)
-		_box(fb, Vector3(0.9, 0.55, 0.6), Vector3(-1.1, 1.28, 1.35), Color(0.306, 0.408, 0.220))
-		_box(fb, Vector3(0.8, 0.50, 0.55), Vector3(0.9, 1.25, 1.35), Color(0.659, 0.157, 0.157))
-		_box(fb, Vector3(0.75, 1.0, 0.75), Vector3(2.9, 0.5, 1.1), Color(0.549, 0.384, 0.220), true)
-		return fb
-	)
-	vis.add_child(shack_vis)
-	_sign(vis, "WEAPON SHACK", Color(0.306, 0.408, 0.220), Vector3(0, 3.9, 1.9), 0.0, 4.4)
+		_box(holder, Vector3(15.7, 5.6, 3.0), Vector3(1.1, 2.8, 0), Color(0.306, 0.353, 0.220))
+	_add_solid_box(holder, Vector3(15.7, 5.6, 3.0), Vector3(1.1, 2.8, 0.0))
+	_sign(holder, sign_text, sign_col, Vector3(1.1, 6.2, 1.65), 0.0, 5.4)
 
 
 func _build_camper_rv(vis: Node3D) -> void:

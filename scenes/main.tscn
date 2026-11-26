@@ -138,7 +138,7 @@ script = ExtResource("11_shop")
 station_type = "super"
 
 [node name="Waffengeschaeft" type="Node3D" parent="WorldOverlays/Shops" unique_id=479404682]
-transform = Transform3D(-1, 0, 2.5351817e-06, 0, 1, 0, -2.5351817e-06, 0, -1, 7422.1, 13.131, -8096.309)
+transform = Transform3D(-1.110619, 0, 3.339131e-06, 0, 1.3131918, 0, -2.8156207e-06, 0, -1.317117, 7412.4487, 13.131, -8096.309)
 script = ExtResource("11_shop")
 station_type = "gun"
 
@@ -151,11 +151,6 @@ station_type = "butcher"
 transform = Transform3D(0.027722815, 0, -0.99961567, 0, 1, 0, 0.99961567, 0, 0.027722815, 6966.316, 12.035, -7831.946)
 script = ExtResource("11_shop")
 station_type = "police"
-
-[node name="WeaponShack" type="Node3D" parent="WorldOverlays/Shops" unique_id=930214625]
-transform = Transform3D(0.9966929, 0, 0.0812603, 0, 1, 0, -0.0812603, 0, 0.9966929, 37.142, 56.34, 82.146)
-script = ExtResource("11_shop")
-station_type = "weapon_shack"
 
 [node name="CamperRV" type="Node3D" parent="WorldOverlays/Shops" unique_id=1133694648]
 transform = Transform3D(-0.9966927, 0, -0.08126292, 0, 1, 0, 0.08126292, 0, -0.9966927, 54.957, 57.353, 125.764)
@@ -181,6 +176,11 @@ station_type = "caravan"
 transform = Transform3D(-0.11778834, 0, -0.9930387, 0, 1, 0, 0.9930387, 0, -0.11778834, -37.05911, 57.36137, 99.96382)
 script = ExtResource("11_shop")
 station_type = "gaston"
+
+[node name="WeaponShack" type="Node3D" parent="WorldOverlays/Shops" unique_id=565209941]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 39.547615, 56.093224, 85.47803)
+script = ExtResource("11_shop")
+station_type = "weapon_shack"
 
 [editable path="WorldOverlays/MapMarkers"]
 [editable path="WorldOverlays/StLeonhardProps"]
