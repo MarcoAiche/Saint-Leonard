@@ -112,6 +112,8 @@ func _ready() -> void:
 		_save_baked()
 	_setup_obstacle_colliders()
 	print("Welt bereit in %d ms" % (Time.get_ticks_msec() - t0))
+	if OS.get_cmdline_user_args().has("--bake-and-quit") and DisplayServer.get_name() != "headless":
+		get_tree().quit(0)
 
 
 func _exit_tree() -> void:
@@ -639,10 +641,12 @@ func _load_baked() -> bool:
 	return true
 
 
-func _save_baked(force := false) -> void:
-	var force_bake := force or OS.get_cmdline_user_args().has("--force-bake")
-	if not force_bake and (OS.has_feature("template") or DisplayServer.get_name() == "headless"):
-		return  # exportiertes Spiel oder Headless-Dummy-Renderer: nichts speichern
+func _save_baked(_force := false) -> void:
+	if OS.has_feature("template"):
+		return
+	if DisplayServer.get_name() == "headless":
+		push_warning("Welt-Bake im Headless-Modus blockiert (Dummy-Renderer würde MultiMesh-Transforms nullen).")
+		return
 	_set_owner_recursive(_content, _content)
 	_content.set_meta("version", BUILD_VERSION)
 	_content.set_meta("exclusion_hash", _exclusion_hash)
