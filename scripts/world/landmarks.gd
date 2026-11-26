@@ -494,7 +494,7 @@ func _build_props() -> void:
 			outfit = {uniform = true, hat = "police"}
 		var npc_name: String = {"bauhaus": "Bauhaus-Verkäufer", "super": "Kassiererin", "gun": "Büchsenmacher", "butcher": "Fleischer Franz", "police": "Polizeiinspektion"}[id]
 		if sn != null:
-			var door_local := Vector3(2.0, 0.0, 3.35) if id == "butcher" else Vector3(0, 0, 10.5)
+			var door_local := Vector3(2.0, 0.0, 3.35) if id == "butcher" else (Vector3(0.0, 0.0, 2.3) if id == "gun" else Vector3(0, 0, 10.5))
 			_npc_local(sn, npc_name, door_local, 0.0, outfit)
 			if id == "police":
 				I.add(door_local, 3.0, "Polizei: Strafen bezahlen", func(): game.police_desk(), null, sn)

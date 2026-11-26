@@ -5,6 +5,7 @@ extends Node3D
 ## Im Editor (@tool) werden nur visuelle Meshes/Schilder ohne .owner aufgebaut (keine Physik/KI/Speicher-Duplikate).
 
 const BUTCHER_TRUCK_PATH := "res://assets/shops/Sushi Truck by Quaternius - OgrROxABGT.glb"
+const GUN_TRUCK_PATH := "res://assets/shops/M939 Truck by J-Toastie - y8lBpvMlim.glb"
 const SHOP_SIGNS := {
 	"bauhaus": ["BAUHAUS", Color(0.85, 0.10, 0.10)],
 	"super": ["SUPERMARKT", Color(0.95, 0.75, 0.10)],
@@ -44,14 +45,16 @@ func rebuild_visuals() -> void:
 			_build_gas(vis)
 		"garage":
 			_build_garage(vis)
-		"bauhaus", "super", "gun", "police":
+		"bauhaus", "super", "police":
 			_build_city_shop(vis, station_type)
+		"gun":
+			_build_gun_truck(vis, "WAFFEN & JAGD", Color(0.20, 0.35, 0.20))
 		"butcher":
 			_build_butcher_truck(vis, "FLEISCHEREI", Color(0.70, 0.15, 0.15), -PI * 0.5, Vector3(0.0, 0.0, 4.6))
 		"gaston":
 			_build_butcher_truck(vis, "GASTON BUTCHER", Color(0.722, 0.157, 0.157), 0.0, Vector3(4.6, 0.0, 0.0))
 		"weapon_shack":
-			_build_weapon_shack(vis)
+			_build_gun_truck(vis, "WEAPON SHACK", Color(0.306, 0.408, 0.220))
 		"camper_rv":
 			_build_camper_rv(vis)
 		"campfire":
@@ -190,6 +193,29 @@ func _build_butcher_dropzone_visual(vis: Node3D, local_pos: Vector3) -> void:
 
 	holder.set_meta("ring", ring_mi)
 	holder.set_meta("fill", fill_mi)
+
+
+func _build_gun_truck(vis: Node3D, sign_text: String, sign_col: Color) -> void:
+	var holder := Node3D.new()
+	vis.add_child(holder)
+	if ResourceLoader.exists(GUN_TRUCK_PATH):
+		var sc := ResourceLoader.load(GUN_TRUCK_PATH) as PackedScene
+		if sc != null:
+			var inst := sc.instantiate() as Node3D
+			if inst != null:
+				holder.add_child(inst)
+	else:
+		_box(holder, Vector3(7.3, 2.8, 2.7), Vector3(0.5, 1.4, 0), Color(0.306, 0.353, 0.220))
+	if not Engine.is_editor_hint():
+		var sb := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(7.3, 2.8, 2.7)
+		cs.shape = bs
+		cs.position = Vector3(0.5, 1.4, 0.0)
+		sb.add_child(cs)
+		holder.add_child(sb)
+	_sign(holder, sign_text, sign_col, Vector3(0.5, 3.6, 1.45), 0.0, 4.8)
 
 
 func _build_weapon_shack(vis: Node3D) -> void:
