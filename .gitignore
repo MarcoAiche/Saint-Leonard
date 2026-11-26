@@ -7,5 +7,6 @@
 
 # wird beim ersten Start aus data/riegersdorf.json gebaut
 data/world_baked.scn
+data/world_baked.scn.hash
 data/raw/
 data/riegersdorf_full_backup.json
