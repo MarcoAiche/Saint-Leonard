@@ -43,4 +43,4 @@ common/physics_interpolation=true
 
 [rendering]
 
-anti_aliasing/quality/msaa_3d=1
+anti_aliasing/quality/msaa_3d=0

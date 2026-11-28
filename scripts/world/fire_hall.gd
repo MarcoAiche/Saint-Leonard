@@ -143,6 +143,9 @@ func _build() -> void:
 		l.omni_range = 9.0
 		l.light_energy = 1.3
 		l.light_color = Color(1.0, 0.88, 0.7)
+		l.distance_fade_enabled = true
+		l.distance_fade_begin = 35.0
+		l.distance_fade_length = 15.0
 		add_child(l)
 	# Lichterkette vor dem Tor
 	for k in 9:
@@ -185,6 +188,9 @@ func _build() -> void:
 	lamp.light_color = Color(1.0, 0.8, 0.5)
 	lamp.omni_range = 4.0
 	lamp.light_energy = 1.5
+	lamp.distance_fade_enabled = true
+	lamp.distance_fade_begin = 35.0
+	lamp.distance_fade_length = 15.0
 	add_child(lamp)
 	poker_seat = pk
 	if I != null:

@@ -2023,6 +2023,9 @@ func take_photo() -> void:
 
 # ------------------------------------------------------------------ Ablauf
 
+var _safety_t := 0.0
+
+
 func _process(delta: float) -> void:
 	if not started or Net.is_dedicated() or get_tree().paused:
 		return
@@ -2030,15 +2033,19 @@ func _process(delta: float) -> void:
 	if _dropzone_t >= 0.2:
 		_process_butcher_dropzones(_dropzone_t)
 		_dropzone_t = 0.0
-	# Sicherheitsnetz: niemand fällt durch die Welt
-	if seat == "":
-		var pg := world.height_at(player.global_position.x, player.global_position.z)
-		if player.global_position.y < pg - 4.0:
-			player.global_position.y = pg + 1.0
-	if is_instance_valid(car):
-		var cg := world.height_at(car.global_position.x, car.global_position.z)
-		if car.global_position.y < cg - 4.0:
-			car.place_at(car.global_position, car.global_basis.z)
+	_safety_t -= delta
+	var run_safety := _safety_t <= 0.0
+	if run_safety:
+		_safety_t = 0.1
+		# Sicherheitsnetz: niemand fällt durch die Welt
+		if seat == "":
+			var pg := world.height_at(player.global_position.x, player.global_position.z)
+			if player.global_position.y < pg - 4.0:
+				player.global_position.y = pg + 1.0
+		if is_instance_valid(car):
+			var cg := world.height_at(car.global_position.x, car.global_position.z)
+			if car.global_position.y < cg - 4.0:
+				car.place_at(car.global_position, car.global_basis.z)
 	# Gesundheit
 	if GameState.health <= 0.0 and player.passed_out <= 0.0:
 		GameState.health = 35.0
@@ -2068,7 +2075,8 @@ func _process(delta: float) -> void:
 			m.show_route = gps_ok
 		_place_timer = 0.4
 		_update_place(pos2)
-	hud.update_status()
+	if run_safety:
+		hud.update_status()
 	hud.set_view(rig.first_person, player.hand.aiming, player.hand.slot, seat != "")
 	if seat == "driver":
 		hud.set_speed(car.speed_kmh(), GameState.truck.fuel, GameState.truck.damage, WorldBuilder.TIER_NAMES[car.surface.tier] + (" (matschig)" if GameState.wetness > 0.4 and car.surface.tier != 1 and car.surface.tier != 2 else ""))

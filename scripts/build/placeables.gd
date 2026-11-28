@@ -10,6 +10,7 @@ const STONE := Color(0.52, 0.50, 0.48)
 
 ## Abstand zum nächsten Dorf, den ein Brennkessel mindestens haben muss
 const STILL_MIN_DIST := 350.0
+static var _still_mats := {}
 
 
 static func box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rot := Vector3.ZERO, collide := false) -> MeshInstance3D:
@@ -127,15 +128,27 @@ static func _try_load_glb(type: String) -> Node3D:
 
 
 static func _build_still(n: Node3D) -> void:
-	var copper := _std_mat(Color(0.80, 0.44, 0.21), 0.85, 0.30)
-	var iron := _std_mat(Color(0.16, 0.16, 0.18), 0.70, 0.75)
-	var wood := _std_mat(Color(0.48, 0.31, 0.17), 0.0, 0.82)
-	var dark_wood := _std_mat(Color(0.28, 0.18, 0.10), 0.0, 0.88)
-	var water := _std_mat(Color(0.45, 0.72, 0.85, 0.72), 0.05, 0.15, 0.72)
-	var glass := _std_mat(Color(0.84, 0.93, 0.96, 0.42), 0.05, 0.10, 0.42)
-	var lid_grey := _std_mat(Color(0.55, 0.57, 0.60), 0.55, 0.45)
-	var ember_mat := _std_mat(Color(1.0, 0.38, 0.06), 0.0, 0.9, 1.0, Color(1.0, 0.38, 0.06), 2.8)
-	var flame_mat := _std_mat(Color(1.0, 0.72, 0.14, 0.85), 0.0, 0.9, 0.85, Color(1.0, 0.58, 0.10), 3.4)
+	if _still_mats.is_empty():
+		_still_mats = {
+			copper = _std_mat(Color(0.80, 0.44, 0.21), 0.85, 0.30),
+			iron = _std_mat(Color(0.16, 0.16, 0.18), 0.70, 0.75),
+			wood = _std_mat(Color(0.48, 0.31, 0.17), 0.0, 0.82),
+			dark_wood = _std_mat(Color(0.28, 0.18, 0.10), 0.0, 0.88),
+			water = _std_mat(Color(0.45, 0.72, 0.85, 0.72), 0.05, 0.15, 0.72),
+			glass = _std_mat(Color(0.84, 0.93, 0.96, 0.42), 0.05, 0.10, 0.42),
+			lid_grey = _std_mat(Color(0.55, 0.57, 0.60), 0.55, 0.45),
+			ember_mat = _std_mat(Color(1.0, 0.38, 0.06), 0.0, 0.9, 1.0, Color(1.0, 0.38, 0.06), 2.8),
+			flame_mat = _std_mat(Color(1.0, 0.72, 0.14, 0.85), 0.0, 0.9, 0.85, Color(1.0, 0.58, 0.10), 3.4),
+		}
+	var copper: StandardMaterial3D = _still_mats.copper
+	var iron: StandardMaterial3D = _still_mats.iron
+	var wood: StandardMaterial3D = _still_mats.wood
+	var dark_wood: StandardMaterial3D = _still_mats.dark_wood
+	var water: StandardMaterial3D = _still_mats.water
+	var glass: StandardMaterial3D = _still_mats.glass
+	var lid_grey: StandardMaterial3D = _still_mats.lid_grey
+	var ember_mat: StandardMaterial3D = _still_mats.ember_mat
+	var flame_mat: StandardMaterial3D = _still_mats.flame_mat
 
 	# Teil 1: Kupferkessel & Feuerstelle (links)
 	var pot_grp := Node3D.new()
@@ -212,7 +225,7 @@ static func _build_still(n: Node3D) -> void:
 	_poly_cyl(cond_grp, 0.055, 0.055, 0.03, 8, pipe_pts[1], iron, Vector3(0, 0, -0.35))
 	_poly_cyl(cond_grp, 0.055, 0.055, 0.03, 8, pipe_pts[4], iron, Vector3(0, 0, 0.45))
 	# Vertikale Kupferspirale (4.5 Windungen) taucht ins Kühlfass ein
-	var coil_steps := 36
+	var coil_steps := 18
 	var prev_cp := Vector3(cx, 1.34, 0.0)
 	for i in range(1, coil_steps + 1):
 		var u := float(i) / float(coil_steps)

@@ -109,6 +109,9 @@ static func build(parent: Node3D, plot: Dictionary, type_idx: int, owner_name: S
 		light.omni_range = maxf(size.x, size.y)
 		light.light_energy = 0.9
 		light.light_color = Color(1.0, 0.88, 0.7)
+		light.distance_fade_enabled = true
+		light.distance_fade_begin = 35.0
+		light.distance_fade_length = 15.0
 		root.add_child(light)
 	# Küchenecke vorne rechts: Arbeitsplatte, Herd, Kühlschrank
 	var kx := hx - 0.55

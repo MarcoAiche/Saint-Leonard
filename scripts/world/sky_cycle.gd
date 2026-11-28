@@ -22,9 +22,7 @@ func setup(s: DirectionalLight3D, e: Environment) -> void:
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 1.05
 	env.ssao_enabled = false  # machte fleckige Schatten auf großen Flächen
-	env.glow_enabled = true
-	env.glow_intensity = 0.35
-	env.glow_bloom = 0.04
+	env.glow_enabled = false
 	env.fog_enabled = false
 	env.fog_height_density = 0.0
 	env.adjustment_saturation = 1.12

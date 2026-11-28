@@ -180,6 +180,9 @@ func _build() -> void:
 		l.omni_range = maxf(size.x, size.y) * 0.7
 		l.light_energy = 1.2
 		l.light_color = Color(1.0, 0.82, 0.6)
+		l.distance_fade_enabled = true
+		l.distance_fade_begin = 35.0
+		l.distance_fade_length = 15.0
 		add_child(l)
 	_geweihluster(Vector3(0, WALL_H - 0.6, 0))
 	_furnish(hx, hz)

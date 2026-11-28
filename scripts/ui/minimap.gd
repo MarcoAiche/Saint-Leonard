@@ -151,7 +151,7 @@ func _process(delta: float) -> void:
 	if full and not _fitted and size.x > 10.0:
 		fit_border()
 	_redraw_t += delta
-	if _redraw_t >= 0.08:
+	if _redraw_t >= 0.15:
 		_redraw_t = 0.0
 		queue_redraw()
 

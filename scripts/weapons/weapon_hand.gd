@@ -82,7 +82,7 @@ func setup(r: CameraRig, p: Node3D) -> void:
 	_light.spot_angle = 24.0
 	_light.light_energy = 3.0
 	_light.light_color = Color(1.0, 0.95, 0.85)
-	_light.shadow_enabled = true
+	_light.shadow_enabled = false
 	_light.visible = false
 	add_child(_light)
 	_flash = OmniLight3D.new()
