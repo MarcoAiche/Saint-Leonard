@@ -54,7 +54,7 @@ const ITEMS := {
 	"stand": {name = "Hochstand", kind = "placeable", price = 260, shops = ["bauhaus"]},
 	"trailcam": {name = "Wildkamera", kind = "placeable", price = 90, shops = ["bauhaus"]},
 	"campfire": {name = "Feuerstelle", kind = "placeable", price = 15, shops = ["bauhaus", "gas"]},
-	"straps": {name = "Spanngurte", kind = "tool", price = 20, shops = ["bauhaus"]},
+	"straps": {name = "Spanngurte", kind = "tool", price = 20, shops = []},
 	"tarp": {name = "Pickup-Plane (Abdeckung)", kind = "tool", price = 180, shops = ["bauhaus"]},
 	"trailer": {name = "Pickup-Anhänger", kind = "vehicle", price = 1500, shops = ["bauhaus"]},
 	"crate": {name = "Festkiste (Bier)", kind = "cargo", price = 30, shops = ["super"]},

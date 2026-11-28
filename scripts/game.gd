@@ -561,8 +561,7 @@ func _start_game() -> void:
 	if not car.has_meta("_cargo_lost_connected"):
 		car.set_meta("_cargo_lost_connected", true)
 		car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
-	interactions.add(Truck.BED_SLOTS[0] + Vector3(0.45, 0.6, -0.4), 2.6, func(): return "Ladung lösen" if car.strapped else "Ladung festzurren", func(): _toggle_straps(car), func(): GameState.has("straps") and seat == "", car)
-	interactions.add(Truck.BED_SLOTS[2] + Vector3(0.45, 0.6, 0.0), 2.8, func(): return "Plane abziehen" if car.tarp_on else "Plane aufziehen", func():
+	interactions.add(Vector3(0.0, 0.9, -2.85), 3.0, func(): return "Plane abziehen" if car.tarp_on else "Plane aufziehen", func():
 		car.set_tarp(not car.tarp_on)
 		hud.toast("Ladeflächen-Plane aufgezogen (Schmuggel-Schutz)" if car.tarp_on else "Plane abgezogen", 2.5), func(): GameState.has("tarp") and seat == "", car)
 	interactions.add(Vector3(0, 0.5, 0), 3.2, "Fahrzeug aufstellen [E]", func(): car.respawn_safe(fb_car_pos, fb_car_yaw), func(): seat == "" and car.global_basis.y.y < 0.65, car)
@@ -946,11 +945,17 @@ func _update_interaction() -> String:
 	var e := interactions.nearest(player.global_position)
 	if not e.is_empty():
 		_current_interaction = e
-		return "[F] " + Interactions.text_of(e)
+		var txt := "[F] " + Interactions.text_of(e)
+		if e.get("target") == car and not car.cargo.is_empty():
+			txt += "   [G] Abladen"
+		return txt
 	# Kadaver
 	var c := _nearest_carcass(2.8)
 	if c:
 		return "[F] %s ausnehmen (halten)   [G] tragen" % c.display_name()
+	var keg := _nearest_keg(2.8)
+	if keg:
+		return "[G] %s aufheben / tragen" % Items.display(str(keg.get_meta("kind", "moonshine_keg")))
 	if atv and player.global_position.distance_to(atv.global_position) < ENTER_DISTANCE:
 		return "[F] ATV fahren / Einsteigen"
 	if player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
@@ -991,10 +996,19 @@ func _nearest_keg(max_dist: float) -> Node3D:
 	return best
 
 
+func _set_keg_carry_offset(keg: Node3D, on: bool) -> void:
+	for child in keg.get_children():
+		if child is Node3D and not child is CollisionObject3D:
+			(child as Node3D).position.y = -0.65 if on else 0.0
+			(child as Node3D).position.z = 0.28 if on else 0.0
+
+
 func _cargo_action() -> void:
 	if trailer and player.carrying and trailer.global_position.distance_to(player.global_position) < 3.5 and trailer.has_space():
 		var tn := player.carrying
 		player.carrying = null
+		if tn.is_in_group("carryable_keg"):
+			_set_keg_carry_offset(tn, false)
 		trailer.load_cargo(tn)
 		if tn is Carcass:
 			Net.carcass_removed((tn as Carcass).net_id)
@@ -1006,6 +1020,8 @@ func _cargo_action() -> void:
 		add_child(un)
 		un.scale = Vector3.ONE
 		if un is Carcass or un.is_in_group("carryable_keg"):
+			if un.is_in_group("carryable_keg"):
+				_set_keg_carry_offset(un, true)
 			player.carrying = un
 		else:
 			un.global_position = player.global_position + player.facing * 1.5
@@ -1014,6 +1030,8 @@ func _cargo_action() -> void:
 		if car.global_position.distance_to(player.global_position) < 5.0 and car.has_space():
 			var n := player.carrying
 			player.carrying = null
+			if n.is_in_group("carryable_keg"):
+				_set_keg_carry_offset(n, false)
 			car.load_cargo(n)
 			if n is Carcass:
 				Net.carcass_removed((n as Carcass).net_id)
@@ -1030,6 +1048,7 @@ func _cargo_action() -> void:
 		return
 	var keg := _nearest_keg(2.8)
 	if keg:
+		_set_keg_carry_offset(keg, true)
 		player.carrying = keg
 		player.hand.select("none")
 		hud.toast("Fass aufgenommen")
@@ -1041,6 +1060,8 @@ func _cargo_action() -> void:
 			add_child(n)
 			n.scale = Vector3.ONE
 			if n is Carcass or n.is_in_group("carryable_keg"):
+				if n.is_in_group("carryable_keg"):
+					_set_keg_carry_offset(n, true)
 				player.carrying = n
 				player.hand.select("none")
 			else:
@@ -1054,6 +1075,8 @@ func _drop_carried() -> void:
 		c.set_carried(false)
 		c.global_position = player.global_position + player.facing * 1.2 + Vector3.UP * 0.5
 	elif c != null and is_instance_valid(c):
+		if c.is_in_group("carryable_keg"):
+			_set_keg_carry_offset(c, false)
 		var dp := player.global_position + player.facing * 1.2
 		c.global_position = Vector3(dp.x, world.height_at(dp.x, dp.z), dp.z)
 		c.rotation = Vector3(0.0, atan2(player.facing.x, player.facing.z), 0.0)
@@ -1338,7 +1361,6 @@ func _spawn_trailer() -> void:
 	trailer.cargo_lost.connect(func(_n): hud.toast("Ladung vom Anhänger gefallen! (Spanngurte)", 3.0))
 	interactions.add(Trailer.HITCH + Vector3(0, 0.4, 0), 3.0, func(): return "Anhänger abkuppeln" if trailer.towed_by else "Anhänger ankuppeln",
 		func(): _toggle_hitch(), func(): seat == "" and (trailer.towed_by != null or trailer.can_couple(car)), trailer)
-	interactions.add(Vector3(0, 1.0, -0.4), 2.4, func(): return "Ladung lösen" if trailer.strapped else "Ladung festzurren", func(): _toggle_straps(trailer), func(): GameState.has("straps") and seat == "", trailer)
 
 
 func _toggle_hitch() -> void:
@@ -1580,6 +1602,10 @@ func start_placing(id: String) -> void:
 	_ghost_rot = 0.0
 	_ghost = Placeables.model(id)
 	add_child(_ghost)
+	for col_obj in _ghost.find_children("*", "CollisionObject3D", true, false):
+		col_obj.queue_free()
+	for col_sh in _ghost.find_children("*", "CollisionShape3D", true, false):
+		col_sh.queue_free()
 	for mi in _ghost.find_children("*", "MeshInstance3D", true, false):
 		var m := (mi as MeshInstance3D).material_override as StandardMaterial3D
 		if m:
@@ -1588,8 +1614,6 @@ func start_placing(id: String) -> void:
 			m.albedo_color.a = 0.6
 			m.next_pass = null
 			(mi as MeshInstance3D).material_override = m
-		for sb in mi.find_children("*", "StaticBody3D", true, false):
-			sb.queue_free()
 	hud.toast("[Maus links] aufstellen   [Mausrad] drehen   [Maus rechts / Esc] abbrechen", 5.0)
 
 

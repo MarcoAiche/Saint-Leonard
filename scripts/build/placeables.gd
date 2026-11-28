@@ -124,16 +124,7 @@ static func _try_load_glb(type: String) -> Node3D:
 		root.free()
 		return null
 	root.add_child(model_node)
-	# Unterkante exakt auf y = 0 ausrichten
-	var min_y := INF
-	for mi in model_node.find_children("*", "MeshInstance3D", true, false):
-		var mesh_inst := mi as MeshInstance3D
-		if mesh_inst and mesh_inst.mesh:
-			var aabb := mesh_inst.mesh.get_aabb()
-			var xf := model_node.transform * mesh_inst.transform
-			min_y = minf(min_y, (xf * aabb.position).y)
-	if is_finite(min_y):
-		model_node.position.y -= min_y
+	# AssetLoader.load_model richtet die Unterkante bereits auf y = 0 aus
 	if type in ["moonshine_keg", "empty_keg"]:
 		root.add_to_group("carryable_keg")
 		root.set_meta("kind", type)

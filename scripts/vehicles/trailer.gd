@@ -13,7 +13,7 @@ const HITCH := Vector3(0, 0.45, 2.45)  # Kupplungskopf (lokal)
 
 var world: WorldBuilder
 var cargo: Array[Node3D] = []
-var strapped := false
+var strapped := true
 var towed_by: Node3D = null
 var puppet := false  # Anhänger eines anderen Spielers: Lage kommt übers Netz
 

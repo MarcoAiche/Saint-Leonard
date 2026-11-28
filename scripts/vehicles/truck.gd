@@ -312,8 +312,8 @@ func has_space() -> bool:
 	return cargo.size() < BED_SLOTS.size()
 
 
-## Ladung mit Spanngurten sichern (gelbe Gurte über der Ladefläche)
-var strapped := false
+## Ladung mit Spanngurten sichern (ab Werk integriert)
+var strapped := true
 var _strap_node: Node3D
 ## Pickup-Plane (Abdeckung der Ladefläche für Schmuggel)
 var tarp_on := false

@@ -116,23 +116,62 @@ static func shop(game: Node, id: String) -> void:
 	var buys := Items.buys(id)
 	var any := false
 	for b in buys:
-		var inv_n := GameState.count(b[0])
-		var carried_keg: bool = b[0] == "moonshine_keg" and game.player.carrying != null and game.player.carrying.get_meta("kind", "") == "moonshine_keg"
+		var item_id: String = b[0]
+		var unit_price: int = int(b[1])
+		var inv_n := GameState.count(item_id)
+		var carried_keg: bool = item_id == "moonshine_keg" and game.player.carrying != null and game.player.carrying.get_meta("kind", "") == "moonshine_keg"
 		var total_n := inv_n if inv_n > 0 else (1 if carried_keg else 0)
 		if total_n > 0:
 			if not any:
 				heading(body, "Verkaufen")
 				any = true
-			row(body, "%s  x%d  (je $%d)" % [Items.display(b[0]), total_n, b[1]], "Alle verkaufen", func():
+			var qty := [total_n]
+			var h := HBoxContainer.new()
+			body.add_child(h)
+			var lbl := Label.new()
+			lbl.text = "%s  x%d  (je $%d)" % [Items.display(item_id), total_n, unit_price]
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			h.add_child(lbl)
+			var sell_btn := Button.new()
+			var update_sell_ui := func():
+				sell_btn.text = "Verkaufen (%dx = $%d)" % [qty[0], qty[0] * unit_price]
+			if total_n > 1:
+				var minus_btn := Button.new()
+				minus_btn.text = "-"
+				minus_btn.custom_minimum_size.x = 34
+				h.add_child(minus_btn)
+				var qty_lbl := Label.new()
+				qty_lbl.text = str(qty[0])
+				qty_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				qty_lbl.custom_minimum_size.x = 32
+				h.add_child(qty_lbl)
+				var plus_btn := Button.new()
+				plus_btn.text = "+"
+				plus_btn.custom_minimum_size.x = 34
+				h.add_child(plus_btn)
+				minus_btn.pressed.connect(func():
+					qty[0] = maxi(1, qty[0] - 1)
+					qty_lbl.text = str(qty[0])
+					update_sell_ui.call())
+				plus_btn.pressed.connect(func():
+					qty[0] = mini(total_n, qty[0] + 1)
+					qty_lbl.text = str(qty[0])
+					update_sell_ui.call())
+			update_sell_ui.call()
+			sell_btn.custom_minimum_size.x = 175
+			sell_btn.pressed.connect(func():
+				var sell_q: int = qty[0]
 				if inv_n > 0:
-					GameState.sell(b[0], b[1], inv_n)
+					GameState.sell(item_id, unit_price, mini(sell_q, inv_n))
 				else:
-					GameState.add_money(b[1])
-				if carried_keg and is_instance_valid(game.player.carrying):
+					GameState.add_money(unit_price)
+				if carried_keg and (inv_n == 0 or sell_q >= total_n) and is_instance_valid(game.player.carrying):
 					game.player.carrying.queue_free()
 					game.player.carrying = null
-				game.on_sold(b[0], total_n, id)
+				game.on_sold(item_id, sell_q, id)
 				reopen.call())
+			h.add_child(sell_btn)
 	if id == "bauhaus":
 		heading(body, "Häuser für Saint Leonard (Bauplatz wird zugewiesen)")
 		for i in Items.HOUSES.size():
