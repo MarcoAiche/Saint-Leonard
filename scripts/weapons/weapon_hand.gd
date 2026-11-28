@@ -365,6 +365,10 @@ static func _raise(t: float, up: float, hold: float, down: float) -> float:
 	return 1.0 - smoothstep(0.0, 1.0, (t - up - hold) / down)
 
 
+func lock_shoot(dur := 0.22) -> void:
+	_shoot_lock_t = maxf(_shoot_lock_t, dur)
+
+
 func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) -> void:
 	_cool = maxf(0.0, _cool - delta)
 	_shoot_lock_t = maxf(0.0, _shoot_lock_t - delta)

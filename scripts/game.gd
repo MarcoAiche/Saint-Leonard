@@ -873,7 +873,7 @@ func set_paused(on: bool) -> void:
 	hud.show_pause(on)
 	if on:
 		GameState.save_game()
-	elif player and player.hand:
+	elif player and player.hand and player.hand.has_method("lock_shoot"):
 		player.hand.lock_shoot(0.22)
 	if not DebugTools.active:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if on else Input.MOUSE_MODE_CAPTURED
@@ -1641,14 +1641,14 @@ func _stop_placing() -> void:
 	if _ghost:
 		_ghost.queue_free()
 	_ghost = null
-	if player and player.hand:
+	if player and player.hand and player.hand.has_method("lock_shoot"):
 		player.hand.lock_shoot(0.22)
 
 
 func _placing_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		get_viewport().set_input_as_handled()
-		if player and player.hand:
+		if player and player.hand and player.hand.has_method("lock_shoot"):
 			player.hand.lock_shoot(0.22)
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP: _ghost_rot += 0.2

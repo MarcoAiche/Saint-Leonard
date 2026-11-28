@@ -45,7 +45,7 @@ static func close_all(hud: Hud) -> void:
 		c.queue_free()
 	hud._restore_mouse()
 	var game := hud.get_parent()
-	if game and game.get("player") and game.player.get("hand"):
+	if game and game.get("player") and game.player.get("hand") and game.player.hand.has_method("lock_shoot"):
 		game.player.hand.lock_shoot(0.22)
 
 
