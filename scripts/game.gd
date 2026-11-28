@@ -561,10 +561,6 @@ func _start_game() -> void:
 	if not car.has_meta("_cargo_lost_connected"):
 		car.set_meta("_cargo_lost_connected", true)
 		car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
-	interactions.add(Vector3(0.0, 0.3, -1.5), 3.0, func(): return "Spanngurte lösen" if car.strapped else "Spanngurte anbringen", func(): _toggle_straps(car), func(): seat == "", car)
-	interactions.add(Vector3(0.0, 0.3, -2.95), 3.0, func(): return "Plane abziehen" if car.tarp_on else "Plane aufziehen", func():
-		car.set_tarp(not car.tarp_on)
-		hud.toast("Ladeflächen-Plane aufgezogen (Schmuggel-Schutz)" if car.tarp_on else "Plane abgezogen", 2.5), func(): (GameState.has("tarp") or car.tarp_on) and seat == "", car)
 	interactions.add(Vector3(0, 0.5, 0), 3.2, "Fahrzeug aufstellen [E]", func(): car.respawn_safe(fb_car_pos, fb_car_yaw), func(): seat == "" and car.global_basis.y.y < 0.65, car)
 	if GameState.truck.get("trailer", false):
 		_spawn_trailer()
@@ -683,6 +679,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			car.set_lights(not car.lights_on)
 		elif seat == "":
 			player.hand.toggle_flashlight()
+	elif seat == "" and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_T:
+		if _near_car_bed() and (GameState.has("tarp") or car.tarp_on):
+			car.set_tarp(not car.tarp_on)
+			hud.toast("Ladeflächen-Plane aufgezogen (Schmuggel-Schutz)" if car.tarp_on else "Plane abgezogen", 2.5)
+			return
 	elif OS.is_debug_build() and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F8:
 		_debug_give_test_kit()
 		return
@@ -902,6 +903,22 @@ func _car_door_dist() -> float:
 	return minf((car.global_transform * Vector3(1.25, 0.2, 0.4)).distance_to(p), (car.global_transform * Vector3(-1.25, 0.2, 0.4)).distance_to(p))
 
 
+func _near_car_bed() -> bool:
+	if not is_instance_valid(car):
+		return false
+	var bed_pos := car.to_global(Vector3(0.0, 0.0, -1.9))
+	var d_bed := Vector2(bed_pos.x - player.global_position.x, bed_pos.z - player.global_position.z).length()
+	if d_bed > 3.2:
+		return false
+	return _car_door_dist() >= d_bed
+
+
+func _near_trailer_bed() -> bool:
+	if not is_instance_valid(trailer):
+		return false
+	return Vector2(trailer.global_position.x - player.global_position.x, trailer.global_position.z - player.global_position.z).length() <= 3.0
+
+
 func _interact() -> void:
 	if sitting:
 		if casino.at_poker:
@@ -957,14 +974,25 @@ func _update_interaction() -> String:
 	if not e.is_empty():
 		var e_pos: Vector3 = e.node.global_transform * e.pos if e.node != null else e.pos
 		var e_d := e_pos.distance_to(player.global_position)
-		if door_d < 2.3 and door_d < e_d:
+		if door_d < 2.2 and door_d < e_d:
 			var t := "[F] Einsteigen"
 			if not car.cargo.is_empty():
 				t += "   [G] Abladen"
 			return t
 		_current_interaction = e
-		var txt := "[F] " + Interactions.text_of(e)
-		if e.get("node") == car and not car.cargo.is_empty():
+		return "[F] " + Interactions.text_of(e)
+	if _near_car_bed():
+		_current_interaction = {action = func(): _toggle_straps(car)}
+		var txt := "[F] Spanngurte lösen" if car.strapped else "[F] Spanngurte anbringen"
+		if GameState.has("tarp") or car.tarp_on:
+			txt += "   [T] Plane abziehen" if car.tarp_on else "   [T] Plane aufziehen"
+		if not car.cargo.is_empty():
+			txt += "   [G] Abladen"
+		return txt
+	if _near_trailer_bed():
+		_current_interaction = {action = func(): _toggle_straps(trailer)}
+		var txt := "[F] Spanngurte lösen" if trailer.strapped else "[F] Spanngurte anbringen"
+		if not trailer.cargo.is_empty():
 			txt += "   [G] Abladen"
 		return txt
 	# Kadaver
@@ -976,7 +1004,7 @@ func _update_interaction() -> String:
 		return "[G] %s aufheben / tragen" % Items.display(str(keg.get_meta("kind", "moonshine_keg")))
 	if atv and player.global_position.distance_to(atv.global_position) < ENTER_DISTANCE:
 		return "[F] ATV fahren / Einsteigen"
-	if door_d < 2.3:
+	if door_d < 2.2:
 		var t := "[F] Einsteigen"
 		if not car.cargo.is_empty():
 			t += "   [G] Abladen"
@@ -1379,7 +1407,6 @@ func _spawn_trailer() -> void:
 	trailer.cargo_lost.connect(func(_n): hud.toast("Ladung vom Anhänger gefallen! (Spanngurte)", 3.0))
 	interactions.add(Trailer.HITCH + Vector3(0, 0.4, 0), 3.0, func(): return "Anhänger abkuppeln" if trailer.towed_by else "Anhänger ankuppeln",
 		func(): _toggle_hitch(), func(): seat == "" and (trailer.towed_by != null or trailer.can_couple(car)), trailer)
-	interactions.add(Vector3(0.0, 0.8, 0.0), 2.5, func(): return "Spanngurte lösen" if trailer.strapped else "Spanngurte anbringen", func(): _toggle_straps(trailer), func(): seat == "", trailer)
 
 
 func _toggle_hitch() -> void:
