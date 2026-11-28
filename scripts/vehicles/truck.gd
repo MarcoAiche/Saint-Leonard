@@ -498,7 +498,7 @@ func show_remote_cargo(list: Array) -> void:
 			var sz: float = Animal.SPECIES[kind].size
 			_box(n, Vector3(0.5, 0.45, 1.1) * clampf(sz, 0.4, 1.0), Vector3(0, 0.25, 0), Animal.SPECIES[kind].body)
 		else:
-			n = Placeables.model(kind if kind in ["moonshine", "moonshine_keg"] else "crate")
+			n = Placeables.model(kind if kind in ["moonshine", "moonshine_keg", "empty_keg"] else "crate")
 		n.set_meta("remote_cargo", true)
 		n.position = BED_SLOTS[i] + Vector3(0, _body.position.y - 0.1, 0)
 		n.rotation.y = PI / 2

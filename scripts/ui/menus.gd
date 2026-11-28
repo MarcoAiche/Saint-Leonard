@@ -116,14 +116,22 @@ static func shop(game: Node, id: String) -> void:
 	var buys := Items.buys(id)
 	var any := false
 	for b in buys:
-		if GameState.has(b[0]):
+		var inv_n := GameState.count(b[0])
+		var carried_keg: bool = b[0] == "moonshine_keg" and game.player.carrying != null and game.player.carrying.get_meta("kind", "") == "moonshine_keg"
+		var total_n := inv_n if inv_n > 0 else (1 if carried_keg else 0)
+		if total_n > 0:
 			if not any:
 				heading(body, "Verkaufen")
 				any = true
-			var n := GameState.count(b[0])
-			row(body, "%s  x%d  (je $%d)" % [Items.display(b[0]), n, b[1]], "Alle verkaufen", func():
-				GameState.sell(b[0], b[1], n)
-				game.on_sold(b[0], n, id)
+			row(body, "%s  x%d  (je $%d)" % [Items.display(b[0]), total_n, b[1]], "Alle verkaufen", func():
+				if inv_n > 0:
+					GameState.sell(b[0], b[1], inv_n)
+				else:
+					GameState.add_money(b[1])
+				if carried_keg and is_instance_valid(game.player.carrying):
+					game.player.carrying.queue_free()
+					game.player.carrying = null
+				game.on_sold(b[0], total_n, id)
 				reopen.call())
 	if id == "bauhaus":
 		heading(body, "Häuser für Saint Leonard (Bauplatz wird zugewiesen)")
@@ -367,20 +375,24 @@ static func still(game: Node, entry: Dictionary) -> void:
 static func bottling_table(game: Node, entry: Dictionary) -> void:
 	var hud: Hud = game.hud
 	var body := window(hud, "Abfülltisch", 560)
+	var carried_keg: Node3D = game.player.carrying if (game.player.carrying != null and game.player.carrying.get_meta("kind", "") == "moonshine_keg") else null
 	var keg_car: Node3D = null
 	if game.car and is_instance_valid(game.car) and game.car.global_position.distance_to(game.player.global_position) <= 8.0:
 		for n in game.car.cargo:
 			if n.get_meta("kind", "") == "moonshine_keg":
 				keg_car = n
 				break
-	var has_keg: bool = GameState.has("moonshine_keg") or keg_car != null
+	var has_keg: bool = GameState.has("moonshine_keg") or keg_car != null or carried_keg != null
 	var empty_bottles := GameState.count("empty_bottle")
-	text(body, "Schütte einen 10-l-Moonshine-Bottich (Inventar oder Pickup in 8 m Nähe) in 10 leere Flaschen um.\nVorhanden: %s | Leere Flaschen: %d / 10" % ["10-l-Bottich bereit" if has_keg else "kein Bottich", empty_bottles])
+	text(body, "Schütte einen 10-l-Moonshine-Bottich (in der Hand, im Inventar oder auf Pickup in 8 m Nähe) in 10 leere Flaschen um.\nVorhanden: %s | Leere Flaschen: %d / 10" % ["10-l-Bottich bereit" if has_keg else "kein Bottich", empty_bottles])
 	row(body, "10-l-Bottich in 10 Flaschen abfüllen (+1x Leerer Bottich zurück)", "Abfüllen", func():
 		if not GameState.take("empty_bottle", 10):
 			return
 		if GameState.has("moonshine_keg"):
 			GameState.take("moonshine_keg", 1)
+		if carried_keg != null and is_instance_valid(carried_keg):
+			carried_keg.queue_free()
+			game.player.carrying = null
 		if keg_car != null and is_instance_valid(keg_car):
 			game.car.cargo.erase(keg_car)
 			keg_car.queue_free()

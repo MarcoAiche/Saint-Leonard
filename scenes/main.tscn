@@ -35,7 +35,7 @@ ambient_light_energy = 0.55
 fog_light_color = Color(0.545098, 0.784314, 1, 1)
 fog_density = 0.0004
 fog_sky_affect = 0.0
-adjustment_enabled = true
+adjustment_enabled = false
 adjustment_saturation = 1.15
 
 [node name="Main" type="Node3D" unique_id=60648836]

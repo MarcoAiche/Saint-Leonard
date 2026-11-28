@@ -916,6 +916,20 @@ func _nearest_carcass(r: float) -> Carcass:
 	return best
 
 
+func _nearest_keg(max_dist: float) -> Node3D:
+	var best: Node3D = null
+	var bd := max_dist
+	for node in get_tree().get_nodes_in_group("carryable_keg"):
+		var k := node as Node3D
+		if k == null or k == player.carrying or k.get_parent() == car or k.get_parent() == trailer:
+			continue
+		var d := k.global_position.distance_to(player.global_position)
+		if d < bd:
+			bd = d
+			best = k
+	return best
+
+
 func _cargo_action() -> void:
 	if trailer and player.carrying and trailer.global_position.distance_to(player.global_position) < 3.5 and trailer.has_space():
 		var tn := player.carrying
@@ -925,12 +939,12 @@ func _cargo_action() -> void:
 			Net.carcass_removed((tn as Carcass).net_id)
 		hud.toast("Auf den Anhänger geladen")
 		return
-	if trailer and not player.carrying and _nearest_carcass(2.8) == null and trailer.global_position.distance_to(player.global_position) < 3.5 and not trailer.cargo.is_empty():
+	if trailer and not player.carrying and _nearest_carcass(2.8) == null and _nearest_keg(2.8) == null and trailer.global_position.distance_to(player.global_position) < 3.5 and not trailer.cargo.is_empty():
 		var un := trailer.unload_last()
 		trailer.remove_child(un)
 		add_child(un)
 		un.scale = Vector3.ONE
-		if un is Carcass:
+		if un is Carcass or un.is_in_group("carryable_keg"):
 			player.carrying = un
 		else:
 			un.global_position = player.global_position + player.facing * 1.5
@@ -943,6 +957,9 @@ func _cargo_action() -> void:
 			if n is Carcass:
 				Net.carcass_removed((n as Carcass).net_id)
 			hud.toast("Aufgeladen")
+		elif player.carrying.is_in_group("carryable_keg"):
+			_drop_carried()
+			hud.toast("Fass abgestellt")
 		return
 	var c := _nearest_carcass(2.8)
 	if c:
@@ -950,14 +967,21 @@ func _cargo_action() -> void:
 		player.carrying = c
 		player.hand.select("none")
 		return
+	var keg := _nearest_keg(2.8)
+	if keg:
+		player.carrying = keg
+		player.hand.select("none")
+		hud.toast("Fass aufgenommen")
+		return
 	if car.global_position.distance_to(player.global_position) < 5.0 and not car.cargo.is_empty():
 		var n := car.unload_last()
 		if n:
 			car.remove_child(n)
 			add_child(n)
 			n.scale = Vector3.ONE
-			if n is Carcass:
+			if n is Carcass or n.is_in_group("carryable_keg"):
 				player.carrying = n
+				player.hand.select("none")
 			else:
 				n.global_position = player.global_position + player.facing * 1.5
 
@@ -968,6 +992,10 @@ func _drop_carried() -> void:
 	if c is Carcass:
 		c.set_carried(false)
 		c.global_position = player.global_position + player.facing * 1.2 + Vector3.UP * 0.5
+	elif c != null and is_instance_valid(c):
+		var dp := player.global_position + player.facing * 1.2
+		c.global_position = Vector3(dp.x, world.height_at(dp.x, dp.z), dp.z)
+		c.rotation = Vector3(0.0, atan2(player.facing.x, player.facing.z), 0.0)
 
 
 func _process_harvest(delta: float) -> void:

@@ -218,8 +218,12 @@ func _physics_process(delta: float) -> void:
 	_engine.speed_kmh = v
 	_on_drive(delta, throttle, v)
 
-	var steer_limit := max_steer * lerpf(1.0, 0.3, clampf(absf(v) / 90.0, 0.0, 1.0))
-	_steer = move_toward(_steer, steer_in * steer_limit, delta * 2.2)
+	var speed_t := clampf(absf(v) / 110.0, 0.0, 1.0)
+	var steer_limit := max_steer * lerpf(1.0, 0.16, pow(speed_t, 1.3))
+	var target_steer := steer_in * steer_limit
+	var fast_return := absf(steer_in) < 0.05 or (steer_in * _steer < 0.0)
+	var steer_rate := 6.5 if fast_return else 4.2
+	_steer = move_toward(_steer, target_steer, delta * steer_rate)
 	steering = _steer
 
 	_surface_t -= delta

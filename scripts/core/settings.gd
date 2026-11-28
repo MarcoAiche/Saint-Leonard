@@ -75,6 +75,7 @@ static func apply(tree: SceneTree = null) -> void:
 			var sun: DirectionalLight3D = main.get_node("Sun")
 			var sh := int(values.shadows)
 			sun.shadow_enabled = sh > 0
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 			sun.directional_shadow_max_distance = 90.0 if sh == 1 else 120.0
 		RenderingServer.directional_shadow_atlas_set_size(1024 if int(values.shadows) <= 1 else 2048, true)
 		if main and main.has_node("World"):
@@ -107,6 +108,8 @@ static func _apply_view_distance(node: Node, f: float) -> void:
 			gi.visibility_range_end = 500.0 * f
 			gi.visibility_range_end_margin = 45.0
 			gi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+			if nm.begins_with("RK") or nm.begins_with("TS"):
+				gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		else:
 			gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			gi.visibility_range_end = 90.0 * f

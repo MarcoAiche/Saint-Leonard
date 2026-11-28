@@ -400,12 +400,16 @@ static func model(type: String) -> Node3D:
 			box(n, Vector3(0.6, 0.35, 0.45), Vector3(0, 0.17, 0), Color(0.55, 0.40, 0.25))
 			for k in 4:
 				cyl(n, 0.06, 0.3, Vector3(-0.15 + (k % 2) * 0.3, 0.45, -0.1 + (k / 2) * 0.2), Color(0.85, 0.92, 0.95))
-		"moonshine_keg":
-			cyl(n, 0.28, 0.52, Vector3(0, 0.26, 0), Color(0.45, 0.30, 0.16), 0.26)
+		"moonshine_keg", "empty_keg":
+			var is_full := type == "moonshine_keg"
+			var keg_col := Color(0.45, 0.30, 0.16) if is_full else Color(0.55, 0.42, 0.28)
+			cyl(n, 0.28, 0.52, Vector3(0, 0.26, 0), keg_col, 0.26)
 			cyl(n, 0.29, 0.05, Vector3(0, 0.10, 0), Color(0.28, 0.29, 0.31))
 			cyl(n, 0.29, 0.05, Vector3(0, 0.42, 0), Color(0.28, 0.29, 0.31))
-			cyl(n, 0.25, 0.04, Vector3(0, 0.53, 0), Color(0.22, 0.23, 0.25))
+			cyl(n, 0.25, 0.04, Vector3(0, 0.53, 0), Color(0.22, 0.23, 0.25) if is_full else Color(0.42, 0.44, 0.46))
 			box(n, Vector3(0.06, 0.06, 0.12), Vector3(0, 0.18, 0.29), Color(0.75, 0.60, 0.22))
+			n.add_to_group("carryable_keg")
+			n.set_meta("kind", type)
 	return n
 
 
