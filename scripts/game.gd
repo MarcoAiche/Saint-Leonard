@@ -561,10 +561,10 @@ func _start_game() -> void:
 	if not car.has_meta("_cargo_lost_connected"):
 		car.set_meta("_cargo_lost_connected", true)
 		car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
-	interactions.add(Vector3(0.0, 0.8, -1.5), 2.4, func(): return "Spanngurte lösen" if car.strapped else "Spanngurte anbringen", func(): _toggle_straps(car), func(): seat == "", car)
-	interactions.add(Vector3(0.0, 0.8, -2.95), 2.4, func(): return "Plane abziehen" if car.tarp_on else "Plane aufziehen", func():
+	interactions.add(Vector3(0.0, 0.3, -1.5), 3.0, func(): return "Spanngurte lösen" if car.strapped else "Spanngurte anbringen", func(): _toggle_straps(car), func(): seat == "", car)
+	interactions.add(Vector3(0.0, 0.3, -2.95), 3.0, func(): return "Plane abziehen" if car.tarp_on else "Plane aufziehen", func():
 		car.set_tarp(not car.tarp_on)
-		hud.toast("Ladeflächen-Plane aufgezogen (Schmuggel-Schutz)" if car.tarp_on else "Plane abgezogen", 2.5), func(): GameState.has("tarp") and seat == "", car)
+		hud.toast("Ladeflächen-Plane aufgezogen (Schmuggel-Schutz)" if car.tarp_on else "Plane abgezogen", 2.5), func(): (GameState.has("tarp") or car.tarp_on) and seat == "", car)
 	interactions.add(Vector3(0, 0.5, 0), 3.2, "Fahrzeug aufstellen [E]", func(): car.respawn_safe(fb_car_pos, fb_car_yaw), func(): seat == "" and car.global_basis.y.y < 0.65, car)
 	if GameState.truck.get("trailer", false):
 		_spawn_trailer()
@@ -899,7 +899,7 @@ func _car_door_dist() -> float:
 	if not is_instance_valid(car):
 		return INF
 	var p := player.global_position
-	return minf((car.global_transform * Vector3(1.25, 0.5, 0.4)).distance_to(p), (car.global_transform * Vector3(-1.25, 0.5, 0.4)).distance_to(p))
+	return minf((car.global_transform * Vector3(1.25, 0.2, 0.4)).distance_to(p), (car.global_transform * Vector3(-1.25, 0.2, 0.4)).distance_to(p))
 
 
 func _interact() -> void:
