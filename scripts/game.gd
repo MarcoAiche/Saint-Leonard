@@ -561,7 +561,8 @@ func _start_game() -> void:
 	if not car.has_meta("_cargo_lost_connected"):
 		car.set_meta("_cargo_lost_connected", true)
 		car.cargo_lost.connect(func(_n): hud.toast("Ladung verloren! (Spanngurte im Bauhaus)", 3.0))
-	interactions.add(Vector3(0.0, 0.9, -2.85), 3.0, func(): return "Plane abziehen" if car.tarp_on else "Plane aufziehen", func():
+	interactions.add(Vector3(0.0, 0.8, -1.5), 2.4, func(): return "Spanngurte lösen" if car.strapped else "Spanngurte anbringen", func(): _toggle_straps(car), func(): seat == "", car)
+	interactions.add(Vector3(0.0, 0.8, -2.95), 2.4, func(): return "Plane abziehen" if car.tarp_on else "Plane aufziehen", func():
 		car.set_tarp(not car.tarp_on)
 		hud.toast("Ladeflächen-Plane aufgezogen (Schmuggel-Schutz)" if car.tarp_on else "Plane abgezogen", 2.5), func(): GameState.has("tarp") and seat == "", car)
 	interactions.add(Vector3(0, 0.5, 0), 3.2, "Fahrzeug aufstellen [E]", func(): car.respawn_safe(fb_car_pos, fb_car_yaw), func(): seat == "" and car.global_basis.y.y < 0.65, car)
@@ -872,6 +873,8 @@ func set_paused(on: bool) -> void:
 	hud.show_pause(on)
 	if on:
 		GameState.save_game()
+	elif player and player.hand:
+		player.hand.lock_shoot(0.22)
 	if not DebugTools.active:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if on else Input.MOUSE_MODE_CAPTURED
 
@@ -891,6 +894,13 @@ func set_waypoint(p: Vector2) -> void:
 
 
 # ------------------------------------------------------------------ Interaktion [F]
+
+func _car_door_dist() -> float:
+	if not is_instance_valid(car):
+		return INF
+	var p := player.global_position
+	return minf((car.global_transform * Vector3(1.25, 0.5, 0.4)).distance_to(p), (car.global_transform * Vector3(-1.25, 0.5, 0.4)).distance_to(p))
+
 
 func _interact() -> void:
 	if sitting:
@@ -917,7 +927,7 @@ func _interact() -> void:
 	if atv and player.global_position.distance_to(atv.global_position) < ENTER_DISTANCE:
 		enter_vehicle(atv, "driver")
 		return
-	if player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
+	if _car_door_dist() < 2.3:
 		enter_vehicle(car, "driver")
 		return
 	for id in remote_trucks:
@@ -942,11 +952,19 @@ func _update_interaction() -> String:
 		if car.global_position.distance_to(player.global_position) < 5.0:
 			return "[G] Auf die Ladefläche laden   [F] Ablegen"
 		return "[F] Ablegen"
+	var door_d := _car_door_dist()
 	var e := interactions.nearest(player.global_position)
 	if not e.is_empty():
+		var e_pos: Vector3 = e.node.global_transform * e.pos if e.node != null else e.pos
+		var e_d := e_pos.distance_to(player.global_position)
+		if door_d < 2.3 and door_d < e_d:
+			var t := "[F] Einsteigen"
+			if not car.cargo.is_empty():
+				t += "   [G] Abladen"
+			return t
 		_current_interaction = e
 		var txt := "[F] " + Interactions.text_of(e)
-		if e.get("target") == car and not car.cargo.is_empty():
+		if e.get("node") == car and not car.cargo.is_empty():
 			txt += "   [G] Abladen"
 		return txt
 	# Kadaver
@@ -958,7 +976,7 @@ func _update_interaction() -> String:
 		return "[G] %s aufheben / tragen" % Items.display(str(keg.get_meta("kind", "moonshine_keg")))
 	if atv and player.global_position.distance_to(atv.global_position) < ENTER_DISTANCE:
 		return "[F] ATV fahren / Einsteigen"
-	if player.global_position.distance_to(car.global_position) < ENTER_DISTANCE:
+	if door_d < 2.3:
 		var t := "[F] Einsteigen"
 		if not car.cargo.is_empty():
 			t += "   [G] Abladen"
@@ -1361,6 +1379,7 @@ func _spawn_trailer() -> void:
 	trailer.cargo_lost.connect(func(_n): hud.toast("Ladung vom Anhänger gefallen! (Spanngurte)", 3.0))
 	interactions.add(Trailer.HITCH + Vector3(0, 0.4, 0), 3.0, func(): return "Anhänger abkuppeln" if trailer.towed_by else "Anhänger ankuppeln",
 		func(): _toggle_hitch(), func(): seat == "" and (trailer.towed_by != null or trailer.can_couple(car)), trailer)
+	interactions.add(Vector3(0.0, 0.8, 0.0), 2.5, func(): return "Spanngurte lösen" if trailer.strapped else "Spanngurte anbringen", func(): _toggle_straps(trailer), func(): seat == "", trailer)
 
 
 func _toggle_hitch() -> void:
@@ -1622,10 +1641,15 @@ func _stop_placing() -> void:
 	if _ghost:
 		_ghost.queue_free()
 	_ghost = null
+	if player and player.hand:
+		player.hand.lock_shoot(0.22)
 
 
 func _placing_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
+		get_viewport().set_input_as_handled()
+		if player and player.hand:
+			player.hand.lock_shoot(0.22)
 		match event.button_index:
 			MOUSE_BUTTON_WHEEL_UP: _ghost_rot += 0.2
 			MOUSE_BUTTON_WHEEL_DOWN: _ghost_rot -= 0.2
@@ -1942,7 +1966,7 @@ func still_explode(entry: Dictionary) -> void:
 	q.material = m
 	smoke.draw_pass_1 = q
 	boom.add_child(smoke)
-	get_tree().create_timer(180.0).timeout.connect(boom.queue_free)
+	get_tree().create_timer(300.0).timeout.connect(boom.queue_free)
 	GameState.make_noise(pos, 1200.0, "shot")
 	if player.global_position.distance_to(pos) < 8.0:
 		GameState.damage(45.0)
@@ -1952,6 +1976,24 @@ func still_explode(entry: Dictionary) -> void:
 	if is_instance_valid(n):
 		interactions.remove_node(n)
 	Net.request_remove(uid)
+	# Alles im 5-m-Umkreis um die explodierte Anlage zerstören
+	for pe in GameState.placed.duplicate():
+		var e_uid := int(pe.get("uid", -1))
+		if e_uid == uid:
+			continue
+		var ep := Vector3(float(pe.pos[0]), float(pe.pos[1]), float(pe.pos[2]))
+		if ep.distance_to(pos) <= 5.0:
+			var pn: Node3D = placed_nodes.get(e_uid)
+			if is_instance_valid(pn):
+				interactions.remove_node(pn)
+			Net.request_remove(e_uid)
+	for keg in get_tree().get_nodes_in_group("carryable_keg"):
+		if keg is Node3D and keg.get_parent() != car and keg.get_parent() != trailer and (keg as Node3D).global_position.distance_to(pos) <= 5.0:
+			if player.carrying == keg:
+				player.carrying = null
+			keg.queue_free()
+	if police:
+		police.report_explosion(pos)
 	hud.toast("BUMM! Der Kessel ist explodiert. Die Rauchsäule lockt die Polizei an!", 5.0)
 	police.dispatch(pos, "Rauchsäule im Wald")
 

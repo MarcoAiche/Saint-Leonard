@@ -36,7 +36,8 @@ var _action_cb: Callable
 var _action_done := false
 var _cool := 0.0
 var _reload := 0.0
-var _swap := 0.0  # Waffenwechsel (1 -> 0)
+var _swap := 0.0
+var _shoot_lock_t := 0.0  # Waffenwechsel (1 -> 0)
 var _rifle: Node3D
 var _weapon_nodes := {}  # id -> Node3D
 var _bolt: Node3D
@@ -366,6 +367,7 @@ static func _raise(t: float, up: float, hold: float, down: float) -> float:
 
 func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) -> void:
 	_cool = maxf(0.0, _cool - delta)
+	_shoot_lock_t = maxf(0.0, _shoot_lock_t - delta)
 	_flash_t = maxf(0.0, _flash_t - delta)
 	_flash.light_energy = _flash_t * 40.0
 	if _muzzle_star:
@@ -429,7 +431,7 @@ func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) 
 			wn.position = pos
 			wn.rotation = rot
 	var want_fire := false
-	if input_on and is_weapon(slot) and action == "" and _swap < 0.2:
+	if input_on and not _is_ui_busy() and _shoot_lock_t <= 0.0 and is_weapon(slot) and action == "" and _swap < 0.2:
 		want_fire = Input.is_action_pressed("fire") if bool(WEAPONS[slot].auto) else Input.is_action_just_pressed("fire")
 	if want_fire:
 		_fire()
@@ -468,8 +470,20 @@ func _process_action(delta: float) -> void:
 		action = ""
 
 
+func _is_ui_busy() -> bool:
+	if get_tree().paused:
+		return true
+	var game_node := get_tree().current_scene
+	if game_node == null:
+		return false
+	if not str(game_node.get("_placing")).is_empty():
+		return true
+	var hud_node = game_node.get("hud")
+	return hud_node != null and bool(hud_node.menus_open())
+
+
 func _fire() -> void:
-	if _cool > 0.0 or _reload > 0.0 or not is_weapon(slot):
+	if _cool > 0.0 or _reload > 0.0 or _shoot_lock_t > 0.0 or _is_ui_busy() or not is_weapon(slot):
 		return
 	if GameState.loaded <= 0:
 		Sfx.play_3d(player, Sfx.click(), -2.0, 0.6)

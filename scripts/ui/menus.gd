@@ -44,6 +44,9 @@ static func close_all(hud: Hud) -> void:
 	for c in hud.menu_root.get_children():
 		c.queue_free()
 	hud._restore_mouse()
+	var game := hud.get_parent()
+	if game and game.get("player") and game.player.get("hand"):
+		game.player.hand.lock_shoot(0.22)
 
 
 static func heading(body: VBoxContainer, text: String) -> void:

@@ -27,6 +27,7 @@ var _busted_t := 0.0
 var _checked_t := 0.0
 var _endpoints := {}  # gerundeter Endpunkt -> [Straßen-Index]
 var _rng := RandomNumberGenerator.new()
+var _explosion_sites: Array = []  # {pos, car, arrived, stay_t, drive_t, last_d, stuck_t}
 
 
 func setup(g: Node, w: WorldBuilder, lm: Landmarks) -> void:
@@ -112,7 +113,10 @@ func _focus() -> Node3D:
 
 
 func _process(delta: float) -> void:
-	if not ENABLED or get_tree().paused or not game.player:
+	if get_tree().paused or not game.player:
+		return
+	_update_explosion_sites(delta)
+	if not ENABLED:
 		return
 	_timer -= delta
 	_checked_t = maxf(0.0, _checked_t - delta)
@@ -127,6 +131,79 @@ func _process(delta: float) -> void:
 	_manage_patrols()
 	if phase == Phase.NONE and game.driving:
 		_watch()
+
+
+func report_explosion(pos: Vector3) -> void:
+	if world == null:
+		return
+	var p2 := Vector2(pos.x, pos.z)
+	var ri := world.road_info(p2, 450.0)
+	var spawn_pos := Vector3(ri.pos.x, 0.0, ri.pos.y) if ri.road >= 0 else pos + Vector3(90.0, 0.0, 90.0)
+	if spawn_pos.distance_to(pos) < 60.0:
+		spawn_pos += Vector3(70.0, 0.0, 70.0)
+	var c := _spawn_car()
+	c.place_at(spawn_pos, (pos - spawn_pos).normalized())
+	c.mode = PoliceCar.Mode.GOTO
+	c.goto_pos = pos
+	c.set_siren(true)
+	_explosion_sites.append({
+		pos = pos, car = c, arrived = false, stay_t = 300.0,
+		drive_t = 0.0, last_d = spawn_pos.distance_to(pos), stuck_t = 0.0,
+	})
+
+
+func _update_explosion_sites(delta: float) -> void:
+	for site in _explosion_sites.duplicate():
+		var c: PoliceCar = site.car
+		if not is_instance_valid(c):
+			_explosion_sites.erase(site)
+			continue
+		var pos: Vector3 = site.pos
+		if not site.arrived:
+			site.drive_t += delta
+			var d := c.global_position.distance_to(pos)
+			if absf(d - float(site.last_d)) < 0.8:
+				site.stuck_t += delta
+			else:
+				site.stuck_t = 0.0
+			site.last_d = d
+			# Ankommen bei <= 30m, oder falls tief im Wald feststeckt (>12s bei <= 140m) bzw. Timeout
+			if d <= 30.0 or (site.stuck_t >= 12.0 and d <= 140.0) or site.drive_t >= 45.0:
+				site.arrived = true
+				c.mode = PoliceCar.Mode.PARKED
+				_confiscate_explosion_remains(pos)
+		else:
+			site.stay_t -= delta
+			if phase == Phase.NONE and game.player.global_position.distance_to(pos) <= 25.0:
+				_start_pull_over(c, "Illegale Brennerei explodiert! Stehen bleiben!")
+			if site.stay_t <= 0.0:
+				c.set_siren(false)
+				if ENABLED:
+					c.mode = PoliceCar.Mode.PATROL
+					patrols.append(c)
+				else:
+					c.queue_free()
+				_explosion_sites.erase(site)
+
+
+func _confiscate_explosion_remains(pos: Vector3) -> void:
+	if game.player.global_position.distance_to(pos) <= 25.0:
+		return
+	var removed := 0
+	for pe in GameState.placed.duplicate():
+		if pe.get("type", "") in ["still", "bottling_table", "moonshine_keg", "empty_keg"]:
+			var ep := Vector3(float(pe.pos[0]), float(pe.pos[1]), float(pe.pos[2]))
+			if ep.distance_to(pos) <= 15.0:
+				Net.request_remove(int(pe.uid))
+				removed += 1
+	for keg in get_tree().get_nodes_in_group("carryable_keg"):
+		if keg is Node3D and keg.get_parent() != game.car and keg.get_parent() != game.trailer and (keg as Node3D).global_position.distance_to(pos) <= 15.0:
+			if game.player.carrying == keg:
+				game.player.carrying = null
+			keg.queue_free()
+			removed += 1
+	if removed > 0:
+		game.hud.toast("Die Polizei hat %d illegale Reste am Explosionsort beschlagnahmt!" % removed, 4.0)
 
 
 func _manage_patrols() -> void:
