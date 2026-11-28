@@ -355,6 +355,9 @@ func load_cargo(n: Node3D) -> bool:
 	n.rotation = Vector3(0, PI / 2, 0)
 	if n is Carcass:
 		n.scale = Vector3.ONE * clampf(1.0 / Animal.SPECIES[n.species].size, 0.5, 1.0)
+	elif n.is_in_group("carryable_keg"):
+		n.rotation = Vector3.ZERO
+		n.scale = Vector3.ONE
 	cargo.append(n)
 	return true
 

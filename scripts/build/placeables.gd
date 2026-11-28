@@ -103,10 +103,20 @@ static func _tube_seg(parent: Node3D, a: Vector3, b: Vector3, r: float, segs: in
 
 
 static func _try_load_glb(type: String) -> Node3D:
-	var glb_path := "res://assets/models/%s.glb" % type
+	var model_map := {
+		moonshine_keg = "moonshine_keg",
+		empty_keg = "moonshine_keg",
+		moonshine = "moonshine",
+		empty_bottle = "moonshine",
+	}
+	var glb_name: String = str(model_map.get(type, type))
+	var glb_path := "res://assets/models/%s.glb" % glb_name
 	if not ResourceLoader.exists(glb_path):
 		return null
-	var target_heights := {still = 1.6, still_pot = 1.4, bottling_table = 1.0, stand = 4.9, trailcam = 1.2, campfire = 1.0}
+	var target_heights := {
+		still = 1.6, still_pot = 1.4, bottling_table = 1.0, stand = 4.9, trailcam = 1.2, campfire = 1.0,
+		moonshine_keg = 0.48, empty_keg = 0.48, moonshine = 0.30, empty_bottle = 0.30,
+	}
 	var target_h: float = float(target_heights.get(type, 1.2))
 	var root := Node3D.new()
 	var model_node := AssetLoader.load_model(glb_path, target_h, func() -> Node3D: return Node3D.new(), false)
@@ -124,6 +134,20 @@ static func _try_load_glb(type: String) -> Node3D:
 			min_y = minf(min_y, (xf * aabb.position).y)
 	if is_finite(min_y):
 		model_node.position.y -= min_y
+	if type in ["moonshine_keg", "empty_keg"]:
+		root.add_to_group("carryable_keg")
+		root.set_meta("kind", type)
+		var sb := StaticBody3D.new()
+		sb.collision_layer = 16
+		sb.collision_mask = 0
+		var cs := CollisionShape3D.new()
+		var cyl_s := CylinderShape3D.new()
+		cyl_s.radius = 0.24
+		cyl_s.height = 0.48
+		cs.shape = cyl_s
+		cs.position = Vector3(0.0, 0.24, 0.0)
+		sb.add_child(cs)
+		root.add_child(sb)
 	return root
 
 
@@ -269,8 +293,13 @@ static func model(type: String) -> Node3D:
 			for p in [Vector3(-0.65, 0, -0.34), Vector3(0.65, 0, -0.34), Vector3(-0.65, 0, 0.34), Vector3(0.65, 0, 0.34)]:
 				box(n, Vector3(0.08, 0.75, 0.08), p + Vector3(0, 0.375, 0), DARK_WOOD)
 			cyl(n, 0.14, 0.18, Vector3(-0.35, 0.91, 0.0), COPPER, 0.04)  # Trichter
-			for k in 4:
-				cyl(n, 0.045, 0.22, Vector3(0.15 + (k % 2) * 0.18, 0.93, -0.1 + (k / 2) * 0.2), Color(0.84, 0.93, 0.96))
+			for k in 3:
+				var b_vis := _try_load_glb("moonshine")
+				if b_vis:
+					b_vis.position = Vector3(0.18 + k * 0.18, 0.82, -0.08 + (k % 2) * 0.16)
+					n.add_child(b_vis)
+				else:
+					cyl(n, 0.045, 0.22, Vector3(0.18 + k * 0.18, 0.93, -0.08 + (k % 2) * 0.16), Color(0.84, 0.93, 0.96))
 		"stand":
 			for p in [Vector3(-0.9, 0, -0.9), Vector3(0.9, 0, -0.9), Vector3(-0.9, 0, 0.9), Vector3(0.9, 0, 0.9)]:
 				box(n, Vector3(0.14, 4.0, 0.14), p * 0.9 + Vector3(0, 2.0, 0), WOOD, Vector3(-p.z * 0.06, 0, p.x * 0.06), true)
