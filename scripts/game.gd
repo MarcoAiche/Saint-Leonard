@@ -683,12 +683,73 @@ func _unhandled_input(event: InputEvent) -> void:
 			car.set_lights(not car.lights_on)
 		elif seat == "":
 			player.hand.toggle_flashlight()
+	elif OS.is_debug_build() and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F8:
+		_debug_give_test_kit()
+		return
+	elif OS.is_debug_build() and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F9:
+		_debug_cycle_teleport()
+		return
 	elif seat == "driver":
 		_vehicle_input(event)
 	elif seat == "":
 		_foot_input(event)
 	if event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not hud.map_open():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+var _debug_tp_idx := 0
+
+
+func _debug_give_test_kit() -> void:
+	GameState.add_money(5000)
+	var kit := [
+		["still_pot", 1], ["still_condenser", 1], ["bottling_table", 1],
+		["mash", 3], ["firewood", 3], ["empty_keg", 1], ["empty_bottle", 10], ["tarp", 1],
+	]
+	var skipped: Array[String] = []
+	for item in kit:
+		var id: String = item[0]
+		var qty: int = int(item[1])
+		var before := GameState.count(id)
+		GameState.give(id, qty)
+		if GameState.count(id) < before + qty:
+			skipped.append(Items.display(id))
+	var keg := Placeables.model("moonshine_keg")
+	add_child(keg)
+	var kp := player.global_position + player.facing * 2.0
+	keg.global_position = Vector3(kp.x, world.height_at(kp.x, kp.z), kp.z)
+	if skipped.is_empty():
+		hud.toast("Debug-Kit: +5000 €, Items & 10-l-Fass gespawnt", 3.5)
+	else:
+		var msg := "Debug-Kit: +5000 € & Fass gespawnt (kein Platz für: %s)" % ", ".join(skipped)
+		print("[Debug F8] ", msg)
+		hud.toast(msg, 4.5)
+
+
+func _debug_cycle_teleport() -> void:
+	var targets: Array = []
+	if landmarks and not landmarks.pub.is_empty():
+		var pd: Vector3 = landmarks.pub.door
+		targets.append(["Gasthaus Pirtscher", pd + Vector3(0.0, 0.0, 8.0)])
+	var bm := get_map_marker("Baumarkt")
+	if bm != null:
+		targets.append(["Bauhaus", bm.global_position + bm.global_basis.z * 10.0])
+	if landmarks and not landmarks.spawn.is_empty():
+		targets.append(["Startpunkt", landmarks.spawn.pos])
+	if targets.is_empty():
+		return
+	var entry: Array = targets[_debug_tp_idx % targets.size()]
+	_debug_tp_idx = (_debug_tp_idx + 1) % targets.size()
+	var label: String = entry[0]
+	var raw: Vector3 = entry[1]
+	var tp := Vector3(raw.x, world.height_at(raw.x, raw.z) + 0.5, raw.z)
+	if seat == "driver" and is_instance_valid(car):
+		car.place_at(tp, car.global_basis.z)
+	elif seat == "" and is_instance_valid(player):
+		player.global_position = tp
+		player.velocity = Vector3.ZERO
+		player.reset_physics_interpolation()
+	hud.toast("Teleport: %s" % label, 2.5)
 
 
 func _foot_input(event: InputEvent) -> void:

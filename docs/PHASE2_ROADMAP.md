@@ -68,7 +68,7 @@ Seit dem letzten Rebase (`d325310`) gab es **keine** neuen Commits, PRs oder neu
 
 ### **P2-M5: 3D-Assets, Ragdoll & UI/UX-Overhaul** — *World-Bake: **NEIN***
 - **Spur A (Simon):** Drop-in `.glb`-Assets (#10, u. a. `caravan_big.glb` bei `(300.3, 1536.3)`) + Ragdoll-Physik (`PhysicalBoneSimulator3D`) in `scripts/animals/animal.gd` & `scripts/player/character_model.gd`.
-- **Spur B (Marco):** Einheitlicher UI/UX-Overhaul (#16) & „Fehler melden“-Knopf (#19) in `scripts/ui/*`.
+- **Spur B (Marco):** Einheitliches UI-System (UI/UX-Overhaul #16): Ein konsistentes UI-Design & Framework für Inventar, Einkaufen/Shops, Verkauf, Werkbänke/Brennanlage/Abfülltisch und Menüs, plus „Fehler melden“-Knopf (#19) in `scripts/ui/*`.
 - **Akzeptanz (F5):** Wohnwagen & weitere `.glb`-Modelle sitzen sauber im Terrain; Ragdoll reagiert physikalisch; alle Shop-/NPC-/Casino-Menüs im einheitlichen Stil.
 
 ### **P2-M6: Playtest, Balancing & Release** — *World-Bake: **NEIN***
