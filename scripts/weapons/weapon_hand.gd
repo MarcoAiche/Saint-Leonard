@@ -37,7 +37,15 @@ var _action_done := false
 var _cool := 0.0
 var _reload := 0.0
 var _swap := 0.0
-var _shoot_lock_t := 0.0  # Waffenwechsel (1 -> 0)
+var _shoot_lock_t := 0.35
+var _last_mouse_mode: int = Input.MOUSE_MODE_VISIBLE
+var _require_fire_release := false
+
+
+func _ready() -> void:
+	_shoot_lock_t = 0.35
+	_last_mouse_mode = Input.mouse_mode
+	_require_fire_release = Input.is_action_pressed("fire") or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 var _rifle: Node3D
 var _weapon_nodes := {}  # id -> Node3D
 var _bolt: Node3D
@@ -372,6 +380,13 @@ func lock_shoot(dur := 0.22) -> void:
 func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) -> void:
 	_cool = maxf(0.0, _cool - delta)
 	_shoot_lock_t = maxf(0.0, _shoot_lock_t - delta)
+	var cur_mm := Input.mouse_mode
+	if cur_mm == Input.MOUSE_MODE_CAPTURED and _last_mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		lock_shoot(0.25)
+		_require_fire_release = true
+	_last_mouse_mode = cur_mm
+	if _require_fire_release and not Input.is_action_pressed("fire") and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_require_fire_release = false
 	_flash_t = maxf(0.0, _flash_t - delta)
 	_flash.light_energy = _flash_t * 40.0
 	if _muzzle_star:
@@ -435,7 +450,7 @@ func process_hand(delta: float, input_on: bool, crouched: bool, on_stand: bool) 
 			wn.position = pos
 			wn.rotation = rot
 	var want_fire := false
-	if input_on and not _is_ui_busy() and _shoot_lock_t <= 0.0 and is_weapon(slot) and action == "" and _swap < 0.2:
+	if input_on and not _is_ui_busy() and _shoot_lock_t <= 0.0 and not _require_fire_release and is_weapon(slot) and action == "" and _swap < 0.2:
 		want_fire = Input.is_action_pressed("fire") if bool(WEAPONS[slot].auto) else Input.is_action_just_pressed("fire")
 	if want_fire:
 		_fire()
@@ -487,7 +502,7 @@ func _is_ui_busy() -> bool:
 
 
 func _fire() -> void:
-	if _cool > 0.0 or _reload > 0.0 or _shoot_lock_t > 0.0 or _is_ui_busy() or not is_weapon(slot):
+	if _cool > 0.0 or _reload > 0.0 or _shoot_lock_t > 0.0 or _require_fire_release or _is_ui_busy() or not is_weapon(slot):
 		return
 	if GameState.loaded <= 0:
 		Sfx.play_3d(player, Sfx.click(), -2.0, 0.6)
